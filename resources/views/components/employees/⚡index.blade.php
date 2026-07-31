@@ -168,13 +168,15 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Status</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Onboarding</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Login</th>
-                        <th class="px-6 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
                     @forelse ($employees as $employee)
-                        <tr class="transition hover:bg-brand-50/50 dark:hover:bg-white/[0.03]">
-                            <td class="px-6 py-4">
+                        <tr
+                            class="cursor-pointer transition hover:bg-brand-50/50 dark:hover:bg-white/[0.03]"
+                            @click="selected.includes({{ $employee->id }}) ? selected = selected.filter((id) => id !== {{ $employee->id }}) : selected.push({{ $employee->id }})"
+                        >
+                            <td class="px-6 py-4" @click.stop>
                                 <input
                                     type="checkbox"
                                     value="{{ $employee->id }}"
@@ -204,29 +206,10 @@ new #[Layout('layouts.app')] class extends Component
                                     {{ $employee->user_id ? 'Enabled' : 'No login' }}
                                 </x-badge>
                             </td>
-                            <td class="px-6 py-4 text-right">
-                                <div class="flex justify-end gap-2">
-                                <a href="{{ route('employees.show', $employee) }}" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 dark:border-white/10 dark:bg-white/5 dark:text-ink-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300" title="View employee">
-                                    <x-icon name="eye" class="h-4 w-4" />
-                                </a>
-                                <a href="{{ route('employees.show', $employee) }}" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 dark:border-white/10 dark:bg-white/5 dark:text-ink-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300" title="Edit employee">
-                                    <x-icon name="pencil" class="h-4 w-4" />
-                                </a>
-                                <button
-                                    type="button"
-                                    wire:click="deleteEmployee({{ $employee->id }})"
-                                    wire:confirm="Delete {{ $employee->employee_id }}?"
-                                    class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
-                                    title="Delete employee"
-                                >
-                                    <x-icon name="trash" class="h-4 w-4" />
-                                </button>
-                                </div>
-                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="px-6 py-16 text-center">
+                            <td colspan="8" class="px-6 py-16 text-center">
                                 <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
                                     <x-icon name="people-group" class="h-7 w-7" />
                                 </div>
