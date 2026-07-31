@@ -23,11 +23,52 @@ new #[Layout('layouts.app')] class extends Component
     public ?int $newScheduleId = null;
     public string $newScheduleStartDate = '';
 
+    // Payroll settings
+    public bool $includeInPayroll = true;
+    public bool $sssEnrolled = true;
+    public bool $philhealthEnrolled = true;
+    public bool $pagibigEnrolled = true;
+    public bool $birWithholdingEnrolled = true;
+    public bool $allowanceTaxable = false;
+    public ?string $separationDate = null;
+    public ?string $separationReason = null;
+
     public function mount(Employee $employee): void
     {
         $this->employee = $employee->load(['department', 'position', 'reportsTo', 'user']);
         $this->onboardingEmail = $employee->company_email;
         $this->newScheduleStartDate = now()->toDateString();
+
+        $this->includeInPayroll = (bool) $employee->include_in_payroll;
+        $this->sssEnrolled = (bool) $employee->sss_enrolled;
+        $this->philhealthEnrolled = (bool) $employee->philhealth_enrolled;
+        $this->pagibigEnrolled = (bool) $employee->pagibig_enrolled;
+        $this->birWithholdingEnrolled = (bool) $employee->bir_withholding_enrolled;
+        $this->allowanceTaxable = (bool) $employee->allowance_taxable;
+        $this->separationDate = $employee->separation_date?->toDateString();
+        $this->separationReason = $employee->separation_reason;
+    }
+
+    public function savePayrollSettings(): void
+    {
+        $data = $this->validate([
+            'separationDate' => ['nullable', 'date', 'after_or_equal:' . $this->employee->hire_date->toDateString()],
+            'separationReason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $this->employee->update([
+            'include_in_payroll' => $this->includeInPayroll,
+            'sss_enrolled' => $this->sssEnrolled,
+            'philhealth_enrolled' => $this->philhealthEnrolled,
+            'pagibig_enrolled' => $this->pagibigEnrolled,
+            'bir_withholding_enrolled' => $this->birWithholdingEnrolled,
+            'allowance_taxable' => $this->allowanceTaxable,
+            'separation_date' => $data['separationDate'] ?: null,
+            'separation_reason' => $data['separationReason'] ?: null,
+        ]);
+
+        $this->employee->refresh();
+        $this->statusMessage = 'Payroll settings updated.';
     }
 
     public function assignSchedule(): void
@@ -258,6 +299,55 @@ new #[Layout('layouts.app')] class extends Component
                 </table>
             </div>
         @endif
+    </x-card>
+
+    <x-card>
+        <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Payroll Settings</h2>
+
+        <form wire:submit="savePayrollSettings" class="space-y-4">
+            <div class="space-y-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" wire:model="includeInPayroll" class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                    Include in payroll runs
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" wire:model="sssEnrolled" class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                    SSS contribution
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" wire:model="philhealthEnrolled" class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                    PhilHealth contribution
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" wire:model="pagibigEnrolled" class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                    Pag-IBIG contribution
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" wire:model="birWithholdingEnrolled" class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                    BIR withholding tax <span class="text-xs text-[#778599]">(uncheck for minimum-wage earners)</span>
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" wire:model="allowanceTaxable" class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                    Allowance is taxable <span class="text-xs text-[#778599]">(leave off if de minimis)</span>
+                </label>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <x-label>Separation Date</x-label>
+                    <x-input wire:model="separationDate" type="date" />
+                    <p class="mt-1 text-xs font-medium text-[#778599]">Set this to exclude the employee from payroll runs after they leave.</p>
+                    @error('separationDate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <x-label>Separation Reason</x-label>
+                    <x-input wire:model="separationReason" type="text" placeholder="e.g. Resigned" />
+                    @error('separationReason') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+            </div>
+
+            <x-button type="submit">Save Payroll Settings</x-button>
+        </form>
     </x-card>
 
     <x-card>

@@ -40,6 +40,14 @@ class Employee extends Model
         'pagibig_number',
         'onboarding_completed_at',
         'user_id',
+        'separation_date',
+        'separation_reason',
+        'include_in_payroll',
+        'sss_enrolled',
+        'philhealth_enrolled',
+        'pagibig_enrolled',
+        'bir_withholding_enrolled',
+        'allowance_taxable',
     ];
 
     protected function casts(): array
@@ -51,6 +59,13 @@ class Employee extends Model
             'allowance' => 'decimal:2',
             'quota' => 'decimal:2',
             'onboarding_completed_at' => 'datetime',
+            'separation_date' => 'date',
+            'include_in_payroll' => 'boolean',
+            'sss_enrolled' => 'boolean',
+            'philhealth_enrolled' => 'boolean',
+            'pagibig_enrolled' => 'boolean',
+            'bir_withholding_enrolled' => 'boolean',
+            'allowance_taxable' => 'boolean',
         ];
     }
 
@@ -62,6 +77,67 @@ class Employee extends Model
     public function isRegular(): bool
     {
         return $this->employment_status === 'Regular';
+    }
+
+    public function isSeparated(Carbon|string|null $asOf = null): bool
+    {
+        if ($this->separation_date === null) {
+            return false;
+        }
+
+        return $this->separation_date->lte(Carbon::parse($asOf ?? Carbon::today()));
+    }
+
+    /**
+     * Whether this employee should appear on a payroll run covering the period.
+     * Someone hired mid-cutoff or separated mid-cutoff still belongs on the run;
+     * the aggregator clamps their date range.
+     */
+    public function isPayrollEligibleFor(Carbon|string $periodStart, Carbon|string $periodEnd): bool
+    {
+        if (! $this->include_in_payroll) {
+            return false;
+        }
+
+        $start = Carbon::parse($periodStart)->startOfDay();
+        $end = Carbon::parse($periodEnd)->startOfDay();
+
+        if ($this->hire_date && $this->hire_date->gt($end)) {
+            return false;
+        }
+
+        return $this->separation_date === null || $this->separation_date->gte($start);
+    }
+
+    public function scopeForPayroll(Builder $query, Carbon|string $periodStart, Carbon|string $periodEnd): Builder
+    {
+        $start = Carbon::parse($periodStart)->toDateString();
+        $end = Carbon::parse($periodEnd)->toDateString();
+
+        return $query->where('include_in_payroll', true)
+            ->where(fn (Builder $q) => $q->whereNull('hire_date')->orWhere('hire_date', '<=', $end))
+            ->where(fn (Builder $q) => $q->whereNull('separation_date')->orWhere('separation_date', '>=', $start));
+    }
+
+    /*
+     * Rate helpers. basic_salary is cast decimal:2, which Laravel returns as a
+     * STRING — every caller must coerce to float or strict comparisons and
+     * round() behave unexpectedly.
+     */
+
+    public function dailyRate(): float
+    {
+        return (float) $this->basic_salary / 30;
+    }
+
+    public function hourlyRate(): float
+    {
+        return $this->dailyRate() / 8;
+    }
+
+    public function minuteRate(): float
+    {
+        return $this->hourlyRate() / 60;
     }
 
     public function scopeSearch(Builder $query, string $term): Builder

@@ -12,6 +12,10 @@ new #[Layout('layouts.app')] class extends Component
     public string $end_time = '';
     public string $lunch_break_minutes = '60';
     public string $coffee_break_minutes = '30';
+    /** @var list<int> ISO-8601 day numbers, 1 = Mon .. 7 = Sun */
+    public array $work_days = [1, 2, 3, 4, 5];
+    /** 'auto' defers to whether the shift overlaps the 22:00-06:00 window. */
+    public string $night_differential = 'auto';
     public ?int $editingId = null;
 
     public function create(): void
@@ -28,7 +32,20 @@ new #[Layout('layouts.app')] class extends Component
             'end_time' => ['required'],
             'lunch_break_minutes' => ['required', 'integer', 'min:0'],
             'coffee_break_minutes' => ['required', 'integer', 'min:0'],
+            'work_days' => ['required', 'array', 'min:1'],
+            'work_days.*' => ['integer', 'between:1,7'],
+            'night_differential' => ['required', 'in:auto,yes,no'],
         ]);
+
+        $data['work_days'] = array_values(array_map('intval', $data['work_days']));
+        sort($data['work_days']);
+
+        $data['night_differential_eligible'] = match ($data['night_differential']) {
+            'yes' => true,
+            'no' => false,
+            default => null,
+        };
+        unset($data['night_differential']);
 
         WorkSchedule::updateOrCreate(['id' => $this->editingId], $data);
 
@@ -45,6 +62,12 @@ new #[Layout('layouts.app')] class extends Component
         $this->end_time = $schedule->end_time->format('H:i');
         $this->lunch_break_minutes = (string) $schedule->lunch_break_minutes;
         $this->coffee_break_minutes = (string) $schedule->coffee_break_minutes;
+        $this->work_days = $schedule->workDays();
+        $this->night_differential = match ($schedule->night_differential_eligible) {
+            true => 'yes',
+            false => 'no',
+            default => 'auto',
+        };
         $this->showForm = true;
     }
 
@@ -59,6 +82,8 @@ new #[Layout('layouts.app')] class extends Component
         $this->reset(['name', 'start_time', 'end_time', 'editingId']);
         $this->lunch_break_minutes = '60';
         $this->coffee_break_minutes = '30';
+        $this->work_days = [1, 2, 3, 4, 5];
+        $this->night_differential = 'auto';
     }
 
     public function delete(int $id): void
@@ -92,6 +117,8 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Hours</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Lunch</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Coffee</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Work Days</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Night Diff</th>
                         <th class="px-4 py-3"></th>
                     </tr>
                 </thead>
@@ -102,6 +129,15 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $schedule->start_time->format('g:i A') }} – {{ $schedule->end_time->format('g:i A') }}</td>
                             <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $schedule->lunch_break_minutes }} min</td>
                             <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $schedule->coffee_break_minutes }} min</td>
+                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">
+                                @php $dayLabels = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 7 => 'Sun']; @endphp
+                                {{ collect($schedule->workDays())->map(fn ($d) => $dayLabels[$d] ?? $d)->join(', ') }}
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                <x-badge :color="$schedule->qualifiesForNightDifferential() ? 'blue' : 'neutral'">
+                                    {{ $schedule->qualifiesForNightDifferential() ? 'Yes' : 'No' }}{{ $schedule->night_differential_eligible === null ? ' (auto)' : '' }}
+                                </x-badge>
+                            </td>
                             <td class="px-4 py-3 text-right">
                                 <div class="flex justify-end gap-1">
                                     <x-icon-button icon="pencil" variant="brand" wire:click="edit({{ $schedule->id }})" title="Edit" />
@@ -110,7 +146,7 @@ new #[Layout('layouts.app')] class extends Component
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-4 py-8 text-center text-sm font-medium text-[#778599]">No schedules yet.</td></tr>
+                        <tr><td colspan="7" class="px-4 py-8 text-center text-sm font-medium text-[#778599]">No schedules yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -147,6 +183,32 @@ new #[Layout('layouts.app')] class extends Component
                     <x-input wire:model="coffee_break_minutes" type="number" />
                 </div>
             </div>
+
+            <div>
+                <x-label>Work Days</x-label>
+                <p class="mb-2 text-xs font-medium text-[#778599]">Unchecked days are rest days and are never counted as absences.</p>
+                <div class="flex flex-wrap gap-3">
+                    @foreach ([1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 7 => 'Sun'] as $value => $label)
+                        <label class="flex items-center gap-1.5 text-sm font-medium text-[#65758c] dark:text-neutral-300">
+                            <input type="checkbox" wire:model="work_days" value="{{ $value }}"
+                                   class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                            {{ $label }}
+                        </label>
+                    @endforeach
+                </div>
+                @error('work_days') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <x-label>Night Differential</x-label>
+                <x-select wire:model="night_differential">
+                    <option value="auto">Auto — based on 10PM–6AM overlap</option>
+                    <option value="yes">Always eligible</option>
+                    <option value="no">Never eligible</option>
+                </x-select>
+                @error('night_differential') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            </div>
+
             <div class="flex gap-2 pt-2">
                 <x-button type="submit">{{ $editingId ? 'Update' : 'Add' }}</x-button>
                 <x-button type="button" variant="secondary" wire:click="closeForm">Cancel</x-button>
