@@ -1,0 +1,80 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: 'Figtree', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Brand green, sampled from the CreatiVision logo */
+    --color-brand-50: #eefaf3;
+    --color-brand-100: #d6f3e2;
+    --color-brand-200: #aee6c8;
+    --color-brand-300: #79d1a8;
+    --color-brand-400: #46b884;
+    --color-brand-500: #239b68;
+    --color-brand-600: #157a52;
+    --color-brand-700: #146c43;
+    --color-brand-800: #14532d;
+    --color-brand-900: #0f3d22;
+    --color-brand-950: #082517;
+
+    --color-ink-50: #f8fafc;
+    --color-ink-100: #f1f5f9;
+    --color-ink-200: #e2e8f0;
+    --color-ink-300: #cbd5e1;
+    --color-ink-400: #94a3b8;
+    --color-ink-500: #64748b;
+    --color-ink-600: #475569;
+    --color-ink-700: #334155;
+    --color-ink-800: #1e293b;
+    --color-ink-900: #0f172a;
+    --color-ink-950: #020617;
+}
+
+@layer base {
+    html {
+        @apply bg-ink-50 dark:bg-ink-950;
+    }
+
+    body {
+        @apply bg-ink-50 text-ink-900 antialiased dark:bg-ink-950 dark:text-ink-100;
+    }
+
+    [x-cloak] {
+        display: none !important;
+    }
+
+    button:not(:disabled),
+    a,
+    [role='button']:not(:disabled),
+    [wire\:click]:not(:disabled),
+    summary {
+        cursor: pointer;
+    }
+}
+
+@layer components {
+    .app-surface {
+        background:
+            radial-gradient(circle at top left, rgba(21, 122, 82, 0.08), transparent 34rem),
+            linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+    }
+
+    .dark .app-surface {
+        background:
+            radial-gradient(circle at top left, rgba(35, 155, 104, 0.18), transparent 34rem),
+            linear-gradient(180deg, #020617 0%, #0f172a 100%);
+    }
+
+    .professional-panel {
+        @apply rounded-lg border border-ink-200/80 bg-white shadow-sm shadow-ink-200/60 dark:border-white/10 dark:bg-ink-900/90 dark:shadow-black/20;
+    }
+
+    .muted-label {
+        @apply text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 dark:text-ink-400;
+    }
+}

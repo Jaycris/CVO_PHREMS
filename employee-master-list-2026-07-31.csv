@@ -1,0 +1,4 @@
+"Employee ID","Full Name","Phone Name","Company Email",Department,Position,"Hire Date","Employment Status","Basic Salary",Allowance,"Reports To","Personal Contact","Personal Email","Civil Status"
+EMP-0001,"Jay Cristobal",Jay,jay@creativision.test,Sales,"Sales Agent",2026-07-01,Regular,20000.00,0.00,"Mona Manager",09171234567,jayarcristobal@gmail.com,Single
+EMP-0002,"Mona Manager",,mona.manager@creativision.test,Sales,"Sales Agent",2024-01-01,Regular,30000.00,0.00,,,,
+EMP-0003,"Chris CEO",,chris.ceo@creativision.test,Sales,"Sales Agent",2020-01-01,Regular,50000.00,0.00,,,,

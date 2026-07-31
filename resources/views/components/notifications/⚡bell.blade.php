@@ -1,0 +1,68 @@
+<?php
+
+use Illuminate\Support\Facades\Auth;
+use Livewire\Component;
+
+new class extends Component
+{
+    public function markRead(string $notificationId): void
+    {
+        Auth::user()->notifications()->where('id', $notificationId)->first()?->markAsRead();
+    }
+
+    public function markAllRead(): void
+    {
+        Auth::user()->unreadNotifications->markAsRead();
+    }
+
+    public function with(): array
+    {
+        return [
+            'notifications' => Auth::user()->notifications()->latest()->limit(10)->get(),
+            'unreadCount' => Auth::user()->unreadNotifications()->count(),
+        ];
+    }
+};
+?>
+
+<div class="relative" x-data @click.outside="
+        $refs.bellPanel.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
+        $refs.bellPanel.classList.remove('opacity-100', 'scale-100');
+    ">
+    <button @click="
+            const willOpen = $refs.bellPanel.classList.contains('opacity-0');
+            $refs.bellPanel.classList.toggle('opacity-0', !willOpen);
+            $refs.bellPanel.classList.toggle('scale-95', !willOpen);
+            $refs.bellPanel.classList.toggle('pointer-events-none', !willOpen);
+            $refs.bellPanel.classList.toggle('opacity-100', willOpen);
+            $refs.bellPanel.classList.toggle('scale-100', willOpen);
+        " class="relative flex items-center justify-center rounded-xl border border-neutral-200 bg-white p-2.5 font-medium text-[#778599] shadow-sm hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800">
+        <x-icon name="bell" stroke-width="2.25" class="h-5 w-5" />
+        @if ($unreadCount > 0)
+            <span class="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white">{{ $unreadCount }}</span>
+        @endif
+    </button>
+
+    <div x-ref="bellPanel"
+         class="absolute right-0 z-20 mt-2 w-80 origin-top-right scale-95 rounded-xl border border-neutral-200/70 bg-white opacity-0 shadow-lg transition duration-150 ease-out pointer-events-none dark:border-neutral-800 dark:bg-neutral-900">
+        <div class="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+            <span class="text-sm font-semibold text-[#65758c] dark:text-white">Notifications</span>
+            @if ($unreadCount > 0)
+                <button wire:click="markAllRead" class="text-xs font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Mark all read</button>
+            @endif
+        </div>
+        <div class="max-h-80 overflow-y-auto">
+            @forelse ($notifications as $notification)
+                <a href="{{ url('/leave-requests/' . $notification->data['leave_request_id']) }}"
+                   wire:navigate
+                   wire:click="markRead('{{ $notification->id }}')"
+                   class="block border-b border-neutral-100 px-4 py-3 text-sm hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/50 {{ $notification->read_at ? 'text-[#778599]' : 'font-medium text-[#65758c] dark:text-white' }}">
+                    {{ $notification->data['message'] ?? 'Notification' }}
+                    <div class="mt-1 text-xs font-medium text-[#778599]">{{ $notification->created_at->diffForHumans() }}</div>
+                </a>
+            @empty
+                <p class="px-4 py-8 text-center text-sm font-medium text-[#778599]">No notifications yet.</p>
+            @endforelse
+        </div>
+    </div>
+</div>
