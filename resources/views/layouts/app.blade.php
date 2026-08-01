@@ -47,6 +47,7 @@
 
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">People</p>
                         <x-nav-link :href="route('employees.index')" :active="request()->routeIs('employees.*')" icon="people-group">Employees</x-nav-link>
+                        <x-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')" icon="users">Users</x-nav-link>
                         <x-nav-link :href="route('schedules.index')" :active="request()->routeIs('schedules.*')" icon="calendar">Work Schedules</x-nav-link>
                         <x-nav-link :href="route('attendance.dtr')" :active="request()->routeIs('attendance.dtr')" icon="clock">DTR</x-nav-link>
                         <x-nav-link :href="route('leave-types.index')" :active="request()->routeIs('leave-types.*')" icon="document">Leave Types</x-nav-link>
@@ -69,6 +70,7 @@
                         request()->routeIs('org.departments') => 'Departments',
                         request()->routeIs('org.positions') => 'Positions',
                         request()->routeIs('employees.*') => 'Employees',
+                        request()->routeIs('users.*') => 'Users',
                         request()->routeIs('schedules.*') => 'Work Schedules',
                         request()->routeIs('attendance.dtr') => 'DTR',
                         request()->routeIs('leave-types.*') => 'Leave Types',

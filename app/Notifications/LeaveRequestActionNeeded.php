@@ -7,7 +7,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class LeaveRequestActionNeeded extends Notification
+class LeaveRequestActionNeeded extends Notification implements ShouldQueue
 {
     use Queueable;
 

@@ -27,6 +27,8 @@ Route::middleware('auth')->group(function () {
         Route::livewire('/org/departments', 'org.departments')->name('org.departments');
         Route::livewire('/org/positions', 'org.positions')->name('org.positions');
 
+        Route::livewire('/users', 'users.index')->name('users.index');
+
         Route::livewire('/employees', 'employees.index')->name('employees.index');
         Route::livewire('/employees/create', 'employees.create')->name('employees.create');
         Route::livewire('/employees/{employee}', 'employees.show')->name('employees.show');

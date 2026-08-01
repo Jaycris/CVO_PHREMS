@@ -53,7 +53,16 @@ new class extends Component
         </div>
         <div class="max-h-80 overflow-y-auto">
             @forelse ($notifications as $notification)
-                <a href="{{ url('/leave-requests/' . $notification->data['leave_request_id']) }}"
+                @php
+                    // Older leave notifications only carry leave_request_id; newer ones
+                    // carry an explicit url. Fall back to the bell itself so a
+                    // notification type without either can never render a broken link.
+                    $target = $notification->data['url']
+                        ?? (isset($notification->data['leave_request_id'])
+                            ? '/leave-requests/' . $notification->data['leave_request_id']
+                            : null);
+                @endphp
+                <a href="{{ $target ? url($target) : '#' }}"
                    wire:navigate
                    wire:click="markRead('{{ $notification->id }}')"
                    class="block border-b border-neutral-100 px-4 py-3 text-sm hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/50 {{ $notification->read_at ? 'text-[#778599]' : 'font-medium text-[#65758c] dark:text-white' }}">

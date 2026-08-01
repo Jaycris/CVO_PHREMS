@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\GeneratesReferenceCode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,21 @@ use Illuminate\Support\Facades\DB;
 
 class Employee extends Model
 {
+    use GeneratesReferenceCode;
+
+    public static function generateEmployeeId(): string
+    {
+        return static::generateReferenceCode('EMP', 'employee_id');
+    }
+
+    /** Guarantees an ID even when a record is created outside the HR form. */
+    protected static function booted(): void
+    {
+        static::creating(function (self $employee): void {
+            $employee->employee_id ??= static::generateEmployeeId();
+        });
+    }
+
     protected $fillable = [
         'employee_id',
         'phone_name',

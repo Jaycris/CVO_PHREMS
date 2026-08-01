@@ -1,24 +1,20 @@
 <?php
 
-use App\Mail\AccountInviteMail;
 use App\Mail\OnboardingLinkMail;
 use App\Models\Employee;
 use App\Models\EmployeeLeaveDisposition;
 use App\Models\LeaveCreditTransaction;
 use App\Models\LeaveType;
-use App\Models\User;
 use App\Models\WorkSchedule;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
-use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
     public Employee $employee;
-    public string $onboardingEmail = '';
+    public string $onboardingEmailChoice = 'company';
     public ?string $statusMessage = null;
     public ?int $newScheduleId = null;
     public string $newScheduleStartDate = '';
@@ -36,7 +32,6 @@ new #[Layout('layouts.app')] class extends Component
     public function mount(Employee $employee): void
     {
         $this->employee = $employee->load(['department', 'position', 'reportsTo', 'user']);
-        $this->onboardingEmail = $employee->company_email;
         $this->newScheduleStartDate = now()->toDateString();
 
         $this->includeInPayroll = (bool) $employee->include_in_payroll;
@@ -91,8 +86,18 @@ new #[Layout('layouts.app')] class extends Component
     public function sendOnboardingLink(): void
     {
         $this->validate([
-            'onboardingEmail' => ['required', 'email'],
+            'onboardingEmailChoice' => ['required', 'in:company,personal'],
         ]);
+
+        $recipient = $this->onboardingEmailChoice === 'personal'
+            ? $this->employee->personal_email
+            : $this->employee->company_email;
+
+        if (! $recipient) {
+            $this->addError('onboardingEmailChoice', 'That employee has no ' . $this->onboardingEmailChoice . ' email on file.');
+
+            return;
+        }
 
         $url = URL::temporarySignedRoute(
             'onboarding.show',
@@ -100,34 +105,9 @@ new #[Layout('layouts.app')] class extends Component
             ['employee' => $this->employee->id]
         );
 
-        Mail::to($this->onboardingEmail)->send(new OnboardingLinkMail($this->employee, $url));
+        Mail::to($recipient)->queue(new OnboardingLinkMail($this->employee, $url));
 
-        $this->statusMessage = "Onboarding link sent to {$this->onboardingEmail}.";
-    }
-
-    public function createLogin(): void
-    {
-        abort_if($this->employee->user_id, 403, 'This employee already has a login.');
-
-        $user = User::create([
-            'name' => $this->employee->fullName() ?: $this->employee->employee_id,
-            'email' => $this->employee->company_email,
-            'password' => Str::random(32),
-        ]);
-        $user->assignRole('Employee');
-
-        $this->employee->update(['user_id' => $user->id]);
-
-        $url = URL::temporarySignedRoute(
-            'password.setup',
-            now()->addDays(3),
-            ['user' => $user->id]
-        );
-
-        Mail::to($this->employee->company_email)->send(new AccountInviteMail($this->employee, $url));
-
-        $this->employee->refresh()->load('user');
-        $this->statusMessage = "Login created. Invite sent to {$this->employee->company_email}.";
+        $this->statusMessage = "Onboarding link sent to {$recipient}.";
     }
 
     public function grantInitialCredits(int $leaveTypeId): void
@@ -224,9 +204,19 @@ new #[Layout('layouts.app')] class extends Component
                 <form wire:submit="sendOnboardingLink" class="space-y-3">
                     <div>
                         <x-label>Send onboarding link to</x-label>
-                        <x-input wire:model="onboardingEmail" type="email" />
-                        <p class="mt-1 text-xs font-medium text-[#778599]">Company or personal email — editable for this send.</p>
-                        @error('onboardingEmail') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                        <div class="mt-1 space-y-2">
+                            <label class="flex items-center gap-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
+                                <input type="radio" wire:model="onboardingEmailChoice" value="company"
+                                       class="border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                                Company email <span class="text-xs text-[#778599]">({{ $employee->company_email }})</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
+                                <input type="radio" wire:model="onboardingEmailChoice" value="personal"
+                                       class="border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                                Personal email <span class="text-xs text-[#778599]">({{ $employee->personal_email ?: 'not on file' }})</span>
+                            </label>
+                        </div>
+                        @error('onboardingEmailChoice') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <x-button type="submit">Send Onboarding Link</x-button>
                 </form>
@@ -237,7 +227,11 @@ new #[Layout('layouts.app')] class extends Component
                 @if ($employee->user_id)
                     <x-badge color="green">Login active ({{ $employee->user->email }})</x-badge>
                 @elseif ($employee->onboarding_completed_at)
-                    <x-button wire:click="createLogin">Create Login</x-button>
+                    <p class="text-sm font-medium text-[#778599]">
+                        Ready for credentials. Create the login from the
+                        <a href="{{ route('users.index') }}" wire:navigate class="font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-400">Users</a>
+                        page.
+                    </p>
                 @else
                     <p class="text-sm font-medium text-[#778599]">Complete onboarding before creating a login.</p>
                 @endif

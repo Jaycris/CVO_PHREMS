@@ -31,7 +31,9 @@ new #[Layout('layouts.guest')] class extends Component
             'password_set_at' => now(),
         ]);
 
-        $this->activated = true;
+        session()->flash('status', 'Password set successfully. You can now log in.');
+
+        $this->redirect(route('login'), navigate: true);
     }
 };
 ?>

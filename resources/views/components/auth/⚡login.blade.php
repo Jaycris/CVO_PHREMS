@@ -68,6 +68,13 @@ new #[Layout('layouts.guest')] class extends Component
                     <h2 class="mb-1 text-center text-2xl font-bold text-ink-950 dark:text-white md:text-left">Welcome back</h2>
                     <p class="mb-8 text-center text-sm font-medium text-ink-500 dark:text-ink-400 md:text-left">Sign in to continue to the HRIS workspace.</p>
 
+                    @if (session('status'))
+                        <div class="mb-6 flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                            <x-icon name="check" class="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>{{ session('status') }}</span>
+                        </div>
+                    @endif
+
                     <form wire:submit="login" class="space-y-6">
                         <div>
                             <div class="relative">

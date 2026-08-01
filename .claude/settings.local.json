@@ -6,7 +6,9 @@
       "Bash(rm -f \"/d/Project/CreatiVision/Claude/database/database.sqlite\")",
       "Bash(\"/d/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe\" \"/d/composer/composer.phar\" require livewire/livewire spatie/laravel-permission)",
       "Bash(\"/d/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe\" artisan *)",
-      "Bash(D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe artisan tinker '--execute= *)"
+      "Bash(D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe artisan tinker '--execute= *)",
+      "Bash(perl -0pi -e 's/colspan=\"4\" class=\"px-4 py-8 text-center text-sm font-medium text-\\\\[#778599\\\\]\">No users yet/colspan=\"5\" class=\"px-4 py-8 text-center text-sm font-medium text-[#778599]\">No users yet/' \"resources/views/components/users/⚡index.blade.php\")",
+      "Bash(perl -0pi -e 's/->orWhere\\\\\\('\\\\''email'\\\\'', '\\\\''like'\\\\'', \"%\\\\{\\\\$this->search\\\\}%\"\\\\\\)\\\\\\)\\\\\\)/->orWhere\\('\\\\''email'\\\\'', '\\\\''like'\\\\'', \"%{\\\\$this->search}%\"\\)->orWhere\\('\\\\''user_code'\\\\'', '\\\\''like'\\\\'', \"%{\\\\$this->search}%\"\\)\\)\\)/' resources/views/components/users/⚡index.blade.php)"
     ]
   }
 }

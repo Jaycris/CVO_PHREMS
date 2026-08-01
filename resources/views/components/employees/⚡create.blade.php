@@ -9,8 +9,12 @@ use Livewire\Component;
 new #[Layout('layouts.app')] class extends Component
 {
     public string $employee_id = '';
+    public string $first_name = '';
+    public string $middle_name = '';
+    public string $last_name = '';
     public string $phone_name = '';
     public string $company_email = '';
+    public string $personal_email = '';
     public ?int $position_id = null;
     public ?int $department_id = null;
     public string $hire_date = '';
@@ -23,8 +27,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function mount(): void
     {
-        $next = Employee::count() + 1;
-        $this->employee_id = 'EMP-' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+        $this->employee_id = Employee::generateEmployeeId();
     }
 
     public function isSalesDepartment(): bool
@@ -40,8 +43,12 @@ new #[Layout('layouts.app')] class extends Component
     {
         $rules = [
             'employee_id' => ['required', 'string', 'max:50', 'unique:employees,employee_id'],
+            'first_name' => ['required', 'string', 'max:255'],
+            'middle_name' => ['nullable', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
             'phone_name' => ['nullable', 'string', 'max:255'],
             'company_email' => ['required', 'email', 'unique:employees,company_email'],
+            'personal_email' => ['required', 'email'],
             'position_id' => ['required', 'exists:positions,id'],
             'department_id' => ['required', 'exists:departments,id'],
             'hire_date' => ['required', 'date'],
@@ -92,6 +99,23 @@ new #[Layout('layouts.app')] class extends Component
                     @error('employee_id') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
                 <div>
+                    <x-label>First Name</x-label>
+                    <x-input wire:model="first_name" type="text" />
+                    @error('first_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <x-label>Middle Name <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                    <x-input wire:model="middle_name" type="text" />
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                    <x-label>Last Name</x-label>
+                    <x-input wire:model="last_name" type="text" />
+                    @error('last_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+                <div>
                     <x-label>Phone Name <span class="font-medium text-[#778599]">(alias for calls)</span></x-label>
                     <x-input wire:model="phone_name" type="text" />
                 </div>
@@ -99,6 +123,15 @@ new #[Layout('layouts.app')] class extends Component
                     <x-label>Company Email</x-label>
                     <x-input wire:model="company_email" type="email" />
                     @error('company_email') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                    <x-label>Personal Email</x-label>
+                    <x-input wire:model="personal_email" type="email" />
+                    <p class="mt-1 text-xs font-medium text-[#778599]">The onboarding invitation can be sent here or to the company email.</p>
+                    @error('personal_email') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
             </div>
 
