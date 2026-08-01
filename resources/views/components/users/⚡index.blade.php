@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Spatie\Permission\Models\Role;
 
@@ -21,12 +22,18 @@ new #[Layout('layouts.app')] class extends Component
     public string $email = '';
     public string $role = 'Employee';
 
+    // System-assigned. Locked so a crafted request cannot swap it for a
+    // chosen value — disabling the input only stops honest editing.
+    #[Locked]
+    public string $userCode = '';
+
     public string $search = '';
 
     public function create(): void
     {
         $this->reset(['employeeId', 'email']);
         $this->role = 'Employee';
+        $this->userCode = User::generateUserCode();
         $this->resetValidation();
         $this->showForm = true;
     }
@@ -53,7 +60,16 @@ new #[Layout('layouts.app')] class extends Component
         abort_if($employee->user_id !== null, 403, 'This employee already has a login.');
 
         $user = DB::transaction(function () use ($employee, $data) {
+            // The code was reserved when the form opened; if another account
+            // claimed it in the meantime, take a fresh one rather than failing
+            // on the unique index.
+            $code = $this->userCode;
+            if ($code === '' || User::where('user_code', $code)->exists()) {
+                $code = User::generateUserCode();
+            }
+
             $user = User::create([
+                'user_code' => $code,
                 'name' => $employee->fullName() ?: $employee->employee_id,
                 'email' => $data['email'],
                 // Placeholder only — the employee sets their own via the invite link.
@@ -167,6 +183,12 @@ new #[Layout('layouts.app')] class extends Component
             <div class="mt-4"><x-button type="button" variant="secondary" wire:click="closeForm">Close</x-button></div>
         @else
             <form wire:submit="save" class="space-y-4">
+                <div>
+                    <x-label>User ID</x-label>
+                    <x-input type="text" value="{{ $userCode }}" disabled readonly class="cursor-not-allowed opacity-60" />
+                    <p class="mt-1 text-xs font-medium text-[#778599]">Assigned automatically.</p>
+                </div>
+
                 <div>
                     <x-label>Employee</x-label>
                     <x-select wire:model.live="employeeId">

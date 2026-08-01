@@ -4,10 +4,14 @@ use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Position;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    // System-assigned. Locked so a crafted request cannot swap it for a
+    // chosen value — disabling the input only stops honest editing.
+    #[Locked]
     public string $employee_id = '';
     public string $first_name = '';
     public string $middle_name = '';
@@ -95,7 +99,8 @@ new #[Layout('layouts.app')] class extends Component
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                     <x-label>Employee ID</x-label>
-                    <x-input wire:model="employee_id" type="text" />
+                    <x-input type="text" value="{{ $employee_id }}" disabled readonly class="cursor-not-allowed opacity-60" />
+                    <p class="mt-1 text-xs font-medium text-[#778599]">Assigned automatically.</p>
                     @error('employee_id') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
                 <div>
