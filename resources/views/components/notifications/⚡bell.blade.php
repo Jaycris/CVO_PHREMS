@@ -36,7 +36,7 @@ new class extends Component
             $refs.bellPanel.classList.toggle('pointer-events-none', !willOpen);
             $refs.bellPanel.classList.toggle('opacity-100', willOpen);
             $refs.bellPanel.classList.toggle('scale-100', willOpen);
-        " class="relative flex items-center justify-center rounded-xl border border-neutral-200 bg-white p-2.5 font-medium text-[#778599] shadow-sm hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800">
+        " class="relative flex h-12 w-12 items-center justify-center rounded-xl border border-neutral-200 bg-white font-medium text-[#778599] shadow-sm hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800">
         <x-icon name="bell" stroke-width="2.25" class="h-5 w-5" />
         @if ($unreadCount > 0)
             <span class="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white">{{ $unreadCount }}</span>
@@ -44,9 +44,12 @@ new class extends Component
     </button>
 
     <div x-ref="bellPanel"
-         class="absolute right-0 z-20 mt-2 w-80 origin-top-right scale-95 rounded-xl border border-neutral-200/70 bg-white opacity-0 shadow-lg transition duration-150 ease-out pointer-events-none dark:border-neutral-800 dark:bg-neutral-900">
+         class="absolute right-0 z-20 mt-2 w-96 origin-top-right scale-95 rounded-xl border border-neutral-200/70 bg-white opacity-0 shadow-lg transition duration-150 ease-out pointer-events-none dark:border-neutral-800 dark:bg-neutral-900">
         <div class="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-            <span class="text-sm font-semibold text-[#65758c] dark:text-white">Notifications</span>
+            <div>
+                <span class="text-sm font-bold text-[#0f172a] dark:text-white">Notifications</span>
+                <p class="text-xs font-medium text-[#778599]">{{ $unreadCount }} unread</p>
+            </div>
             @if ($unreadCount > 0)
                 <button wire:click="markAllRead" class="text-xs font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Mark all read</button>
             @endif
@@ -65,9 +68,16 @@ new class extends Component
                 <a href="{{ $target ? url($target) : '#' }}"
                    wire:navigate
                    wire:click="markRead('{{ $notification->id }}')"
-                   class="block border-b border-neutral-100 px-4 py-3 text-sm hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/50 {{ $notification->read_at ? 'text-[#778599]' : 'font-medium text-[#65758c] dark:text-white' }}">
-                    {{ $notification->data['message'] ?? 'Notification' }}
-                    <div class="mt-1 text-xs font-medium text-[#778599]">{{ $notification->created_at->diffForHumans() }}</div>
+                   class="group flex gap-3 border-b border-neutral-100 px-4 py-3 text-sm transition hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/50 {{ $notification->read_at ? 'bg-white text-[#778599] dark:bg-neutral-900' : 'bg-brand-50/80 text-[#0f172a] dark:bg-brand-500/10 dark:text-white' }}">
+                    <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full {{ $notification->read_at ? 'bg-neutral-300 dark:bg-neutral-700' : 'bg-brand-700 dark:bg-brand-300' }}"></span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block {{ $notification->read_at ? 'font-medium' : 'font-bold' }}">{{ $notification->data['message'] ?? 'Notification' }}</span>
+                        <span class="mt-1 flex items-center gap-2 text-xs font-medium text-[#778599]">
+                            <span>{{ $notification->created_at->diffForHumans() }}</span>
+                            <span>•</span>
+                            <span>{{ $notification->read_at ? 'Read' : 'Unread' }}</span>
+                        </span>
+                    </span>
                 </a>
             @empty
                 <p class="px-4 py-8 text-center text-sm font-medium text-[#778599]">No notifications yet.</p>

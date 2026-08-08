@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\LeaveRequest;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -24,22 +25,24 @@ class LeaveRequestActionNeeded extends Notification implements ShouldQueue
     {
         $leaveRequest = $this->leaveRequest;
         $employeeName = $leaveRequest->employee->fullName() ?: $leaveRequest->employee->employee_id;
+        $url = url("/leave-requests/{$leaveRequest->id}");
 
         return (new MailMessage)
-            ->subject("Leave request awaiting your approval — {$employeeName}")
-            ->line("{$employeeName} requested {$leaveRequest->days_requested} day(s) of {$leaveRequest->leaveType->name} ({$leaveRequest->start_date->format('M d, Y')} – {$leaveRequest->end_date->format('M d, Y')}).")
-            ->when($leaveRequest->is_lwop, fn ($mail) => $mail->line('Note: this employee does not have sufficient leave credits — this request would be Leave Without Pay (LWOP) if approved.'))
-            ->action('Review Request', url("/leave-requests/{$leaveRequest->id}"));
+            ->subject("Leave request awaiting your approval - {$employeeName}")
+            ->view('emails.leave-request-action-needed', [
+                'leaveRequest' => $leaveRequest,
+                'url' => $url,
+            ]);
     }
 
     public function toArray(object $notifiable): array
     {
         $leaveRequest = $this->leaveRequest;
+        $employeeName = $leaveRequest->employee->fullName() ?: $leaveRequest->employee->employee_id;
 
         return [
             'leave_request_id' => $leaveRequest->id,
-            'message' => ($leaveRequest->employee->fullName() ?: $leaveRequest->employee->employee_id)
-                . " requested {$leaveRequest->days_requested} day(s) of {$leaveRequest->leaveType->name} — awaiting your approval.",
+            'message' => "{$employeeName} requested {$leaveRequest->days_requested} day(s) of {$leaveRequest->leaveType->name} - awaiting your approval.",
         ];
     }
 }

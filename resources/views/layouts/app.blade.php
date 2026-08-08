@@ -23,9 +23,9 @@
         @livewireStyles
     </head>
     <body class="h-full font-sans antialiased">
-        <div class="app-surface flex h-full min-h-screen" x-data="{ sidebarOpen: false }">
+        <div class="app-surface flex min-h-screen" x-data="{ sidebarOpen: false }">
             {{-- Sidebar --}}
-            <aside class="fixed inset-y-0 left-0 z-30 flex w-[17rem] -translate-x-full transform flex-col border-r border-ink-200/80 bg-white/95 shadow-xl shadow-ink-200/40 backdrop-blur transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 lg:shadow-none dark:border-white/10 dark:bg-ink-950/95 dark:shadow-black/30"
+            <aside class="fixed inset-y-0 left-0 z-30 flex w-[17rem] -translate-x-full transform flex-col border-r border-ink-200/80 bg-white/95 shadow-xl shadow-ink-200/40 backdrop-blur transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:shadow-none dark:border-white/10 dark:bg-ink-950/95 dark:shadow-black/30"
                    :class="{ 'translate-x-0': sidebarOpen }">
                 <div class="border-b border-ink-200/80 px-4 py-5 dark:border-white/10">
                     <img src="{{ asset('images/logo.png') }}" alt="CreatiVision" class="h-auto w-full object-contain">
@@ -78,20 +78,20 @@
                         default => $title ?? '',
                     };
                 @endphp
-                <header class="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-ink-200/80 bg-white/85 px-4 shadow-sm shadow-ink-200/50 backdrop-blur-xl sm:px-6 dark:border-white/10 dark:bg-ink-950/80 dark:shadow-black/20">
+                <header class="sticky top-0 z-10 flex h-20 min-h-20 items-center justify-between border-b border-ink-200/80 bg-white/90 px-5 shadow-sm shadow-ink-200/50 backdrop-blur-xl sm:px-8 dark:border-white/10 dark:bg-ink-950/85 dark:shadow-black/20">
                     <div class="flex items-center gap-3">
                         <button @click="sidebarOpen = true" class="rounded-lg p-2 font-medium text-ink-500 hover:bg-ink-100 lg:hidden dark:hover:bg-white/10">
                             <x-icon name="chevron-down" class="h-5 w-5 rotate-90" />
                         </button>
                         <div>
-                            <p class="hidden text-xs font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300 sm:block">CreatiVision HRIS</p>
+                            <p class="hidden text-sm font-semibold uppercase tracking-[0.22em] text-brand-700 dark:text-brand-300 sm:block">CreatiVision HRIS</p>
                             @unless (request()->routeIs('org.departments') || request()->routeIs('org.positions') || request()->routeIs('employees.*'))
-                                <h1 class="text-xl font-bold text-ink-950 dark:text-white">{{ $pageTitle }}</h1>
+                                <h1 class="text-2xl font-bold leading-tight text-ink-950 dark:text-white">{{ $pageTitle }}</h1>
                             @endunless
                         </div>
                     </div>
 
-                    <div class="flex items-center gap-2 sm:gap-3">
+                    <div class="flex items-center gap-3">
                         <x-theme-toggle />
                         <livewire:notifications.bell />
 
@@ -106,8 +106,8 @@
                                     $refs.userMenuPanel.classList.toggle('pointer-events-none', !willOpen);
                                     $refs.userMenuPanel.classList.toggle('opacity-100', willOpen);
                                     $refs.userMenuPanel.classList.toggle('scale-100', willOpen);
-                                " class="flex items-center gap-2 rounded-full border border-transparent py-1 pl-1 pr-2 transition hover:border-ink-200 hover:bg-white hover:shadow-sm dark:hover:border-white/10 dark:hover:bg-white/10">
-                                <img src="{{ asset('images/logo-mark.png') }}" alt="" class="h-9 w-9 rounded-full border border-ink-200 bg-white object-contain p-1 dark:border-white/10">
+                                " class="flex h-12 items-center gap-3 rounded-2xl border border-transparent py-1 pl-1.5 pr-3 transition hover:border-ink-200 hover:bg-white hover:shadow-sm dark:hover:border-white/10 dark:hover:bg-white/10">
+                                <img src="{{ asset('images/logo-mark.png') }}" alt="" class="h-10 w-10 rounded-full border border-ink-200 bg-white object-contain p-1 dark:border-white/10">
                                 <div class="hidden text-left text-sm leading-tight sm:block">
                                     <p class="font-bold text-ink-950 dark:text-white">{{ config('app.name') }}</p>
                                     <p class="text-xs font-medium text-ink-500 dark:text-ink-400">{{ auth()->user()->getRoleNames()->join(', ') ?: 'No role' }}</p>
@@ -131,9 +131,44 @@
                     </div>
                 </header>
 
-                <main class="flex-1 p-4 sm:p-6">
+                <div id="page-loading-bar" class="page-loading-bar" aria-hidden="true"></div>
+                <div id="page-skeleton" class="page-skeleton hidden" aria-hidden="true">
+                    <div class="space-y-6 p-4 sm:p-6">
+                        <div>
+                            <div class="skeleton-line h-8 w-56"></div>
+                            <div class="skeleton-line mt-3 h-4 w-80 max-w-full"></div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-4">
+                            <div class="skeleton-card h-24 w-full sm:w-56"></div>
+                            <div class="skeleton-card h-24 w-full sm:w-56"></div>
+                            <div class="skeleton-card h-24 w-full sm:w-56"></div>
+                        </div>
+
+                        <div class="skeleton-card overflow-hidden rounded-2xl">
+                            <div class="flex items-center justify-between border-b border-ink-200 px-6 py-5 dark:border-white/10">
+                                <div class="skeleton-line h-6 w-48"></div>
+                                <div class="skeleton-line h-10 w-72 max-w-full"></div>
+                            </div>
+                            <div class="grid gap-5 p-6 sm:grid-cols-3">
+                                <div class="skeleton-line h-12 w-full"></div>
+                                <div class="skeleton-line h-12 w-full"></div>
+                                <div class="skeleton-line h-12 w-full"></div>
+                                <div class="skeleton-line h-12 w-full"></div>
+                                <div class="skeleton-line h-12 w-full"></div>
+                                <div class="skeleton-line h-12 w-full"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <main id="page-content" class="page-transition flex-1 p-4 sm:p-6">
                     {{ $slot }}
                 </main>
+
+                <footer class="border-t border-ink-200/70 bg-white/75 px-4 py-4 text-center text-sm font-medium text-ink-500 backdrop-blur sm:px-6 dark:border-white/10 dark:bg-ink-950/70 dark:text-ink-400">
+                    Copyright {{ now()->year }} | CreatiVision Outsourcing Team
+                </footer>
             </div>
         </div>
 

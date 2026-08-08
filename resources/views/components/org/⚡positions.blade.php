@@ -170,7 +170,7 @@ new #[Layout('layouts.app')] class extends Component
         @endif
     </x-card>
 
-    <div x-cloak x-show="formOpen" class="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div x-cloak x-show="formOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-ink-950/50 backdrop-blur-sm" @click="formOpen = false; $wire.closeForm()"></div>
 
         <section x-show="formOpen"

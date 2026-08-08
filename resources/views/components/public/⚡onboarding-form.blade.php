@@ -10,11 +10,8 @@ new #[Layout('layouts.guest')] class extends Component
 {
     public Employee $employee;
 
-    /** 'form' while filling in details, 'review' on the confirmation step. */
     public string $step = 'form';
 
-    // Employee-supplied fields. Everything HR captured at creation is shown
-    // read-only instead, so the employee can verify but not alter it.
     public string $birthdate = '';
     public string $address = '';
     public string $personal_contact_number = '';
@@ -31,7 +28,7 @@ new #[Layout('layouts.guest')] class extends Component
         abort_unless(request()->hasValidSignature(), 403);
         abort_if($employee->onboarding_completed_at, 403, 'This onboarding form has already been submitted.');
 
-        $this->employee = $employee;
+        $this->employee = $employee->load(['department', 'position']);
         $this->birthdate = $employee->birthdate?->format('Y-m-d') ?? '';
         $this->address = (string) $employee->address;
         $this->personal_contact_number = (string) $employee->personal_contact_number;
@@ -75,8 +72,6 @@ new #[Layout('layouts.guest')] class extends Component
 
     public function submit(): void
     {
-        // Re-validate rather than trusting the step flag — a crafted request
-        // could call submit() directly without ever passing through next().
         $data = $this->validate($this->rules());
 
         abort_if($this->employee->onboarding_completed_at, 403, 'This onboarding form has already been submitted.');
@@ -85,10 +80,6 @@ new #[Layout('layouts.guest')] class extends Component
         $this->employee->update($data);
         $this->employee->refresh();
 
-        // HR is notified in-app and by email so they know a profile is ready
-        // for login creation. Admin is included because a small company may
-        // have no dedicated HR account, and a silent no-op would strand the
-        // employee. One bad address must not abort the rest.
         User::role(['HR', 'Admin'])->get()->each(function (User $hr): void {
             try {
                 $hr->notify(new EmployeeOnboardingCompleted($this->employee));
@@ -107,176 +98,242 @@ new #[Layout('layouts.guest')] class extends Component
 };
 ?>
 
-<div class="mx-auto max-w-2xl px-4 py-10">
-    <div class="mb-6 flex items-center justify-between">
-        <img src="{{ asset('images/logo.png') }}" alt="CreatiVision" class="h-9 w-auto object-contain">
-        <x-theme-toggle />
+@php
+    $fullName = trim($employee->first_name . ' ' . ($employee->middle_name ? $employee->middle_name . ' ' : '') . $employee->last_name);
+    $reviewRows = [
+        'Full Name' => $fullName,
+        'Phone Name' => $employee->phone_name ?: '-',
+        'Company Email' => $employee->company_email,
+        'Personal Email' => $employee->personal_email ?: '-',
+        'Department' => $employee->department?->name ?? '-',
+        'Job Title' => $employee->position?->title ?? '-',
+        'Birthdate' => $birthdate,
+        'Civil Status' => $civil_status,
+        'Address' => $address,
+        'Personal Contact' => $personal_contact_number,
+        'Emergency Contact' => trim($emergency_contact_name . ' (' . $emergency_contact_number . ')'),
+        'TIN' => $tin_number ?: '-',
+        'SSS' => $sss_number ?: '-',
+        'PhilHealth' => $philhealth_number ?: '-',
+        'Pag-IBIG' => $pagibig_number ?: '-',
+    ];
+@endphp
+
+<div class="min-h-screen bg-[#eef3f8] text-ink-900 dark:bg-ink-950 dark:text-white">
+    <div class="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+        <div class="mb-6 flex min-h-16 items-center rounded-2xl border border-ink-200 bg-white/90 px-5 py-4 shadow-sm shadow-ink-200/60 backdrop-blur dark:border-white/10 dark:bg-ink-900/80 dark:shadow-black/30">
+            <img src="{{ asset('images/CreativeVision-LOGO-v2-03.png') }}" alt="CreatiVision" class="h-12 w-auto object-contain">
+        </div>
+
+        @if ($employee->onboarding_completed_at)
+            <div class="mx-auto mt-16 w-full max-w-xl rounded-2xl border border-ink-200 bg-white p-8 text-center shadow-sm dark:border-white/10 dark:bg-ink-900">
+                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                    <x-icon name="check" class="h-7 w-7" />
+                </div>
+                <h1 class="mt-5 text-2xl font-bold text-ink-950 dark:text-white">Profile submitted</h1>
+                <p class="mt-2 text-sm font-medium text-ink-600 dark:text-ink-300">Thank you. HR will review your details and follow up with your HRIS account access.</p>
+            </div>
+        @else
+            <div class="grid flex-1 gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+                <aside class="rounded-3xl bg-gradient-to-br from-ink-950 via-ink-900 to-brand-950 p-8 text-white shadow-xl shadow-ink-300/50 dark:shadow-black/30">
+                    <p class="text-xs font-bold uppercase tracking-[0.28em] text-brand-200">CreatiVision HRIS</p>
+                    <h1 class="mt-5 text-4xl font-black leading-tight">
+                        {{ $step === 'review' ? 'Review your profile.' : 'Complete your employee profile.' }}
+                    </h1>
+                    <p class="mt-4 max-w-md text-sm font-medium leading-7 text-ink-200">
+                        {{ $step === 'review' ? 'Please confirm every detail before submitting to HR.' : 'HR has already recorded your work details. Please check them and complete your personal information.' }}
+                    </p>
+
+                    <div class="mt-8 rounded-2xl border border-white/10 bg-white/10 p-5">
+                        <p class="text-xs font-bold uppercase tracking-[0.2em] text-brand-200">Employee</p>
+                        <p class="mt-2 text-2xl font-bold">{{ $employee->employee_id }}</p>
+                        <p class="mt-1 text-sm font-medium text-ink-200">{{ $fullName ?: $employee->company_email }}</p>
+                    </div>
+
+                    <div class="mt-6 grid grid-cols-2 gap-3 text-sm">
+                        <div class="rounded-2xl border border-white/10 bg-white/10 p-4">
+                            <p class="text-xs font-bold uppercase tracking-wide text-ink-300">Step</p>
+                            <p class="mt-1 font-bold">{{ $step === 'review' ? 'Review' : 'Profile' }}</p>
+                        </div>
+                        <div class="rounded-2xl border border-white/10 bg-white/10 p-4">
+                            <p class="text-xs font-bold uppercase tracking-wide text-ink-300">Status</p>
+                            <p class="mt-1 font-bold">Pending HR</p>
+                        </div>
+                    </div>
+                </aside>
+
+                <main class="rounded-3xl border border-ink-200 bg-white shadow-sm shadow-ink-200/70 dark:border-white/10 dark:bg-ink-900 dark:shadow-black/20">
+                    @if ($step === 'review')
+                        <div class="border-b border-ink-200 px-7 py-6 dark:border-white/10">
+                            <h2 class="text-2xl font-bold text-ink-950 dark:text-white">Review Details</h2>
+                            <p class="mt-1 text-sm font-medium text-ink-600 dark:text-ink-300">This is the final copy HR will receive.</p>
+                        </div>
+
+                        <div class="space-y-6 p-7">
+                            <section>
+                                <h3 class="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-ink-500 dark:text-ink-400">Profile Details</h3>
+                                <div class="overflow-hidden rounded-2xl border border-ink-200 dark:border-white/10">
+                                    @foreach ($reviewRows as $label => $value)
+                                        <div class="grid gap-2 border-b border-ink-100 px-4 py-3 text-sm last:border-b-0 sm:grid-cols-[12rem_1fr] dark:border-white/10">
+                                            <dt class="font-bold text-ink-500 dark:text-ink-400">{{ $label }}</dt>
+                                            <dd class="font-semibold text-ink-900 dark:text-white">{{ $value }}</dd>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </section>
+
+                            <section>
+                                <h3 class="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-ink-500 dark:text-ink-400">Compensation And Status</h3>
+                                <div class="grid gap-3 sm:grid-cols-3">
+                                    <div class="rounded-2xl border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
+                                        <p class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Basic Salary</p>
+                                        <p class="mt-2 text-xl font-bold text-ink-950 dark:text-white">PHP {{ number_format($employee->basic_salary, 2) }}</p>
+                                    </div>
+                                    <div class="rounded-2xl border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
+                                        <p class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Allowance</p>
+                                        <p class="mt-2 text-xl font-bold text-ink-950 dark:text-white">PHP {{ number_format($employee->allowance, 2) }}</p>
+                                    </div>
+                                    <div class="rounded-2xl border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
+                                        <p class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Employment Status</p>
+                                        <div class="mt-2"><x-badge :color="$employee->employment_status === 'Regular' ? 'green' : 'amber'">{{ $employee->employment_status }}</x-badge></div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <div class="flex flex-wrap gap-3 border-t border-ink-200 pt-6 dark:border-white/10">
+                                <x-button type="button" wire:click="submit">Submit To HR</x-button>
+                                <x-button type="button" variant="secondary" wire:click="back">Back</x-button>
+                            </div>
+                        </div>
+                    @else
+                        <div class="border-b border-ink-200 px-7 py-6 dark:border-white/10">
+                            <h2 class="text-2xl font-bold text-ink-950 dark:text-white">Employee Onboarding Form</h2>
+                            <p class="mt-1 text-sm font-medium text-ink-600 dark:text-ink-300">Visible HR details are locked. Complete the remaining personal information.</p>
+                        </div>
+
+                        <form wire:submit="next" class="space-y-7 p-7">
+                            <section>
+                                <h3 class="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-ink-500 dark:text-ink-400">Recorded By HR</h3>
+                                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    @foreach ([
+                                        'Full Name' => $fullName,
+                                        'Phone Name' => $employee->phone_name ?: '-',
+                                        'Company Email' => $employee->company_email,
+                                        'Personal Email' => $employee->personal_email ?: '-',
+                                        'Department' => $employee->department?->name ?? '-',
+                                        'Job Title' => $employee->position?->title ?? '-',
+                                        'Basic Salary' => 'PHP ' . number_format($employee->basic_salary, 2),
+                                        'Allowance' => 'PHP ' . number_format($employee->allowance, 2),
+                                        'Commission Scheme' => $employee->commission_scheme ?: '-',
+                                        'Quota' => $employee->quota ? 'PHP ' . number_format($employee->quota, 2) : '-',
+                                        'Employee Status' => $employee->employment_status,
+                                    ] as $label => $value)
+                                        <div>
+                                            <x-label class="text-ink-500 dark:text-ink-400">{{ $label }}</x-label>
+                                            <x-input
+                                                type="text"
+                                                disabled
+                                                value="{{ $value }}"
+                                                class="cursor-not-allowed !border-ink-200 !bg-[#eef2f6] !font-semibold !text-ink-500 !shadow-none opacity-100 dark:!border-white/10 dark:!bg-white/10 dark:!text-ink-400"
+                                            />
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </section>
+
+                            <section class="border-t border-ink-200 pt-7 dark:border-white/10">
+                                <h3 class="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-ink-500 dark:text-ink-400">Personal Details</h3>
+
+                                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    <div>
+                                        <x-label>Birthdate</x-label>
+                                        <div class="relative" x-data="datePicker($wire.entangle('birthdate').live)" @click.outside="open = false">
+                                            <button type="button" @click="open = !open" class="flex h-11 w-full items-center justify-between rounded-lg border border-ink-200 bg-white px-3.5 text-left text-sm font-semibold text-ink-700 shadow-sm transition hover:border-brand-300 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                                                <span x-text="display()"></span>
+                                                <x-icon name="calendar" class="h-4 w-4 text-ink-400" />
+                                            </button>
+                                            <div x-cloak x-show="open" x-transition class="absolute z-20 mt-2 w-80 rounded-2xl border border-ink-200 bg-white p-4 shadow-xl shadow-ink-200/70 dark:border-white/10 dark:bg-ink-900 dark:shadow-black/30">
+                                                <div class="mb-4 flex items-center justify-between">
+                                                    <button type="button" @click="previousMonth()" class="rounded-lg p-2 text-ink-500 hover:bg-ink-100 dark:hover:bg-white/10"><x-icon name="chevron-down" class="h-4 w-4 rotate-90" /></button>
+                                                    <p class="text-sm font-bold text-ink-950 dark:text-white"><span x-text="monthNames[month]"></span> <span x-text="year"></span></p>
+                                                    <button type="button" @click="nextMonth()" class="rounded-lg p-2 text-ink-500 hover:bg-ink-100 dark:hover:bg-white/10"><x-icon name="chevron-down" class="h-4 w-4 -rotate-90" /></button>
+                                                </div>
+                                                <div class="grid grid-cols-7 gap-1 text-center text-xs font-bold uppercase text-ink-400">
+                                                    <template x-for="dayName in dayNames" :key="dayName"><div x-text="dayName"></div></template>
+                                                </div>
+                                                <div class="mt-2 grid grid-cols-7 gap-1 text-sm">
+                                                    <template x-for="blank in firstDay()" :key="`blank-${blank}`"><div></div></template>
+                                                    <template x-for="day in daysInMonth()" :key="day">
+                                                        <button type="button" @click="select(day)" class="rounded-lg px-2 py-2 font-semibold text-ink-700 hover:bg-brand-50 hover:text-brand-700 dark:text-ink-200 dark:hover:bg-brand-500/10" :class="{ 'bg-brand-700 text-white hover:bg-brand-700 hover:text-white dark:bg-brand-600': isSelected(day) }" x-text="day"></button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @error('birthdate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                                    </div>
+                                    <div>
+                                        <x-label>Civil Status</x-label>
+                                        <x-select wire:model="civil_status">
+                                            <option value="">Select status</option>
+                                            @foreach ($civilStatuses as $status)
+                                                <option value="{{ $status }}">{{ $status }}</option>
+                                            @endforeach
+                                        </x-select>
+                                        @error('civil_status') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                                    </div>
+                                </div>
+
+                                <div class="mt-4">
+                                    <x-label>Address</x-label>
+                                    <x-textarea wire:model="address" rows="3" />
+                                    @error('address') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                                </div>
+
+                                <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                    <div>
+                                        <x-label>Personal Contact Number</x-label>
+                                        <x-input wire:model="personal_contact_number" type="text" />
+                                        @error('personal_contact_number') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                                    </div>
+                                    <div>
+                                        <x-label>Emergency Contact Name</x-label>
+                                        <x-input wire:model="emergency_contact_name" type="text" />
+                                        @error('emergency_contact_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                                    </div>
+                                    <div>
+                                        <x-label>Emergency Contact Number</x-label>
+                                        <x-input wire:model="emergency_contact_number" type="text" />
+                                        @error('emergency_contact_number') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                    <div>
+                                        <x-label>TIN Number</x-label>
+                                        <x-input wire:model="tin_number" type="text" />
+                                    </div>
+                                    <div>
+                                        <x-label>SSS Number</x-label>
+                                        <x-input wire:model="sss_number" type="text" />
+                                    </div>
+                                    <div>
+                                        <x-label>PhilHealth Number</x-label>
+                                        <x-input wire:model="philhealth_number" type="text" />
+                                    </div>
+                                    <div>
+                                        <x-label>Pag-IBIG Number</x-label>
+                                        <x-input wire:model="pagibig_number" type="text" />
+                                    </div>
+                                </div>
+                            </section>
+
+                            <div class="flex justify-end border-t border-ink-200 pt-6 dark:border-white/10">
+                                <x-button type="submit">Next</x-button>
+                            </div>
+                        </form>
+                    @endif
+                </main>
+            </div>
+        @endif
     </div>
-
-    @if ($employee->onboarding_completed_at)
-        <x-card class="p-8 text-center">
-            <h1 class="text-lg font-semibold text-[#0f172a] dark:text-white">Thank you!</h1>
-            <p class="mt-2 text-sm font-medium text-[#778599] dark:text-neutral-400">Your profile has been submitted. HR will follow up with your account access.</p>
-        </x-card>
-    @elseif ($step === 'review')
-        <h1 class="mb-1 text-xl font-semibold text-[#0f172a] dark:text-white">Review Your Details</h1>
-        <p class="mb-6 text-sm font-medium text-[#778599] dark:text-neutral-400">Please check everything below before submitting.</p>
-
-        <x-card>
-            <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Your Details</h2>
-            <dl class="space-y-2 text-sm">
-                @foreach ([
-                    'Full Name' => trim($employee->first_name . ' ' . ($employee->middle_name ? $employee->middle_name . ' ' : '') . $employee->last_name),
-                    'Phone Name' => $employee->phone_name ?: '—',
-                    'Company Email' => $employee->company_email,
-                    'Personal Email' => $employee->personal_email ?: '—',
-                    'Department' => $employee->department->name,
-                    'Job Title' => $employee->position->title,
-                    'Birthdate' => $birthdate,
-                    'Civil Status' => $civil_status,
-                    'Address' => $address,
-                    'Personal Contact' => $personal_contact_number,
-                    'Emergency Contact' => $emergency_contact_name . ' (' . $emergency_contact_number . ')',
-                    'TIN' => $tin_number ?: '—',
-                    'SSS' => $sss_number ?: '—',
-                    'PhilHealth' => $philhealth_number ?: '—',
-                    'Pag-IBIG' => $pagibig_number ?: '—',
-                ] as $label => $value)
-                    <div class="flex justify-between gap-4">
-                        <dt class="font-medium text-[#778599] dark:text-neutral-400">{{ $label }}</dt>
-                        <dd class="text-right text-[#65758c] dark:text-white">{{ $value }}</dd>
-                    </div>
-                @endforeach
-            </dl>
-
-            <div class="mt-5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
-                <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Employment</h2>
-                <dl class="space-y-2 text-sm">
-                    <div class="flex justify-between gap-4">
-                        <dt class="font-medium text-[#778599] dark:text-neutral-400">Basic Salary</dt>
-                        <dd class="text-right text-[#65758c] dark:text-white">₱{{ number_format($employee->basic_salary, 2) }}</dd>
-                    </div>
-                    <div class="flex justify-between gap-4">
-                        <dt class="font-medium text-[#778599] dark:text-neutral-400">Allowance</dt>
-                        <dd class="text-right text-[#65758c] dark:text-white">₱{{ number_format($employee->allowance, 2) }}</dd>
-                    </div>
-                    <div class="flex justify-between gap-4">
-                        <dt class="font-medium text-[#778599] dark:text-neutral-400">Employment Status</dt>
-                        <dd class="text-right"><x-badge :color="$employee->employment_status === 'Regular' ? 'green' : 'amber'">{{ $employee->employment_status }}</x-badge></dd>
-                    </div>
-                </dl>
-            </div>
-
-            <div class="mt-6 flex gap-2">
-                <x-button type="button" wire:click="submit">Submit</x-button>
-                <x-button type="button" variant="secondary" wire:click="back">Back</x-button>
-            </div>
-        </x-card>
-    @else
-        <h1 class="mb-1 text-xl font-semibold text-[#0f172a] dark:text-white">Complete Your Profile</h1>
-        <p class="mb-6 text-sm font-medium text-[#778599] dark:text-neutral-400">Welcome, {{ $employee->employee_id }}. Please fill in your personal details below.</p>
-
-        <x-card>
-            <form wire:submit="next" class="space-y-5">
-                <div>
-                    <h2 class="mb-1 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Recorded by HR</h2>
-                    <p class="mb-3 text-xs font-medium text-[#778599]">Please check these are correct. Contact HR if anything is wrong.</p>
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <x-label>Full Name</x-label>
-                            <x-input type="text" disabled value="{{ trim($employee->first_name . ' ' . ($employee->middle_name ? $employee->middle_name . ' ' : '') . $employee->last_name) }}" class="opacity-60" />
-                        </div>
-                        <div>
-                            <x-label>Phone Name</x-label>
-                            <x-input type="text" disabled value="{{ $employee->phone_name ?: '—' }}" class="opacity-60" />
-                        </div>
-                        <div>
-                            <x-label>Company Email</x-label>
-                            <x-input type="email" disabled value="{{ $employee->company_email }}" class="opacity-60" />
-                        </div>
-                        <div>
-                            <x-label>Personal Email</x-label>
-                            <x-input type="email" disabled value="{{ $employee->personal_email ?: '—' }}" class="opacity-60" />
-                        </div>
-                        <div>
-                            <x-label>Department</x-label>
-                            <x-input type="text" disabled value="{{ $employee->department->name }}" class="opacity-60" />
-                        </div>
-                        <div>
-                            <x-label>Job Title</x-label>
-                            <x-input type="text" disabled value="{{ $employee->position->title }}" class="opacity-60" />
-                        </div>
-                    </div>
-                </div>
-
-                <div class="border-t border-neutral-200 pt-5 dark:border-neutral-800">
-                    <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Your Details</h2>
-
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <x-label>Birthdate</x-label>
-                            <x-input wire:model="birthdate" type="date" />
-                            @error('birthdate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                        </div>
-                        <div>
-                            <x-label>Civil Status</x-label>
-                            <x-select wire:model="civil_status">
-                                <option value="">Select status</option>
-                                @foreach ($civilStatuses as $status)
-                                    <option value="{{ $status }}">{{ $status }}</option>
-                                @endforeach
-                            </x-select>
-                            @error('civil_status') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                        </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <x-label>Address</x-label>
-                        <x-textarea wire:model="address" rows="2" />
-                        @error('address') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div class="mt-4">
-                        <x-label>Personal Contact Number</x-label>
-                        <x-input wire:model="personal_contact_number" type="text" />
-                        @error('personal_contact_number') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <x-label>Emergency Contact Name</x-label>
-                            <x-input wire:model="emergency_contact_name" type="text" />
-                            @error('emergency_contact_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                        </div>
-                        <div>
-                            <x-label>Emergency Contact Number</x-label>
-                            <x-input wire:model="emergency_contact_number" type="text" />
-                            @error('emergency_contact_number') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                        </div>
-                    </div>
-
-                    <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <x-label>TIN Number</x-label>
-                            <x-input wire:model="tin_number" type="text" />
-                        </div>
-                        <div>
-                            <x-label>SSS Number</x-label>
-                            <x-input wire:model="sss_number" type="text" />
-                        </div>
-                        <div>
-                            <x-label>PhilHealth Number</x-label>
-                            <x-input wire:model="philhealth_number" type="text" />
-                        </div>
-                        <div>
-                            <x-label>Pag-IBIG Number</x-label>
-                            <x-input wire:model="pagibig_number" type="text" />
-                        </div>
-                    </div>
-                </div>
-
-                <x-button type="submit">Next</x-button>
-            </form>
-        </x-card>
-    @endif
 </div>

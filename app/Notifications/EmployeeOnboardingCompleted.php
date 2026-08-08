@@ -4,17 +4,14 @@ namespace App\Notifications;
 
 use App\Models\Employee;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * Queued deliberately. Sending inline blocks the employee's submit request for
- * the full SMTP round-trip (~30s against a remote host), and because Laravel
- * dispatches channels in order the in-app notification would not appear until
- * the mail finished.
+ * Sent immediately so the Phase 1 onboarding flow works without requiring a
+ * separate queue worker during local testing.
  */
-class EmployeeOnboardingCompleted extends Notification implements ShouldQueue
+class EmployeeOnboardingCompleted extends Notification
 {
     use Queueable;
 
@@ -29,12 +26,14 @@ class EmployeeOnboardingCompleted extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $name = $this->employee->fullName() ?: $this->employee->employee_id;
+        $url = url("/employees/{$this->employee->id}");
 
         return (new MailMessage)
             ->subject("Onboarding completed: {$name}")
-            ->line("{$name} ({$this->employee->employee_id}) has submitted their onboarding form.")
-            ->line('Review the details, then create their HRIS login when everything looks correct.')
-            ->action('Review Employee', url("/employees/{$this->employee->id}"));
+            ->view('emails.employee-onboarding-completed', [
+                'employee' => $this->employee,
+                'url' => $url,
+            ]);
     }
 
     /** @return array<string, mixed> */

@@ -28,10 +28,13 @@ window.datePicker = function (model) {
         normalizedValue() {
             return typeof this.value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(this.value)
                 ? this.value
-                : new Date().toISOString().slice(0, 10);
+                : '';
+        },
+        calendarValue() {
+            return this.normalizedValue() || new Date().toISOString().slice(0, 10);
         },
         setCalendarFromValue() {
-            const parsed = new Date(this.normalizedValue() + 'T00:00:00');
+            const parsed = new Date(this.calendarValue() + 'T00:00:00');
 
             if (Number.isNaN(parsed.getTime())) {
                 const fallback = new Date();
@@ -91,3 +94,44 @@ window.datePicker = function (model) {
         },
     };
 };
+
+let pageLoadingTimer;
+
+document.addEventListener('livewire:navigate', () => {
+    document.getElementById('page-content')?.classList.add('is-leaving');
+    const loadingBar = document.getElementById('page-loading-bar');
+    const skeleton = document.getElementById('page-skeleton');
+
+    window.clearTimeout(pageLoadingTimer);
+    loadingBar?.classList.remove('is-complete');
+    loadingBar?.classList.add('is-visible');
+    skeleton?.classList.add('is-visible');
+});
+
+document.addEventListener('livewire:navigated', () => {
+    const page = document.getElementById('page-content');
+    const loadingBar = document.getElementById('page-loading-bar');
+    const skeleton = document.getElementById('page-skeleton');
+
+    if (!page) {
+        return;
+    }
+
+    if (!window.location.hash) {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+
+    loadingBar?.classList.add('is-complete');
+    loadingBar?.classList.remove('is-visible');
+    skeleton?.classList.remove('is-visible');
+    page.classList.remove('is-leaving');
+    page.classList.add('is-entering');
+
+    window.setTimeout(() => {
+        page.classList.remove('is-entering');
+    }, 240);
+
+    pageLoadingTimer = window.setTimeout(() => {
+        loadingBar?.classList.remove('is-complete');
+    }, 320);
+});

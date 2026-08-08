@@ -1,5 +1,9 @@
 @php
     $displayName = $employee->phone_name ?: $employee->employee_id;
+    $logoPath = public_path('images/CreativeVision-LOGO-v2-01.png');
+    $logoSrc = isset($message) && file_exists($logoPath)
+        ? $message->embed($logoPath)
+        : asset('images/CreativeVision-LOGO-v2-01.png');
 @endphp
 
 <!DOCTYPE html>
@@ -13,6 +17,14 @@
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9; padding:32px 16px;">
         <tr>
             <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px; margin:0 0 18px;">
+                    <tr>
+                        <td align="center">
+                            <img src="{{ $logoSrc }}" alt="CreatiVision Outsourcing" width="160" style="display:block; max-width:160px; width:100%; height:auto;">
+                        </td>
+                    </tr>
+                </table>
+
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px; overflow:hidden; border-radius:18px; background:#ffffff; border:1px solid #dbe3ee;">
                     <tr>
                         <td style="padding:0;">

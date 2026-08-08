@@ -12,7 +12,7 @@ $maxWidths = [
 @endphp
 
 @if ($show)
-    <div class="fixed inset-0 z-40 flex items-center justify-center p-4" x-data x-transition.opacity.duration.150ms>
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4" x-data x-transition.opacity.duration.150ms>
         <div class="absolute inset-0 bg-ink-950/50 backdrop-blur-sm" @if($onClose) wire:click="{{ $onClose }}" @endif></div>
 
         <div x-data x-transition:enter="ease-out duration-150" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
