@@ -217,6 +217,32 @@ class Employee extends Model
         return $this->hasMany(EmployeeLeaveDisposition::class);
     }
 
+    public function leaveEligibilities(): HasMany
+    {
+        return $this->hasMany(EmployeeLeaveEligibility::class);
+    }
+
+    /**
+     * Whether this employee is entitled to a leave type at all.
+     *
+     * With no explicit record, event-based types (Maternity, Paternity) are
+     * NOT granted — they depend on a qualifying life event, so handing them to
+     * everyone by default would be wrong. Every other type stays eligible so
+     * existing SL/VL behaviour is untouched.
+     */
+    public function isEligibleFor(LeaveType $leaveType): bool
+    {
+        $explicit = $this->leaveEligibilities()
+            ->where('leave_type_id', $leaveType->id)
+            ->value('is_eligible');
+
+        if ($explicit !== null) {
+            return (bool) $explicit;
+        }
+
+        return $leaveType->accrual_mode !== 'event_based';
+    }
+
     public function leaveBalance(LeaveType $leaveType): float
     {
         return (float) $this->leaveCreditTransactions()

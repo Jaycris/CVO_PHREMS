@@ -19,6 +19,12 @@ class LeaveService
         $end = Carbon::parse($endDate);
         $daysRequested = $start->diffInDays($end) + 1;
 
+        abort_unless(
+            $employee->isEligibleFor($leaveType),
+            403,
+            "This employee is not entitled to {$leaveType->name}."
+        );
+
         $balance = $employee->leaveBalance($leaveType);
         $isLwop = ! $employee->isRegular() || $balance < $daysRequested;
 
@@ -146,7 +152,12 @@ class LeaveService
                 // Regular simply cannot spend them — LeaveService::submit() flags any
                 // non-Regular request as LWOP — so by the time they regularize the
                 // balance is already waiting for them.
-                Employee::query()->get()->each(function (Employee $employee) use ($leaveType, $date, &$count) {
+                Employee::with('leaveEligibilities')->get()->each(function (Employee $employee) use ($leaveType, $date, &$count) {
+                    // HR can switch an individual off a leave type entirely.
+                    if (! $employee->isEligibleFor($leaveType)) {
+                        return;
+                    }
+
                     LeaveCreditTransaction::create([
                         'employee_id' => $employee->id,
                         'leave_type_id' => $leaveType->id,

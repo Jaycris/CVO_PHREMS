@@ -3,6 +3,7 @@
 use App\Mail\OnboardingLinkMail;
 use App\Models\Employee;
 use App\Models\EmployeeLeaveDisposition;
+use App\Models\EmployeeLeaveEligibility;
 use App\Models\LeaveCreditTransaction;
 use App\Models\LeaveType;
 use App\Models\WorkSchedule;
@@ -28,6 +29,11 @@ new #[Layout('layouts.app')] class extends Component
     public bool $allowanceTaxable = false;
     public ?string $separationDate = null;
     public ?string $separationReason = null;
+
+    // Event-based leave grant (Maternity, Paternity, ...)
+    public ?int $eventGrantTypeId = null;
+    public string $eventGrantDays = '';
+    public string $eventGrantNote = '';
 
     public function mount(Employee $employee): void
     {
@@ -118,6 +124,11 @@ new #[Layout('layouts.app')] class extends Component
         // An upfront grant on top of that would double the annual entitlement.
         abort_if($leaveType->accrual_mode === 'monthly_accrual', 403, "{$leaveType->code} accrues monthly and cannot be granted upfront.");
 
+        // Event-based types are granted per occurrence via grantEventLeave().
+        abort_if($leaveType->accrual_mode === 'event_based', 403, "{$leaveType->code} is event-based and is granted per occurrence.");
+
+        abort_unless($this->employee->isEligibleFor($leaveType), 403, "This employee is not entitled to {$leaveType->name}.");
+
         abort_if($this->employee->leaveBalance($leaveType) > 0, 403, "{$leaveType->code} credits have already been granted.");
 
         LeaveCreditTransaction::create([
@@ -129,6 +140,102 @@ new #[Layout('layouts.app')] class extends Component
         ]);
 
         $this->statusMessage = "Granted {$leaveType->default_annual_credits} {$leaveType->code} credits.";
+    }
+
+    /**
+     * Undo the most recent manual grant for a leave type.
+     *
+     * Deletes the ledger row rather than writing a compensating entry, because
+     * the case this exists for is an accidental click that should never have
+     * been recorded. It refuses once any of those credits have been spent,
+     * since removing them would drive the balance negative — that situation
+     * needs a deliberate adjustment, not an undo.
+     */
+    public function revertGrant(int $leaveTypeId): void
+    {
+        $leaveType = LeaveType::findOrFail($leaveTypeId);
+
+        $grant = LeaveCreditTransaction::where('employee_id', $this->employee->id)
+            ->where('leave_type_id', $leaveType->id)
+            ->where('reason', 'initial_grant')
+            ->latest('id')
+            ->first();
+
+        abort_unless($grant, 404, "There is no manual {$leaveType->code} grant to revert.");
+
+        $balanceAfter = $this->employee->leaveBalance($leaveType) - (float) $grant->amount;
+
+        abort_if(
+            $balanceAfter < 0,
+            403,
+            "Cannot revert — some of these {$leaveType->code} credits have already been used."
+        );
+
+        $amount = $grant->amount;
+        $grant->delete();
+
+        $this->statusMessage = "Reverted {$amount} {$leaveType->code} credit(s).";
+    }
+
+    public function toggleEligibility(int $leaveTypeId): void
+    {
+        $leaveType = LeaveType::findOrFail($leaveTypeId);
+        $current = $this->employee->isEligibleFor($leaveType);
+
+        EmployeeLeaveEligibility::updateOrCreate(
+            ['employee_id' => $this->employee->id, 'leave_type_id' => $leaveType->id],
+            ['is_eligible' => ! $current]
+        );
+
+        $this->employee->load('leaveEligibilities');
+        $this->statusMessage = $current
+            ? "{$leaveType->name} entitlement removed."
+            : "{$leaveType->name} entitlement granted.";
+    }
+
+    public function openEventGrant(int $leaveTypeId): void
+    {
+        $this->eventGrantTypeId = $leaveTypeId;
+        $this->eventGrantDays = (string) LeaveType::findOrFail($leaveTypeId)->default_annual_credits;
+        $this->eventGrantNote = '';
+        $this->resetValidation();
+    }
+
+    public function closeEventGrant(): void
+    {
+        $this->reset(['eventGrantTypeId', 'eventGrantDays', 'eventGrantNote']);
+        $this->resetValidation();
+    }
+
+    /**
+     * Event-based leave is granted per occurrence — a second pregnancy earns a
+     * second entitlement — so unlike grantInitialCredits() this deliberately
+     * does NOT refuse when a balance already exists. The note records why.
+     */
+    public function grantEventLeave(): void
+    {
+        $data = $this->validate([
+            'eventGrantTypeId' => ['required', 'exists:leave_types,id'],
+            'eventGrantDays' => ['required', 'numeric', 'min:0.5'],
+            'eventGrantNote' => ['required', 'string', 'max:255'],
+        ]);
+
+        $leaveType = LeaveType::findOrFail($data['eventGrantTypeId']);
+
+        abort_unless($leaveType->accrual_mode === 'event_based', 403, "{$leaveType->code} is not an event-based leave type.");
+        abort_unless($this->employee->isEligibleFor($leaveType), 403, "This employee is not entitled to {$leaveType->name}.");
+
+        LeaveCreditTransaction::create([
+            'employee_id' => $this->employee->id,
+            'leave_type_id' => $leaveType->id,
+            'transaction_date' => now()->toDateString(),
+            'amount' => $data['eventGrantDays'],
+            'reason' => 'initial_grant',
+            'note' => $data['eventGrantNote'],
+        ]);
+
+        $this->closeEventGrant();
+        $this->statusMessage = "Granted {$data['eventGrantDays']} day(s) of {$leaveType->name}.";
     }
 
     public function setDisposition(int $leaveTypeId, string $disposition): void
@@ -355,6 +462,7 @@ new #[Layout('layouts.app')] class extends Component
             <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
                 <thead class="bg-neutral-50 dark:bg-neutral-800/50">
                     <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Entitled</th>
                         <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Type</th>
                         <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Balance</th>
                         <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Year-end Disposition</th>
@@ -363,8 +471,19 @@ new #[Layout('layouts.app')] class extends Component
                 </thead>
                 <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
                     @foreach ($leaveTypes as $type)
-                        <tr wire:key="lt-{{ $type->id }}">
-                            <td class="px-3 py-2 text-[#65758c] dark:text-white">{{ $type->code }} — {{ $type->name }}</td>
+                        @php $eligible = $employee->isEligibleFor($type); @endphp
+                        <tr wire:key="lt-{{ $type->id }}" @class(['opacity-50' => ! $eligible])>
+                            <td class="px-3 py-2">
+                                <input type="checkbox" wire:click="toggleEligibility({{ $type->id }})" @checked($eligible)
+                                       title="{{ $eligible ? 'Entitled to this leave type' : 'Not entitled to this leave type' }}"
+                                       class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                            </td>
+                            <td class="px-3 py-2 text-[#65758c] dark:text-white">
+                                {{ $type->code }} — {{ $type->name }}
+                                @if ($type->accrual_mode === 'event_based')
+                                    <span class="block text-xs font-medium text-[#778599]">Event-based — granted per occurrence</span>
+                                @endif
+                            </td>
                             <td class="px-3 py-2 font-medium text-[#65758c] dark:text-white">{{ $employee->leaveBalance($type) }} days</td>
                             <td class="px-3 py-2">
                                 @if ($type->allow_carry_over || $type->allow_cash_conversion)
@@ -377,13 +496,33 @@ new #[Layout('layouts.app')] class extends Component
                                 @endif
                             </td>
                             <td class="px-3 py-2 text-right">
-                                @if ($type->accrual_mode === 'monthly_accrual')
-                                    <span class="text-xs font-medium text-[#778599]">Accrues {{ rtrim(rtrim(number_format((float) $type->monthly_accrual_rate, 3), '0'), '.') }}/mo</span>
-                                @elseif ($employee->leaveBalance($type) <= 0)
-                                    <button wire:click="grantInitialCredits({{ $type->id }})"
-                                            wire:confirm="Grant {{ $type->default_annual_credits }} {{ $type->code }} credits to {{ $employee->fullName() ?: $employee->employee_id }}?"
-                                            class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Grant Initial Credits</button>
-                                @endif
+                                @php
+                                    $hasManualGrant = $employee->leaveCreditTransactions()
+                                        ->where('leave_type_id', $type->id)
+                                        ->where('reason', 'initial_grant')
+                                        ->exists();
+                                @endphp
+
+                                <div class="flex items-center justify-end gap-3">
+                                    @if (! $eligible)
+                                        <span class="text-xs font-medium text-[#778599]">Not entitled</span>
+                                    @elseif ($type->accrual_mode === 'monthly_accrual')
+                                        <span class="text-xs font-medium text-[#778599]">Accrues {{ rtrim(rtrim(number_format((float) $type->monthly_accrual_rate, 3), '0'), '.') }}/mo</span>
+                                    @elseif ($type->accrual_mode === 'event_based')
+                                        <button wire:click="openEventGrant({{ $type->id }})"
+                                                class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Grant for an Event</button>
+                                    @elseif ($employee->leaveBalance($type) <= 0)
+                                        <button wire:click="grantInitialCredits({{ $type->id }})"
+                                                wire:confirm="Grant {{ $type->default_annual_credits }} {{ $type->code }} credits to {{ $employee->fullName() ?: $employee->employee_id }}?"
+                                                class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Grant Initial Credits</button>
+                                    @endif
+
+                                    @if ($hasManualGrant)
+                                        <button wire:click="revertGrant({{ $type->id }})"
+                                                wire:confirm="Revert the last manual {{ $type->code }} grant for {{ $employee->fullName() ?: $employee->employee_id }}?"
+                                                class="font-medium text-red-600 hover:text-red-700 dark:text-red-400">Revert Grant</button>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @endforeach
@@ -391,4 +530,30 @@ new #[Layout('layouts.app')] class extends Component
             </table>
         </div>
     </x-card>
+
+    <x-modal :show="$eventGrantTypeId !== null" onClose="closeEventGrant">
+        @php $eventType = $eventGrantTypeId ? $leaveTypes->firstWhere('id', $eventGrantTypeId) : null; @endphp
+        <h2 class="mb-1 text-lg font-bold text-[#0f172a] dark:text-white">Grant {{ $eventType?->name }}</h2>
+        <p class="mb-4 text-sm font-medium text-[#778599]">
+            Event-based leave is granted per occurrence, so this can be used again for a future event.
+        </p>
+
+        <form wire:submit="grantEventLeave" class="space-y-4">
+            <div>
+                <x-label>Days to Grant</x-label>
+                <x-input wire:model="eventGrantDays" type="number" step="0.5" min="0.5" />
+                @error('eventGrantDays') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            </div>
+            <div>
+                <x-label>Reason / Event</x-label>
+                <x-input wire:model="eventGrantNote" type="text" placeholder="e.g. Maternity — expected delivery Nov 2026" />
+                <p class="mt-1 text-xs font-medium text-[#778599]">Recorded against the credit for audit.</p>
+                @error('eventGrantNote') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            </div>
+            <div class="flex gap-2 pt-2">
+                <x-button type="submit">Grant</x-button>
+                <x-button type="button" variant="secondary" wire:click="closeEventGrant">Cancel</x-button>
+            </div>
+        </form>
+    </x-modal>
 </div>
