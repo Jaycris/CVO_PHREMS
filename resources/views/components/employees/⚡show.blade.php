@@ -105,7 +105,7 @@ new #[Layout('layouts.app')] class extends Component
             ['employee' => $this->employee->id]
         );
 
-        Mail::to($recipient)->send(new OnboardingLinkMail($this->employee, $url));
+        Mail::to($recipient)->queue(new OnboardingLinkMail($this->employee, $url));
 
         $this->statusMessage = "Onboarding link sent to {$recipient}.";
     }

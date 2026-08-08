@@ -4,14 +4,21 @@ namespace App\Notifications;
 
 use App\Models\Employee;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * Sent immediately so the Phase 1 onboarding flow works without requiring a
- * separate queue worker during local testing.
+ * Queued rather than sent inline: the SMTP round-trip runs on the request
+ * thread otherwise, and because Laravel dispatches channels in order the
+ * in-app notification would not appear until the mail finished.
+ *
+ * This does NOT require a worker locally — QUEUE_CONNECTION=sync in .env
+ * makes queued work run immediately, while production uses the database
+ * driver drained by the scheduler. Behaviour is chosen by environment,
+ * not hard-coded here.
  */
-class EmployeeOnboardingCompleted extends Notification
+class EmployeeOnboardingCompleted extends Notification implements ShouldQueue
 {
     use Queueable;
 

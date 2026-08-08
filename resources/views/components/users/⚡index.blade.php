@@ -83,7 +83,7 @@ new #[Layout('layouts.app')] class extends Component
         });
 
         $url = URL::temporarySignedRoute('password.setup', now()->addDays(3), ['user' => $user->id]);
-        Mail::to($user->email)->send(new AccountInviteMail($employee, $url));
+        Mail::to($user->email)->queue(new AccountInviteMail($employee, $url));
 
         $this->showForm = false;
         $this->confirmationMessage = "User has been registered. Invitation has been sent to {$user->email}.";
