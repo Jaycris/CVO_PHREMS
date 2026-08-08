@@ -27,7 +27,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function editEmployee(int $id): void
     {
-        $this->redirect(route('employees.show', Employee::findOrFail($id)), navigate: true);
+        $this->redirect(route('employees.edit', Employee::findOrFail($id)), navigate: true);
     }
 
     public function deleteEmployee(int $id): void

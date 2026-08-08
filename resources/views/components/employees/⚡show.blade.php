@@ -263,7 +263,10 @@ new #[Layout('layouts.app')] class extends Component
 <div class="space-y-6">
     <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">{{ $employee->fullName() ?: $employee->employee_id }}</h1>
-        <a href="{{ route('employees.index') }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">← Back to Employees</a>
+        <div class="flex items-center gap-4">
+            <a href="{{ route('employees.edit', $employee) }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Edit Profile</a>
+            <a href="{{ route('employees.index') }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">← Back to Employees</a>
+        </div>
     </div>
 
     @if ($statusMessage)

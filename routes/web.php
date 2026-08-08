@@ -31,6 +31,7 @@ Route::middleware('auth')->group(function () {
 
         Route::livewire('/employees', 'employees.index')->name('employees.index');
         Route::livewire('/employees/create', 'employees.create')->name('employees.create');
+        Route::livewire('/employees/{employee}/edit', 'employees.edit')->name('employees.edit');
         Route::livewire('/employees/{employee}', 'employees.show')->name('employees.show');
 
         Route::livewire('/schedules', 'schedules.index')->name('schedules.index');
