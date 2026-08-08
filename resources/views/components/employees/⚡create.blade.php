@@ -80,7 +80,7 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'departments' => Department::orderBy('name')->get(),
             'positions' => Position::orderBy('title')->get(),
-            'potentialManagers' => Employee::orderBy('employee_id')->get(),
+            'potentialManagers' => Employee::supervisors()->with('position')->orderBy('employee_id')->get(),
         ];
     }
 };
@@ -220,9 +220,16 @@ new #[Layout('layouts.app')] class extends Component
                         <x-select wire:model="reports_to_id">
                             <option value="">None</option>
                             @foreach ($potentialManagers as $manager)
-                                <option value="{{ $manager->id }}">{{ $manager->employee_id }} - {{ $manager->fullName() ?: $manager->company_email }}</option>
+                                <option value="{{ $manager->id }}">{{ $manager->employee_id }} - {{ $manager->fullName() ?: $manager->company_email }} ({{ $manager->position?->title }})</option>
                             @endforeach
                         </x-select>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">
+                            @if ($potentialManagers->isEmpty())
+                                No supervisory positions exist yet. Mark a position as supervisory under Positions to populate this list.
+                            @else
+                                Only employees in supervisory positions are listed. Leave approvals route here.
+                            @endif
+                        </p>
                     </div>
                 </div>
             </section>

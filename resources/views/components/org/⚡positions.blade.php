@@ -12,13 +12,14 @@ new #[Layout('layouts.app')] class extends Component
     public bool $showForm = false;
     public string $title = '';
     public string $description = '';
+    public bool $is_supervisory = false;
     public ?int $editingId = null;
     public string $search = '';
     public int $perPage = 10;
 
     public function create(): void
     {
-        $this->reset(['title', 'description', 'editingId']);
+        $this->reset(['title', 'description', 'is_supervisory', 'editingId']);
         $this->showForm = true;
     }
 
@@ -27,11 +28,12 @@ new #[Layout('layouts.app')] class extends Component
         $data = $this->validate([
             'title' => ['required', 'string', 'max:255', 'unique:positions,title,' . $this->editingId],
             'description' => ['nullable', 'string'],
+            'is_supervisory' => ['boolean'],
         ]);
 
         Position::updateOrCreate(['id' => $this->editingId], $data);
 
-        $this->reset(['title', 'description', 'editingId']);
+        $this->reset(['title', 'description', 'is_supervisory', 'editingId']);
         $this->showForm = false;
         $this->resetPage();
     }
@@ -42,6 +44,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->editingId = $position->id;
         $this->title = $position->title;
         $this->description = (string) $position->description;
+        $this->is_supervisory = (bool) $position->is_supervisory;
         $this->showForm = true;
     }
 
@@ -54,7 +57,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function closeForm(): void
     {
-        $this->reset(['title', 'description', 'editingId']);
+        $this->reset(['title', 'description', 'is_supervisory', 'editingId']);
         $this->showForm = false;
     }
 
@@ -144,6 +147,7 @@ new #[Layout('layouts.app')] class extends Component
                         </th>
                         <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Title</th>
                         <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Description</th>
+                        <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Supervisory</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
@@ -155,9 +159,12 @@ new #[Layout('layouts.app')] class extends Component
                             </td>
                             <td class="px-5 py-4 text-sm font-medium text-[#526783] dark:text-white">{{ $position->title }}</td>
                             <td class="px-5 py-4 text-sm font-medium text-[#64748b] dark:text-ink-400">{{ $position->description }}</td>
+                            <td class="px-5 py-4 text-sm">
+                                <x-badge :color="$position->is_supervisory ? 'brand' : 'neutral'">{{ $position->is_supervisory ? 'Yes' : 'No' }}</x-badge>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="3" class="px-5 py-10 text-center text-sm font-medium text-ink-500">No positions yet.</td></tr>
+                        <tr><td colspan="4" class="px-5 py-10 text-center text-sm font-medium text-ink-500">No positions yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -206,6 +213,19 @@ new #[Layout('layouts.app')] class extends Component
                     <x-label>Description</x-label>
                     <x-textarea wire:model="description" rows="4" placeholder="Briefly describe the position's responsibilities." />
                     @error('description') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+
+                <div>
+                    <label class="flex items-start gap-2 text-sm font-medium text-[#65758c] dark:text-ink-300">
+                        <input type="checkbox" wire:model="is_supervisory" class="mt-0.5 rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                        <span>
+                            Supervisory position
+                            <span class="block text-xs font-medium text-[#778599]">
+                                Team Leader, Manager, COO, CEO. Only employees holding a supervisory
+                                position appear in an employee's Reports To list, and leave approvals route to them.
+                            </span>
+                        </span>
+                    </label>
                 </div>
 
                 <div class="flex flex-col-reverse gap-3 border-t border-ink-100 pt-5 dark:border-white/10 sm:flex-row sm:justify-end">

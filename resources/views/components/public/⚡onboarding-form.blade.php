@@ -15,6 +15,7 @@ new #[Layout('layouts.guest')] class extends Component
     public string $birthdate = '';
     public string $address = '';
     public string $personal_contact_number = '';
+    public string $gender = '';
     public string $civil_status = '';
     public string $emergency_contact_name = '';
     public string $emergency_contact_number = '';
@@ -32,6 +33,7 @@ new #[Layout('layouts.guest')] class extends Component
         $this->birthdate = $employee->birthdate?->format('Y-m-d') ?? '';
         $this->address = (string) $employee->address;
         $this->personal_contact_number = (string) $employee->personal_contact_number;
+        $this->gender = (string) $employee->gender;
         $this->civil_status = (string) $employee->civil_status;
         $this->emergency_contact_name = (string) $employee->emergency_contact_name;
         $this->emergency_contact_number = (string) $employee->emergency_contact_number;
@@ -48,6 +50,7 @@ new #[Layout('layouts.guest')] class extends Component
             'birthdate' => ['required', 'date', 'before:today'],
             'address' => ['required', 'string'],
             'personal_contact_number' => ['required', 'string', 'max:50'],
+            'gender' => ['required', 'in:Male,Female'],
             'civil_status' => ['required', 'in:Single,Married,Widowed,Separated,Divorced'],
             'emergency_contact_name' => ['required', 'string', 'max:255'],
             'emergency_contact_number' => ['required', 'string', 'max:50'],
@@ -108,6 +111,7 @@ new #[Layout('layouts.guest')] class extends Component
         'Department' => $employee->department?->name ?? '-',
         'Job Title' => $employee->position?->title ?? '-',
         'Birthdate' => $birthdate,
+        'Gender' => $gender,
         'Civil Status' => $civil_status,
         'Address' => $address,
         'Personal Contact' => $personal_contact_number,
@@ -270,6 +274,15 @@ new #[Layout('layouts.guest')] class extends Component
                                             </div>
                                         </div>
                                         @error('birthdate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                                    </div>
+                                    <div>
+                                        <x-label>Gender</x-label>
+                                        <x-select wire:model="gender">
+                                            <option value="">Select gender</option>
+                                            <option value="Male">Male</option>
+                                            <option value="Female">Female</option>
+                                        </x-select>
+                                        @error('gender') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                                     </div>
                                     <div>
                                         <x-label>Civil Status</x-label>

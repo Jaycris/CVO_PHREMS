@@ -30,10 +30,45 @@ new #[Layout('layouts.app')] class extends Component
     public ?string $separationDate = null;
     public ?string $separationReason = null;
 
+    // The profile is read-only; each section opens its own editor.
+    public bool $showScheduleModal = false;
+    public bool $showPayrollModal = false;
+    public bool $showLeaveModal = false;
+
     // Event-based leave grant (Maternity, Paternity, ...)
     public ?int $eventGrantTypeId = null;
     public string $eventGrantDays = '';
     public string $eventGrantNote = '';
+
+    public function openScheduleModal(): void
+    {
+        $this->newScheduleId = null;
+        $this->newScheduleStartDate = now()->toDateString();
+        $this->resetValidation();
+        $this->showScheduleModal = true;
+    }
+
+    public function openPayrollModal(): void
+    {
+        // Re-read from the record so a cancelled edit never leaves stale values.
+        $this->mount($this->employee);
+        $this->resetValidation();
+        $this->showPayrollModal = true;
+    }
+
+    public function openLeaveModal(): void
+    {
+        $this->resetValidation();
+        $this->showLeaveModal = true;
+    }
+
+    public function closeModals(): void
+    {
+        $this->showScheduleModal = false;
+        $this->showPayrollModal = false;
+        $this->showLeaveModal = false;
+        $this->resetValidation();
+    }
 
     public function mount(Employee $employee): void
     {
@@ -69,6 +104,7 @@ new #[Layout('layouts.app')] class extends Component
         ]);
 
         $this->employee->refresh();
+        $this->showPayrollModal = false;
         $this->statusMessage = 'Payroll settings updated.';
     }
 
@@ -86,6 +122,7 @@ new #[Layout('layouts.app')] class extends Component
 
         $this->reset(['newScheduleId']);
         $this->newScheduleStartDate = now()->toDateString();
+        $this->showScheduleModal = false;
         $this->statusMessage = 'Work schedule assigned.';
     }
 
@@ -195,6 +232,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function openEventGrant(int $leaveTypeId): void
     {
+        // Swap rather than stack — the leave editor reopens once this closes.
+        $this->showLeaveModal = false;
         $this->eventGrantTypeId = $leaveTypeId;
         $this->eventGrantDays = (string) LeaveType::findOrFail($leaveTypeId)->default_annual_credits;
         $this->eventGrantNote = '';
@@ -205,6 +244,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->reset(['eventGrantTypeId', 'eventGrantDays', 'eventGrantNote']);
         $this->resetValidation();
+        $this->showLeaveModal = true;
     }
 
     /**
@@ -299,6 +339,7 @@ new #[Layout('layouts.app')] class extends Component
             @if ($employee->onboarding_completed_at)
                 <dl class="space-y-2 text-sm">
                     <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Birthdate</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->birthdate->format('M d, Y') }}</dd></div>
+                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Gender</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->gender ?: '—' }}</dd></div>
                     <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Civil Status</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->civil_status }}</dd></div>
                     <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Address</dt><dd class="text-right text-[#65758c] dark:text-white">{{ $employee->address }}</dd></div>
                     <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Personal Contact</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->personal_contact_number }}</dd></div>
@@ -350,7 +391,10 @@ new #[Layout('layouts.app')] class extends Component
     </div>
 
     <x-card>
-        <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Work Schedule</h2>
+        <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Work Schedule</h2>
+            <button wire:click="openScheduleModal" class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Update Work Schedule</button>
+        </div>
 
         <p class="mb-4 text-sm font-medium text-[#778599] dark:text-neutral-300">
             Current:
@@ -361,25 +405,6 @@ new #[Layout('layouts.app')] class extends Component
                 <span class="font-medium text-[#778599]">No schedule assigned</span>
             @endif
         </p>
-
-        <form wire:submit="assignSchedule" class="mb-4 flex flex-wrap items-end gap-3">
-            <div class="min-w-[12rem] flex-1">
-                <x-label>Assign Schedule</x-label>
-                <x-select wire:model="newScheduleId">
-                    <option value="">Select schedule</option>
-                    @foreach ($workSchedules as $schedule)
-                        <option value="{{ $schedule->id }}">{{ $schedule->name }} ({{ $schedule->start_time->format('g:i A') }}–{{ $schedule->end_time->format('g:i A') }})</option>
-                    @endforeach
-                </x-select>
-                @error('newScheduleId') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-            </div>
-            <div>
-                <x-label>Effective Date</x-label>
-                <x-input wire:model="newScheduleStartDate" type="date" />
-                @error('newScheduleStartDate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-            </div>
-            <x-button type="submit">Assign</x-button>
-        </form>
 
         @if ($scheduleHistory->isNotEmpty())
             <div class="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -406,8 +431,116 @@ new #[Layout('layouts.app')] class extends Component
     </x-card>
 
     <x-card>
-        <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Payroll Settings</h2>
+        <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Payroll Settings</h2>
+            <button wire:click="openPayrollModal" class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Edit Payroll Settings</button>
+        </div>
 
+        <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+            @foreach ([
+                'Include in payroll runs' => $employee->include_in_payroll,
+                'SSS contribution' => $employee->sss_enrolled,
+                'PhilHealth contribution' => $employee->philhealth_enrolled,
+                'Pag-IBIG contribution' => $employee->pagibig_enrolled,
+                'BIR withholding tax' => $employee->bir_withholding_enrolled,
+                'Allowance is taxable' => $employee->allowance_taxable,
+            ] as $label => $on)
+                <div class="flex items-center justify-between">
+                    <dt class="font-medium text-[#778599] dark:text-neutral-400">{{ $label }}</dt>
+                    <dd><x-badge :color="$on ? 'green' : 'neutral'">{{ $on ? 'Yes' : 'No' }}</x-badge></dd>
+                </div>
+            @endforeach
+            <div class="flex items-center justify-between">
+                <dt class="font-medium text-[#778599] dark:text-neutral-400">Separation Date</dt>
+                <dd class="text-[#65758c] dark:text-white">{{ $employee->separation_date?->format('M d, Y') ?? '—' }}</dd>
+            </div>
+            <div class="flex items-center justify-between">
+                <dt class="font-medium text-[#778599] dark:text-neutral-400">Separation Reason</dt>
+                <dd class="text-[#65758c] dark:text-white">{{ $employee->separation_reason ?: '—' }}</dd>
+            </div>
+        </dl>
+    </x-card>
+
+    <x-card>
+        <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Leave Credits</h2>
+            <button wire:click="openLeaveModal" class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Update Leave Credits</button>
+        </div>
+
+        @if (! $employee->isRegular())
+            <p class="mb-3 text-sm text-amber-600 dark:text-amber-400">Employee is {{ $employee->employment_status }} — not yet eligible to accrue or use leave credits. Any leave taken will be Leave Without Pay.</p>
+        @endif
+
+        <div class="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+                <thead class="bg-neutral-50 dark:bg-neutral-800/50">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Entitled</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Type</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Balance</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Year-end Disposition</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                    @foreach ($leaveTypes as $type)
+                        @php $eligible = $employee->isEligibleFor($type); @endphp
+                        <tr wire:key="lt-view-{{ $type->id }}">
+                            <td class="px-3 py-2">
+                                <x-badge :color="$eligible ? 'green' : 'neutral'">{{ $eligible ? 'Yes' : 'No' }}</x-badge>
+                            </td>
+                            <td class="px-3 py-2 text-[#65758c] dark:text-white">
+                                {{ $type->code }} — {{ $type->name }}
+                                @if ($type->accrual_mode === 'event_based')
+                                    <span class="block text-xs font-medium text-[#778599]">Event-based — granted per occurrence</span>
+                                @elseif ($type->accrual_mode === 'monthly_accrual')
+                                    <span class="block text-xs font-medium text-[#778599]">Accrues {{ rtrim(rtrim(number_format((float) $type->monthly_accrual_rate, 3), '0'), '.') }}/mo</span>
+                                @endif
+                            </td>
+                            <td class="px-3 py-2 font-medium text-[#65758c] dark:text-white">{{ $employee->leaveBalance($type) }} days</td>
+                            <td class="px-3 py-2 font-medium text-[#778599] dark:text-neutral-400">
+                                @if ($type->allow_carry_over || $type->allow_cash_conversion)
+                                    {{ $employee->leaveDispositionFor($type) === 'cash_out' ? 'Cash Out' : 'Carry Over' }}
+                                @else
+                                    —
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </x-card>
+
+    {{-- Editors. The profile itself stays read-only; each opens from its section. --}}
+
+    <x-modal :show="$showScheduleModal" onClose="closeModals">
+        <h2 class="mb-4 text-lg font-bold text-[#0f172a] dark:text-white">Update Work Schedule</h2>
+        <form wire:submit="assignSchedule" class="space-y-4">
+            <div>
+                <x-label>Schedule</x-label>
+                <x-select wire:model="newScheduleId">
+                    <option value="">Select schedule</option>
+                    @foreach ($workSchedules as $schedule)
+                        <option value="{{ $schedule->id }}">{{ $schedule->name }} ({{ $schedule->start_time->format('g:i A') }}–{{ $schedule->end_time->format('g:i A') }})</option>
+                    @endforeach
+                </x-select>
+                @error('newScheduleId') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            </div>
+            <div>
+                <x-label>Effective Date</x-label>
+                <x-input wire:model="newScheduleStartDate" type="date" />
+                <p class="mt-1 text-xs font-medium text-[#778599]">The previous schedule is closed the day before this date.</p>
+                @error('newScheduleStartDate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            </div>
+            <div class="flex gap-2 pt-2">
+                <x-button type="submit">Assign</x-button>
+                <x-button type="button" variant="secondary" wire:click="closeModals">Cancel</x-button>
+            </div>
+        </form>
+    </x-modal>
+
+    <x-modal :show="$showPayrollModal" onClose="closeModals" maxWidth="lg">
+        <h2 class="mb-4 text-lg font-bold text-[#0f172a] dark:text-white">Edit Payroll Settings</h2>
         <form wire:submit="savePayrollSettings" class="space-y-4">
             <div class="space-y-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
                 <label class="flex items-center gap-2">
@@ -440,7 +573,7 @@ new #[Layout('layouts.app')] class extends Component
                 <div>
                     <x-label>Separation Date</x-label>
                     <x-input wire:model="separationDate" type="date" />
-                    <p class="mt-1 text-xs font-medium text-[#778599]">Set this to exclude the employee from payroll runs after they leave.</p>
+                    <p class="mt-1 text-xs font-medium text-[#778599]">Excludes the employee from payroll runs after they leave.</p>
                     @error('separationDate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
                 <div>
@@ -450,16 +583,16 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </div>
 
-            <x-button type="submit">Save Payroll Settings</x-button>
+            <div class="flex gap-2 pt-2">
+                <x-button type="submit">Save Payroll Settings</x-button>
+                <x-button type="button" variant="secondary" wire:click="closeModals">Cancel</x-button>
+            </div>
         </form>
-    </x-card>
+    </x-modal>
 
-    <x-card>
-        <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Leave Credits</h2>
-
-        @if (! $employee->isRegular())
-            <p class="mb-3 text-sm text-amber-600 dark:text-amber-400">Employee is {{ $employee->employment_status }} — not yet eligible to accrue or use leave credits. Any leave taken will be Leave Without Pay.</p>
-        @endif
+    <x-modal :show="$showLeaveModal" onClose="closeModals" maxWidth="4xl">
+        <h2 class="mb-1 text-lg font-bold text-[#0f172a] dark:text-white">Update Leave Credits</h2>
+        <p class="mb-4 text-sm font-medium text-[#778599]">Changes here apply immediately.</p>
 
         <div class="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
             <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
@@ -468,25 +601,25 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Entitled</th>
                         <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Type</th>
                         <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Balance</th>
-                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Year-end Disposition</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Year-end</th>
                         <th class="px-3 py-2"></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
                     @foreach ($leaveTypes as $type)
-                        @php $eligible = $employee->isEligibleFor($type); @endphp
-                        <tr wire:key="lt-{{ $type->id }}" @class(['opacity-50' => ! $eligible])>
+                        @php
+                            $eligible = $employee->isEligibleFor($type);
+                            $hasManualGrant = $employee->leaveCreditTransactions()
+                                ->where('leave_type_id', $type->id)
+                                ->where('reason', 'initial_grant')
+                                ->exists();
+                        @endphp
+                        <tr wire:key="lt-edit-{{ $type->id }}" @class(['opacity-60' => ! $eligible])>
                             <td class="px-3 py-2">
                                 <input type="checkbox" wire:click="toggleEligibility({{ $type->id }})" @checked($eligible)
-                                       title="{{ $eligible ? 'Entitled to this leave type' : 'Not entitled to this leave type' }}"
                                        class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
                             </td>
-                            <td class="px-3 py-2 text-[#65758c] dark:text-white">
-                                {{ $type->code }} — {{ $type->name }}
-                                @if ($type->accrual_mode === 'event_based')
-                                    <span class="block text-xs font-medium text-[#778599]">Event-based — granted per occurrence</span>
-                                @endif
-                            </td>
+                            <td class="px-3 py-2 text-[#65758c] dark:text-white">{{ $type->code }} — {{ $type->name }}</td>
                             <td class="px-3 py-2 font-medium text-[#65758c] dark:text-white">{{ $employee->leaveBalance($type) }} days</td>
                             <td class="px-3 py-2">
                                 @if ($type->allow_carry_over || $type->allow_cash_conversion)
@@ -499,29 +632,22 @@ new #[Layout('layouts.app')] class extends Component
                                 @endif
                             </td>
                             <td class="px-3 py-2 text-right">
-                                @php
-                                    $hasManualGrant = $employee->leaveCreditTransactions()
-                                        ->where('leave_type_id', $type->id)
-                                        ->where('reason', 'initial_grant')
-                                        ->exists();
-                                @endphp
-
                                 <div class="flex items-center justify-end gap-3">
                                     @if (! $eligible)
                                         <span class="text-xs font-medium text-[#778599]">Not entitled</span>
                                     @elseif ($type->accrual_mode === 'monthly_accrual')
                                         <span class="text-xs font-medium text-[#778599]">Accrues {{ rtrim(rtrim(number_format((float) $type->monthly_accrual_rate, 3), '0'), '.') }}/mo</span>
                                     @elseif ($type->accrual_mode === 'event_based')
-                                        <button wire:click="openEventGrant({{ $type->id }})"
+                                        <button type="button" wire:click="openEventGrant({{ $type->id }})"
                                                 class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Grant for an Event</button>
                                     @elseif ($employee->leaveBalance($type) <= 0)
-                                        <button wire:click="grantInitialCredits({{ $type->id }})"
+                                        <button type="button" wire:click="grantInitialCredits({{ $type->id }})"
                                                 wire:confirm="Grant {{ $type->default_annual_credits }} {{ $type->code }} credits to {{ $employee->fullName() ?: $employee->employee_id }}?"
                                                 class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Grant Initial Credits</button>
                                     @endif
 
                                     @if ($hasManualGrant)
-                                        <button wire:click="revertGrant({{ $type->id }})"
+                                        <button type="button" wire:click="revertGrant({{ $type->id }})"
                                                 wire:confirm="Revert the last manual {{ $type->code }} grant for {{ $employee->fullName() ?: $employee->employee_id }}?"
                                                 class="font-medium text-red-600 hover:text-red-700 dark:text-red-400">Revert Grant</button>
                                     @endif
@@ -532,7 +658,11 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
-    </x-card>
+
+        <div class="mt-4">
+            <x-button type="button" variant="secondary" wire:click="closeModals">Done</x-button>
+        </div>
+    </x-modal>
 
     <x-modal :show="$eventGrantTypeId !== null" onClose="closeEventGrant">
         @php $eventType = $eventGrantTypeId ? $leaveTypes->firstWhere('id', $eventGrantTypeId) : null; @endphp

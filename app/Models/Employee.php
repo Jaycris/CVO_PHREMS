@@ -44,6 +44,7 @@ class Employee extends Model
         'middle_name',
         'last_name',
         'birthdate',
+        'gender',
         'address',
         'personal_contact_number',
         'personal_email',
@@ -154,6 +155,17 @@ class Employee extends Model
     public function minuteRate(): float
     {
         return $this->hourlyRate() / 60;
+    }
+
+    /**
+     * Employees who can appear in a Reports To list — those holding a position
+     * flagged supervisory (Team Leader, Manager, COO, CEO). Separated staff are
+     * excluded so leave approvals never route to someone who has left.
+     */
+    public function scopeSupervisors(Builder $query): Builder
+    {
+        return $query->whereHas('position', fn (Builder $p) => $p->where('is_supervisory', true))
+            ->whereNull('separation_date');
     }
 
     public function scopeSearch(Builder $query, string $term): Builder
