@@ -19,6 +19,10 @@ Route::middleware('auth')->group(function () {
 
     Route::livewire('/attendance', 'attendance.punch-clock')->name('attendance.punch');
 
+    Route::livewire('/overtime', 'overtime.index')->name('overtime.index');
+    Route::livewire('/overtime/create', 'overtime.create')->name('overtime.create');
+    Route::livewire('/overtime/{overtimeRequest}', 'overtime.show')->name('overtime.show');
+
     Route::livewire('/leave-requests', 'leave-requests.index')->name('leave-requests.index');
     Route::livewire('/leave-requests/create', 'leave-requests.create')->name('leave-requests.create');
     Route::livewire('/leave-requests/{leaveRequest}', 'leave-requests.show')->name('leave-requests.show');
