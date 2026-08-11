@@ -45,13 +45,23 @@ class AttendanceDay extends Model
         return $this->employee->scheduleAssignmentForDate($this->work_date);
     }
 
-    /**
-     * Minutes late vs the schedule's start time, or null if there's no
-     * schedule/time_in to compare against.
+    /*
+     * The methods below accept an already-resolved schedule assignment.
+     *
+     * Left to themselves they each look the assignment up, which is fine for a
+     * single row on screen but is a query per call — payroll walking a hundred
+     * employees across a cutoff would issue thousands. The aggregator resolves
+     * each day's assignment once in memory and passes it in; screens that call
+     * these without an argument behave exactly as before.
      */
-    public function lateMinutes(): ?int
+
+    /**
+     * Minutes late against the schedule's start time, or null when there is no
+     * schedule or no time in to compare against.
+     */
+    public function lateMinutes(?EmployeeScheduleAssignment $assignment = null): ?int
     {
-        $assignment = $this->scheduleAssignment();
+        $assignment ??= $this->scheduleAssignment();
 
         if (! $assignment || ! $this->time_in) {
             return null;
@@ -64,6 +74,33 @@ class AttendanceDay extends Model
             : 0;
     }
 
+    /**
+     * Minutes left early against the schedule's end time.
+     *
+     * Counted and shown regardless; whether it actually deducts is a company
+     * setting, since some payrolls treat it as a discipline matter rather than
+     * a pay matter.
+     */
+    public function undertimeMinutes(?EmployeeScheduleAssignment $assignment = null): ?int
+    {
+        $assignment ??= $this->scheduleAssignment();
+
+        if (! $assignment || ! $this->time_out) {
+            return null;
+        }
+
+        $schedule = $assignment->workSchedule;
+        $scheduledEnd = Carbon::parse($this->work_date->toDateString() . ' ' . $schedule->end_time->format('H:i:s'));
+
+        if ($schedule->crossesMidnight()) {
+            $scheduledEnd->addDay();
+        }
+
+        return $this->time_out->lt($scheduledEnd)
+            ? $this->time_out->diffInMinutes($scheduledEnd)
+            : 0;
+    }
+
     public function totalBreakMinutes(): int
     {
         return $this->breaks->sum(function (AttendanceBreak $break) {
@@ -73,9 +110,9 @@ class AttendanceDay extends Model
         });
     }
 
-    public function allowedBreakMinutes(): ?int
+    public function allowedBreakMinutes(?EmployeeScheduleAssignment $assignment = null): ?int
     {
-        $assignment = $this->scheduleAssignment();
+        $assignment ??= $this->scheduleAssignment();
 
         if (! $assignment) {
             return null;
@@ -84,9 +121,9 @@ class AttendanceDay extends Model
         return $assignment->workSchedule->lunch_break_minutes + $assignment->workSchedule->coffee_break_minutes;
     }
 
-    public function overBreakMinutes(): int
+    public function overBreakMinutes(?EmployeeScheduleAssignment $assignment = null): int
     {
-        $allowed = $this->allowedBreakMinutes();
+        $allowed = $this->allowedBreakMinutes($assignment);
 
         if ($allowed === null) {
             return 0;

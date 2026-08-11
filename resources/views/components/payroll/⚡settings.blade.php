@@ -427,36 +427,48 @@ new #[Layout('layouts.app')] class extends Component
 
     <x-card :padding="false">
         <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Which cutoff each contribution comes out of</h2>
+            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">What gets deducted</h2>
             <p class="mt-1 text-sm font-medium text-[#778599]">
-                The whole month is taken in one go rather than split in half. Spreading the types across the two
+                Anything switched off is not taken from anyone's pay, whatever the rates below say. Once switched on,
+                the whole month is taken in one go rather than split in half — spreading the types across the two
                 cutoffs keeps either payslip from carrying all of them at once.
             </p>
         </div>
 
+        @if ($contributions->every(fn ($c) => ! $c->is_active))
+            <div class="border-b border-neutral-200 bg-[#f8fafc] px-5 py-3 dark:border-neutral-800 dark:bg-neutral-800/50">
+                <p class="text-sm font-medium text-[#65758c] dark:text-neutral-300">
+                    Nothing is being deducted at the moment. Payslips will show gross pay with no government
+                    deductions until one of these is switched on.
+                </p>
+            </div>
+        @endif
+
         <div class="divide-y divide-neutral-100 dark:divide-neutral-800">
             @foreach ($contributions as $contribution)
                 <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4" wire:key="cut-{{ $contribution->code }}">
-                    <div class="min-w-40">
-                        <p class="text-sm font-bold text-[#0f172a] dark:text-white">{{ $contribution->label() }}</p>
-                        @if ($contribution->code === 'bir')
-                            <p class="text-xs font-medium text-[#778599]">Withheld on every payslip, on what was actually paid.</p>
-                        @endif
+                    <div class="flex min-w-56 items-center gap-3">
+                        <label class="flex cursor-pointer items-center gap-2.5">
+                            <input type="checkbox" wire:model.live="active.{{ $contribution->code }}"
+                                   class="h-4 w-4 rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                            <span class="text-sm font-bold text-[#0f172a] dark:text-white">{{ $contribution->label() }}</span>
+                        </label>
+                        <x-badge :color="($active[$contribution->code] ?? false) ? 'green' : 'neutral'">
+                            {{ ($active[$contribution->code] ?? false) ? 'Deducting' : 'Not deducted' }}
+                        </x-badge>
                     </div>
 
                     <div class="flex flex-wrap items-center gap-4">
-                        <label class="flex items-center gap-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
-                            <input type="checkbox" wire:model="active.{{ $contribution->code }}"
-                                   class="rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
-                            Deduct this
-                        </label>
-
-                        <div class="w-64">
-                            <x-select wire:model="cutoffs.{{ $contribution->code }}" :disabled="$contribution->code === 'bir'">
-                                <option value="first">First cutoff — paid on the 15th</option>
-                                <option value="second">Second cutoff — paid on the 30th</option>
-                            </x-select>
-                        </div>
+                        @if ($contribution->code === 'bir')
+                            <p class="text-xs font-medium text-[#778599]">Withheld on every payslip, on what was actually paid.</p>
+                        @else
+                            <div class="w-64">
+                                <x-select wire:model="cutoffs.{{ $contribution->code }}" :disabled="! ($active[$contribution->code] ?? false)">
+                                    <option value="first">First cutoff — paid on the 15th</option>
+                                    <option value="second">Second cutoff — paid on the 30th</option>
+                                </x-select>
+                            </div>
+                        @endif
                     </div>
                 </div>
             @endforeach

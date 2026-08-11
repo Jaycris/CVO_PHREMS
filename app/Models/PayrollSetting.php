@@ -10,20 +10,36 @@ class PayrollSetting extends Model
     protected $fillable = ['key', 'value', 'label', 'description', 'type', 'group'];
 
     /**
-     * Settings are read many times inside a single payroll run — once per
-     * employee per line — so the whole table is cached as one map and the cache
-     * is dropped whenever a row changes.
+     * Read once per request, then held in memory.
+     *
+     * The cache alone is not enough: this app's cache store is the database, so
+     * every Cache::get is itself a query. A payroll run asks for these settings
+     * several times per employee, which turned into hundreds of round trips on
+     * a hundred payslips.
+     *
+     * @var array<string, string|null>|null
      */
+    protected static ?array $memo = null;
+
     protected static function booted(): void
     {
-        static::saved(fn () => Cache::forget('payroll_settings'));
-        static::deleted(fn () => Cache::forget('payroll_settings'));
+        static::saved(fn () => static::flushCache());
+        static::deleted(fn () => static::flushCache());
+    }
+
+    public static function flushCache(): void
+    {
+        static::$memo = null;
+        Cache::forget('payroll_settings');
     }
 
     /** @return array<string, string|null> */
     public static function all_(): array
     {
-        return Cache::rememberForever('payroll_settings', fn () => static::query()->pluck('value', 'key')->all());
+        return static::$memo ??= Cache::rememberForever(
+            'payroll_settings',
+            fn () => static::query()->pluck('value', 'key')->all()
+        );
     }
 
     public static function get(string $key, mixed $default = null): mixed

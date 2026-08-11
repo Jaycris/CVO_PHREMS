@@ -39,9 +39,16 @@ class StatutorySeeder extends Seeder
     }
 
     /**
-     * Which cutoff each contribution is taken on. SSS on the first and
-     * PhilHealth and Pag-IBIG on the second spreads the deductions so neither
-     * payslip carries all of them; confirm against how the company files.
+     * All four start switched OFF.
+     *
+     * The company does not yet deduct any of them, so defaulting to on would
+     * silently take money off every payslip from the first run. The rates are
+     * still loaded and ready — turning each one on is a checkbox on the Payroll
+     * Settings page, on whatever date the company starts remitting.
+     *
+     * The cutoff each is targeted at only matters once it is switched on: SSS
+     * on the first and the rest on the second spreads them so neither payslip
+     * carries all of them at once.
      */
     protected function seedContributionSettings(): void
     {
@@ -55,7 +62,7 @@ class StatutorySeeder extends Seeder
         foreach ($targets as $code => $cutoff) {
             StatutoryContributionSetting::firstOrCreate(
                 ['code' => $code],
-                ['deduct_on_cutoff' => $cutoff, 'is_active' => true]
+                ['deduct_on_cutoff' => $cutoff, 'is_active' => false]
             );
         }
     }
