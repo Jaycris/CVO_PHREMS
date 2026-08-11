@@ -126,15 +126,15 @@ new #[Layout('layouts.app')] class extends Component
             'Lowest salary credit' => $money($p['msc_floor']),
             'Highest salary credit' => $money($p['msc_ceiling']),
             'Provident fund starts above' => $money($p['regular_ceiling']),
-            'Employer EC — lower' => $money($p['ec_low']),
-            'Employer EC — higher' => $money($p['ec_high']),
-            'EC rises at' => $money($p['ec_threshold']),
+            'Work injury insurance — lower' => $money($p['ec_low']),
+            'Work injury insurance — higher' => $money($p['ec_high']),
+            'Higher amount starts at' => $money($p['ec_threshold']),
         ];
 
         if ($ph = PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first()) {
             $snapshot['PhilHealth'] = [
-                'Premium rate' => $percent($ph->premium_rate),
-                "Employee's share of the premium" => $percent($ph->employee_share_ratio),
+                'Monthly rate' => $percent($ph->premium_rate),
+                "Employee pays this much of it" => $percent($ph->employee_share_ratio),
                 'Salary floor' => $money($ph->salary_floor),
                 'Salary ceiling' => $money($ph->salary_ceiling),
             ];
@@ -145,11 +145,11 @@ new #[Layout('layouts.app')] class extends Component
             $low = $bands->first();
             $high = $bands->last();
             $snapshot['Pag-IBIG'] = [
-                'Lower band up to' => $money($low->salary_to),
-                'Employee rate — lower band' => $percent($low->employee_rate),
-                'Employer rate — lower band' => $percent($low->employer_rate),
-                'Employee rate — upper band' => $percent($high->employee_rate),
-                'Employer rate — upper band' => $percent($high->employer_rate),
+                'Lower rate applies up to' => $money($low->salary_to),
+                'Employee rate — at or below that' => $percent($low->employee_rate),
+                'Employer rate — at or below that' => $percent($low->employer_rate),
+                'Employee rate — above that' => $percent($high->employee_rate),
+                'Employer rate — above that' => $percent($high->employer_rate),
                 'Maximum base' => $money($high->max_contribution_base),
             ];
         }
@@ -540,7 +540,7 @@ new #[Layout('layouts.app')] class extends Component
                     <p class="text-xs font-medium text-[#778599]">{{ $sssCount }} salary brackets in force</p>
                 </div>
                 <p class="mt-1 text-sm font-medium text-[#778599]">
-                    The salary brackets are rebuilt from these figures when you save, so there is no thirty-row table to retype.
+                    SSS does not charge on the exact salary. It rounds each salary to the nearest step of 500 — that rounded figure is the <strong class="font-semibold">salary credit</strong>, and the rates apply to it. The full table is rebuilt from these figures when you save, so there is no thirty-row table to retype.
                 </p>
 
                 <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -576,37 +576,41 @@ new #[Layout('layouts.app')] class extends Component
                     <div>
                         <x-label>Provident fund starts above</x-label>
                         <x-input wire:model="sss.regular_ceiling" type="number" step="1" min="0" />
-                        <p class="mt-1 text-xs font-medium text-[#778599]">Contributions on salary credit above this go to WISP and are remitted separately.</p>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Anything above this goes into a separate SSS savings fund instead, reported on its own line of the remittance.</p>
                         @error('sss.regular_ceiling') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <x-label>Employer EC — lower</x-label>
+                        <x-label>Work injury insurance — lower</x-label>
                         <x-input wire:model="sss.ec_low" type="number" step="0.01" min="0" />
                         @error('sss.ec_low') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <x-label>Employer EC — higher</x-label>
+                        <x-label>Work injury insurance — higher</x-label>
                         <x-input wire:model="sss.ec_high" type="number" step="0.01" min="0" />
                         @error('sss.ec_high') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <x-label>EC rises at</x-label>
+                        <x-label>Higher amount starts at</x-label>
                         <x-input wire:model="sss.ec_threshold" type="number" step="1" min="0" />
-                        <p class="mt-1 text-xs font-medium text-[#778599]">Employee Compensation is paid entirely by the employer.</p>
                         @error('sss.ec_threshold') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                 </div>
+
+                <p class="mt-3 text-xs font-medium text-[#778599]">
+                    Work injury insurance is SSS Employee Compensation. It covers treatment and benefits if someone is
+                    hurt or falls ill because of their job. The company pays all of it — it never appears on a payslip.
+                </p>
             </div>
 
             <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">PhilHealth</p>
                 <p class="mt-1 text-sm font-medium text-[#778599]">
-                    The premium is a percentage of monthly basic salary, held between a floor and a ceiling, then split between the two sides.
+                    PhilHealth charges a percentage of monthly basic salary. That whole amount is the month's bill, which is then split between the employee and the company.
                 </p>
 
                 <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <div>
-                        <x-label>Premium rate</x-label>
+                        <x-label>Monthly rate</x-label>
                         <div class="relative">
                             <x-input wire:model="philhealth.premium_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
                             <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
@@ -614,7 +618,7 @@ new #[Layout('layouts.app')] class extends Component
                         @error('philhealth.premium_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <x-label>Employee's share of it</x-label>
+                        <x-label>Employee pays this much of it</x-label>
                         <div class="relative">
                             <x-input wire:model="philhealth.employee_share_ratio" type="number" step="0.01" min="0" max="100" class="pr-8" />
                             <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
@@ -638,17 +642,17 @@ new #[Layout('layouts.app')] class extends Component
             <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Pag-IBIG</p>
                 <p class="mt-1 text-sm font-medium text-[#778599]">
-                    Two rate bands by salary. Both sides are held at the maximum by applying their rate to a capped base rather than to actual pay.
+                    Pag-IBIG charges two different rates depending on salary. Almost everyone falls in the higher one. Both sides are held at the maximum by applying the rate to a capped amount rather than to the full salary.
                 </p>
 
                 <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
                     <div>
-                        <x-label>Lower band up to</x-label>
+                        <x-label>Lower rate applies up to</x-label>
                         <x-input wire:model="pagibigLow.threshold" type="number" step="1" min="0" />
                         @error('pagibigLow.threshold') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <x-label>Employee — lower band</x-label>
+                        <x-label>Employee — at or below that</x-label>
                         <div class="relative">
                             <x-input wire:model="pagibigLow.employee_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
                             <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
@@ -656,7 +660,7 @@ new #[Layout('layouts.app')] class extends Component
                         @error('pagibigLow.employee_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <x-label>Employer — lower band</x-label>
+                        <x-label>Employer — at or below that</x-label>
                         <div class="relative">
                             <x-input wire:model="pagibigLow.employer_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
                             <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
@@ -664,7 +668,7 @@ new #[Layout('layouts.app')] class extends Component
                         @error('pagibigLow.employer_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <x-label>Employee — upper band</x-label>
+                        <x-label>Employee — above that</x-label>
                         <div class="relative">
                             <x-input wire:model="pagibigHigh.employee_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
                             <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
@@ -672,7 +676,7 @@ new #[Layout('layouts.app')] class extends Component
                         @error('pagibigHigh.employee_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <x-label>Employer — upper band</x-label>
+                        <x-label>Employer — above that</x-label>
                         <div class="relative">
                             <x-input wire:model="pagibigHigh.employer_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
                             <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
