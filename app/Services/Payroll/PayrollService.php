@@ -104,12 +104,17 @@ class PayrollService
         foreach ($employees as $employee) {
             $c = $counters[$employee->id] ?? [];
 
-            foreach ($c['unscheduled_days'] ?? [] as $date) {
-                $blocking[] = $this->name($employee) . ' has no work schedule covering ' . Carbon::parse($date)->format('M j') . '.';
+            // Summarised per employee rather than per day. A missing schedule
+            // is missing for the whole period, so listing every date turns one
+            // problem into sixteen lines and buries the rest of the panel.
+            if ($unscheduled = $c['unscheduled_days'] ?? []) {
+                $blocking[] = $this->name($employee) . ' has no work schedule for '
+                    . $this->dateRange($unscheduled) . '. Assign one on their employee page.';
             }
 
-            foreach ($c['unclosed_days'] ?? [] as $date) {
-                $blocking[] = $this->name($employee) . ' clocked in on ' . Carbon::parse($date)->format('M j') . ' but never clocked out.';
+            if ($unclosed = $c['unclosed_days'] ?? []) {
+                $blocking[] = $this->name($employee) . ' clocked in but never out on '
+                    . $this->dateRange($unclosed) . '.';
             }
 
             // Not blocking — someone genuinely on leave all period is legitimate
@@ -501,5 +506,31 @@ class PayrollService
     protected function name(Employee $employee): string
     {
         return $employee->fullName() ?: $employee->employee_id;
+    }
+
+    /**
+     * A run of dates as a phrase a person can read: one date, two dates joined,
+     * or a span with the count.
+     *
+     * @param  list<string>  $dates
+     */
+    protected function dateRange(array $dates): string
+    {
+        $sorted = collect($dates)->sort()->values();
+        $count = $sorted->count();
+
+        $first = Carbon::parse($sorted->first())->format('M j');
+
+        if ($count === 1) {
+            return $first;
+        }
+
+        $last = Carbon::parse($sorted->last())->format('M j');
+
+        if ($count === 2) {
+            return $first . ' and ' . $last;
+        }
+
+        return $first . ' – ' . $last . ' (' . $count . ' days)';
     }
 }
