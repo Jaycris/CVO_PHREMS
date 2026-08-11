@@ -116,24 +116,23 @@ new #[Layout('layouts.app')] class extends Component
         $scheduleAssignment = $this->employee->scheduleAssignmentForDate($today);
         $recentDays = $this->employee->attendanceDays()->latest('work_date')->limit(10)->get();
 
-        // Which of these days have already been paid out. Loaded as one query
-        // over the whole visible range and matched in memory, rather than a
-        // lookup per row.
-        $runs = $recentDays->isEmpty()
-            ? collect()
-            : \App\Models\PayrollRun::settledOver(
-                $recentDays->min('work_date'),
-                $recentDays->max('work_date')
-            )->get();
+        /*
+         * Payroll status is answered once for the period rather than once per
+         * row. Repeating "Not yet processed" down every line of the table is
+         * noise, and it gets worse the more attendance there is.
+         */
+        $resolver = new \App\Services\Payroll\PayrollPeriodResolver();
+        $current = $resolver->containing($today);
 
-        $payslips = $runs->isEmpty()
-            ? collect()
-            : \App\Models\Payslip::where('employee_id', $this->employee->id)
-                ->whereIn('payroll_run_id', $runs->pluck('id'))
-                ->get()
-                ->keyBy('payroll_run_id');
+        $currentRun = \App\Models\PayrollRun::query()
+            ->whereDate('period_start', $current['start']->toDateString())
+            ->whereDate('period_end', $current['end']->toDateString())
+            ->first();
 
-        $payrollFor = fn ($date) => $runs->first(fn ($run) => $run->coversDate($date));
+        $lastSettled = \App\Models\PayrollRun::whereIn('status', ['finalized', 'paid'])
+            ->whereHas('payslips', fn ($q) => $q->where('employee_id', $this->employee->id))
+            ->orderByDesc('pay_date')
+            ->first();
 
         return [
             'day' => $day,
@@ -141,10 +140,13 @@ new #[Layout('layouts.app')] class extends Component
             'recentDays' => $recentDays,
             'today' => $today,
             'schedule' => $scheduleAssignment?->workSchedule,
-            'payrollFor' => $payrollFor,
-            'payslips' => $payslips,
-            // The most recent settled period, for the banner.
-            'latestSettled' => $runs->sortByDesc('pay_date')->first(),
+            'currentPeriod' => $current,
+            // Only a locked run counts as settled; a draft or a run still being
+            // computed can still move.
+            'currentSettled' => $currentRun && in_array($currentRun->status, ['finalized', 'paid'], true)
+                ? $currentRun
+                : null,
+            'lastSettled' => $lastSettled,
         ];
     }
 };
@@ -162,29 +164,47 @@ new #[Layout('layouts.app')] class extends Component
         <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-300">{{ $errorMessage }}</div>
     @endif
 
-    {{-- Payroll for these days is settled. Said here because this is the page
-         someone opens when they want to know whether their hours counted. --}}
-    @if ($latestSettled)
-        @php($settledSlip = $payslips->get($latestSettled->id))
-        <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 dark:border-brand-400/20 dark:bg-brand-500/10">
-            <div>
-                <p class="text-sm font-bold text-brand-800 dark:text-brand-200">
-                    Payroll for {{ $latestSettled->periodLabel() }} has been processed
-                </p>
-                <p class="mt-0.5 text-sm font-medium text-brand-700 dark:text-brand-300">
-                    @if ($latestSettled->status === 'paid')
-                        Released on {{ $latestSettled->pay_date->format('F j, Y') }}.
-                    @else
-                        Pay date {{ $latestSettled->pay_date->format('F j, Y') }}.
-                    @endif
-                    Check it and tell HR within three working days if anything looks wrong.
-                </p>
+    {{-- One line for the period being worked now, one for the last one paid.
+         This is the page someone opens to find out whether their hours
+         counted, so it answers that before the table does. --}}
+    <div class="grid gap-4 sm:grid-cols-2">
+        <div class="rounded-xl border border-ink-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-ink-900">
+            <p class="text-xs font-semibold uppercase tracking-[0.14em] text-[#778599]">Current period</p>
+            <p class="mt-1 text-sm font-bold text-ink-950 dark:text-white">
+                {{ $currentPeriod['start']->format('M j') }} – {{ $currentPeriod['end']->format('M j, Y') }}
+            </p>
+            <div class="mt-1.5">
+                @if ($currentSettled)
+                    <x-badge :color="$currentSettled->status === 'paid' ? 'green' : 'brand'">
+                        {{ $currentSettled->status === 'paid' ? 'Paid' : 'Processed' }}
+                    </x-badge>
+                @else
+                    <x-badge color="neutral">Not yet processed</x-badge>
+                @endif
             </div>
-            @if ($settledSlip)
-                <x-button as="a" href="{{ route('my-payslips') }}" wire:navigate variant="secondary">View Payslip</x-button>
+            <p class="mt-1.5 text-xs font-medium text-[#778599]">
+                Pay date {{ $currentPeriod['pay_date']->format('F j, Y') }}
+            </p>
+        </div>
+
+        <div class="rounded-xl border border-ink-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-ink-900">
+            <p class="text-xs font-semibold uppercase tracking-[0.14em] text-[#778599]">Last payroll</p>
+            @if ($lastSettled)
+                <p class="mt-1 text-sm font-bold text-ink-950 dark:text-white">{{ $lastSettled->periodLabel() }}</p>
+                <div class="mt-1.5 flex flex-wrap items-center gap-3">
+                    <x-badge :color="$lastSettled->status === 'paid' ? 'green' : 'brand'">
+                        {{ $lastSettled->status === 'paid' ? 'Paid' : 'Processed' }}
+                    </x-badge>
+                    <a href="{{ route('my-payslips') }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View payslip</a>
+                </div>
+                <p class="mt-1.5 text-xs font-medium text-[#778599]">
+                    Tell HR within three working days if anything looks wrong.
+                </p>
+            @else
+                <p class="mt-1 text-sm font-medium text-[#778599]">None yet.</p>
             @endif
         </div>
-    @endif
+    </div>
 
     <section class="grid gap-5 xl:grid-cols-[1fr_1.1fr]">
         <div class="overflow-hidden rounded-2xl border border-white/10 bg-ink-950 shadow-sm">
@@ -304,7 +324,6 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Time Out</th>
                         <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Late</th>
                         <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Break</th>
-                        <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Payroll</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
@@ -315,19 +334,9 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $recentDay->time_out?->format('g:i A') ?? '--' }}</td>
                             <td class="px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $recentDay->lateMinutes() !== null ? $recentDay->lateMinutes() . ' min' : '--' }}</td>
                             <td class="px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $recentDay->totalBreakMinutes() }} min @if($recentDay->overBreakMinutes() > 0) <span class="text-red-600 dark:text-red-400">(+{{ $recentDay->overBreakMinutes() }} over)</span> @endif</td>
-                            <td class="px-5 py-4">
-                                @php($dayRun = $payrollFor($recentDay->work_date))
-                                @if (! $dayRun)
-                                    <span class="text-sm font-medium text-ink-500">Not yet processed</span>
-                                @else
-                                    <x-badge :color="$dayRun->status === 'paid' ? 'green' : 'brand'">
-                                        {{ $dayRun->status === 'paid' ? 'Paid' : 'Processed' }}
-                                    </x-badge>
-                                @endif
-                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="px-5 py-10 text-center font-medium text-ink-500">No attendance records yet.</td></tr>
+                        <tr><td colspan="5" class="px-5 py-10 text-center font-medium text-ink-500">No attendance records yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>

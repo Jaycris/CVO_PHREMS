@@ -53,6 +53,12 @@ class AttendanceDay extends Model
      * employees across a cutoff would issue thousands. The aggregator resolves
      * each day's assignment once in memory and passes it in; screens that call
      * these without an argument behave exactly as before.
+     *
+     * Every minute count is floored rather than rounded. Carbon returns these
+     * as floats, and a part-minute should not be charged to the employee —
+     * 5 minutes 40 seconds late is 5 minutes, not 6. Flooring is also what the
+     * int return type was already doing implicitly, so this is the behaviour
+     * that produced every figure to date, now stated rather than assumed.
      */
 
     /**
@@ -70,7 +76,7 @@ class AttendanceDay extends Model
         $scheduledStart = Carbon::parse($this->work_date->toDateString() . ' ' . $assignment->workSchedule->start_time->format('H:i:s'));
 
         return $this->time_in->gt($scheduledStart)
-            ? $scheduledStart->diffInMinutes($this->time_in)
+            ? (int) floor($scheduledStart->diffInMinutes($this->time_in))
             : 0;
     }
 
@@ -97,7 +103,7 @@ class AttendanceDay extends Model
         }
 
         return $this->time_out->lt($scheduledEnd)
-            ? $this->time_out->diffInMinutes($scheduledEnd)
+            ? (int) floor($this->time_out->diffInMinutes($scheduledEnd))
             : 0;
     }
 
@@ -106,7 +112,7 @@ class AttendanceDay extends Model
         return $this->breaks->sum(function (AttendanceBreak $break) {
             $end = $break->break_end ?? now();
 
-            return $break->break_start->diffInMinutes($end);
+            return (int) floor($break->break_start->diffInMinutes($end));
         });
     }
 
@@ -138,6 +144,6 @@ class AttendanceDay extends Model
             return null;
         }
 
-        return max(0, $this->time_in->diffInMinutes($this->time_out) - $this->totalBreakMinutes());
+        return max(0, (int) floor($this->time_in->diffInMinutes($this->time_out)) - $this->totalBreakMinutes());
     }
 }

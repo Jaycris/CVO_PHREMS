@@ -35,6 +35,31 @@ class PayrollPeriodResolver
     }
 
     /**
+     * The period a working date falls inside.
+     *
+     * Not the same as forPayDate(): the 11th belongs to the cutoff that pays on
+     * the 30th, while the pay date closest to it is the 15th, which settles a
+     * period that ended the day before.
+     *
+     * @return array{cutoff: string, start: Carbon, end: Carbon, pay_date: Carbon}
+     */
+    public function containing(Carbon|string $date): array
+    {
+        $on = Carbon::parse($date)->startOfDay();
+
+        if ($on->day >= 26) {
+            // Runs into next month and is settled there.
+            $next = $on->copy()->addMonthNoOverflow();
+
+            return $this->firstCutoffEndingIn($next->year, $next->month);
+        }
+
+        return $on->day <= 10
+            ? $this->firstCutoffEndingIn($on->year, $on->month)
+            : $this->secondCutoffIn($on->year, $on->month);
+    }
+
+    /**
      * @return array{cutoff: string, start: Carbon, end: Carbon, pay_date: Carbon}
      */
     public function payDateFor(int $year, int $month, string $cutoff): array
