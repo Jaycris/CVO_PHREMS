@@ -166,7 +166,7 @@ class StatutorySeeder extends Seeder
                 // same absences deduct the whole month and land on zero.
                 'value' => '22',
                 'label' => 'Days per month used to price a day',
-                'description' => 'Divides the monthly salary to get a day\'s pay. 22 counts working days only, so being absent every working day deducts exactly one month. 30 counts every calendar day instead, which leaves part of the salary behind. This drives absences, lateness and overtime.',
+                'description' => 'Divides the monthly salary to get a day\'s pay, which prices absences, lateness and overtime. 22 counts working days, so being absent every working day deducts exactly one month. 30 counts calendar days and leaves part of the salary behind.',
                 'type' => 'decimal',
                 'group' => 'Daily and Hourly Rates',
             ],
