@@ -15,6 +15,7 @@ use Livewire\Component;
 new #[Layout('layouts.app')] class extends Component
 {
     public ?string $statusMessage = null;
+    public bool $showAdvanced = false;
 
     /** @var array<string, string> code => first|second */
     public array $cutoffs = [];
@@ -23,13 +24,25 @@ new #[Layout('layouts.app')] class extends Component
     /** @var array<string, string> key => value */
     public array $settings = [];
 
-    // Rates are typed as percentages, because that is how the circulars are
-    // written and how the company will discuss them. They are converted to
-    // fractions on save.
-    public array $sss = [];
-    public array $philhealth = [];
-    public array $pagibigLow = [];
-    public array $pagibigHigh = [];
+    /**
+     * The everyday figures: what each side pays, as a straight percentage of
+     * monthly salary.
+     *
+     * PhilHealth is stored by the government as one premium and a split ratio,
+     * but nobody discusses it that way — they say "we each pay 2.5%". The two
+     * are converted on the way in and out.
+     *
+     * @var array<string, array<string, string>>
+     */
+    public array $rates = [];
+
+    /**
+     * The rest of the government's parameters. Real, but set by circular and
+     * almost never touched, so they stay out of the way until asked for.
+     *
+     * @var array<string, string>
+     */
+    public array $advanced = [];
 
     /** @var list<array{income_from: string, income_to: string, base_tax: string, excess_rate: string}> */
     public array $taxBrackets = [];
@@ -41,13 +54,17 @@ new #[Layout('layouts.app')] class extends Component
             $this->active[$setting->code] = (bool) $setting->is_active;
         }
 
-        $this->loadRates();
-        $this->loadTaxBrackets();
-
         foreach (PayrollSetting::orderBy('group')->get() as $setting) {
             $this->settings[$setting->key] = (string) $setting->value;
         }
+
+        $this->loadRates();
+        $this->loadTaxBrackets();
     }
+
+    // -----------------------------------------------------------------
+    // What gets deducted
+    // -----------------------------------------------------------------
 
     public function saveCutoffs(): void
     {
@@ -63,108 +80,133 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         PayrollChangeLog::record($before, $this->snapshot());
-
-        $this->statusMessage = 'Contribution schedule saved. It applies the next time a payroll run is computed.';
+        $this->statusMessage = 'Saved. It applies the next time payroll is computed.';
     }
 
-    public function saveSettings(): void
+    // -----------------------------------------------------------------
+    // Rates
+    // -----------------------------------------------------------------
+
+    protected function loadRates(): void
     {
-        $before = $this->snapshot();
+        $pct = fn ($v) => (string) round((float) $v * 100, 4);
 
-        foreach (PayrollSetting::all() as $setting) {
-            if (! array_key_exists($setting->key, $this->settings)) {
-                continue;
-            }
+        $p = (new SssTableGenerator)->describe(SssBracket::effectiveOn(now())->get());
 
-            $value = $this->settings[$setting->key];
+        $ph = PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first();
+        $phRate = $ph ? (float) $ph->premium_rate : 0.05;
+        $phShare = $ph ? (float) $ph->employee_share_ratio : 0.5;
 
-            $setting->update([
-                'value' => $setting->type === 'boolean'
-                    ? (filter_var($value, FILTER_VALIDATE_BOOLEAN) ? '1' : '0')
-                    : $value,
-            ]);
-        }
+        $bands = PagibigRate::effectiveOn(now())->orderBy('salary_from')->get();
+        $low = $bands->first();
+        $high = $bands->last();
 
-        PayrollChangeLog::record($before, $this->snapshot());
+        $this->rates = [
+            'sss' => ['ee' => $pct($p['employee_rate']), 'er' => $pct($p['employer_rate'])],
+            'philhealth' => ['ee' => $pct($phRate * $phShare), 'er' => $pct($phRate * (1 - $phShare))],
+            'pagibig' => [
+                'ee' => $high ? $pct($high->employee_rate) : '2',
+                'er' => $high ? $pct($high->employer_rate) : '2',
+            ],
+        ];
 
-        $this->statusMessage = 'Payroll policy saved.';
+        $this->advanced = [
+            'sss_msc_floor' => (string) $p['msc_floor'],
+            'sss_msc_ceiling' => (string) $p['msc_ceiling'],
+            'sss_regular_ceiling' => (string) $p['regular_ceiling'],
+            'sss_ec_low' => (string) $p['ec_low'],
+            'sss_ec_high' => (string) $p['ec_high'],
+            'sss_ec_threshold' => (string) $p['ec_threshold'],
+            'ph_floor' => $ph ? (string) (float) $ph->salary_floor : '10000',
+            'ph_ceiling' => $ph ? (string) (float) $ph->salary_ceiling : '100000',
+            'pi_threshold' => $low ? (string) (float) $low->salary_to : '1500',
+            'pi_low_ee' => $low ? $pct($low->employee_rate) : '1',
+            'pi_low_er' => $low ? $pct($low->employer_rate) : '2',
+            'pi_cap' => $high ? (string) (float) $high->max_contribution_base : '5000',
+        ];
     }
 
     /**
-     * Everything on this page, as it is displayed, keyed by area and label.
-     *
-     * Taken before and after a save so the change log records what actually
-     * moved. Reading from the database rather than from the form properties is
-     * deliberate — it captures what was really stored, not what was typed.
-     *
-     * @return array<string, array<string, string>>
+     * Rewrites the rates in force today. Earlier periods are untouched, so
+     * payslips already finalised still reproduce their figures.
      */
-    protected function snapshot(): array
+    public function saveRates(SssTableGenerator $generator): void
     {
-        $money = fn ($v) => '₱' . number_format((float) $v, 2);
-        $percent = fn ($v) => rtrim(rtrim(number_format((float) $v * 100, 4), '0'), '.') . '%';
+        $percent = ['required', 'numeric', 'min:0', 'max:100'];
+        $amount = ['required', 'numeric', 'min:0'];
 
-        $snapshot = ['Deduction Schedule' => [], 'Payroll Policy' => []];
+        $this->validate([
+            'rates.sss.ee' => $percent, 'rates.sss.er' => $percent,
+            'rates.philhealth.ee' => $percent, 'rates.philhealth.er' => $percent,
+            'rates.pagibig.ee' => $percent, 'rates.pagibig.er' => $percent,
+            'advanced.sss_msc_floor' => ['required', 'numeric', 'min:1'],
+            'advanced.sss_msc_ceiling' => ['required', 'numeric', 'gte:advanced.sss_msc_floor'],
+            'advanced.sss_regular_ceiling' => ['required', 'numeric', 'gte:advanced.sss_msc_floor'],
+            'advanced.sss_ec_low' => $amount, 'advanced.sss_ec_high' => $amount, 'advanced.sss_ec_threshold' => $amount,
+            'advanced.ph_floor' => $amount,
+            'advanced.ph_ceiling' => ['required', 'numeric', 'gte:advanced.ph_floor'],
+            'advanced.pi_threshold' => $amount, 'advanced.pi_cap' => $amount,
+            'advanced.pi_low_ee' => $percent, 'advanced.pi_low_er' => $percent,
+        ], [], [
+            'rates.sss.ee' => 'SSS employee rate', 'rates.sss.er' => 'SSS employer rate',
+            'rates.philhealth.ee' => 'PhilHealth employee rate', 'rates.philhealth.er' => 'PhilHealth employer rate',
+            'rates.pagibig.ee' => 'Pag-IBIG employee rate', 'rates.pagibig.er' => 'Pag-IBIG employer rate',
+            'advanced.sss_msc_ceiling' => 'highest salary credit',
+            'advanced.ph_ceiling' => 'PhilHealth ceiling',
+        ]);
 
-        foreach (StatutoryContributionSetting::all() as $setting) {
-            $snapshot['Deduction Schedule'][$setting->label() . ' — deducted'] = $setting->is_active ? 'Yes' : 'No';
-            $snapshot['Deduction Schedule'][$setting->label() . ' — cutoff'] =
-                $setting->deduct_on_cutoff === 'first' ? 'First (15th)' : 'Second (30th)';
-        }
+        $before = $this->snapshot();
+        $a = $this->advanced;
 
-        foreach (PayrollSetting::orderBy('id')->get() as $setting) {
-            $snapshot['Payroll Policy'][$setting->label] = $setting->type === 'boolean'
-                ? (filter_var($setting->value, FILTER_VALIDATE_BOOLEAN) ? 'Yes' : 'No')
-                : (string) $setting->value;
-        }
+        $effectiveFrom = SssBracket::effectiveOn(now())->min('effective_from') ?? now()->startOfYear()->toDateString();
 
-        $generator = new SssTableGenerator();
-        $p = $generator->describe(SssBracket::effectiveOn(now())->get());
-        $snapshot['SSS'] = [
-            'Employee rate' => $percent($p['employee_rate']),
-            'Employer rate' => $percent($p['employer_rate']),
-            'Lowest salary credit' => $money($p['msc_floor']),
-            'Highest salary credit' => $money($p['msc_ceiling']),
-            'Provident fund starts above' => $money($p['regular_ceiling']),
-            'Work injury insurance — lower' => $money($p['ec_low']),
-            'Work injury insurance — higher' => $money($p['ec_high']),
-            'Higher amount starts at' => $money($p['ec_threshold']),
-        ];
+        $generator->generate([
+            'employee_rate' => (float) $this->rates['sss']['ee'] / 100,
+            'employer_rate' => (float) $this->rates['sss']['er'] / 100,
+            'msc_floor' => (float) $a['sss_msc_floor'],
+            'msc_ceiling' => (float) $a['sss_msc_ceiling'],
+            'regular_ceiling' => (float) $a['sss_regular_ceiling'],
+            'ec_low' => (float) $a['sss_ec_low'],
+            'ec_high' => (float) $a['sss_ec_high'],
+            'ec_threshold' => (float) $a['sss_ec_threshold'],
+        ], $effectiveFrom);
 
-        if ($ph = PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first()) {
-            $snapshot['PhilHealth'] = [
-                'Monthly rate' => $percent($ph->premium_rate),
-                "Employee pays this much of it" => $percent($ph->employee_share_ratio),
-                'Salary floor' => $money($ph->salary_floor),
-                'Salary ceiling' => $money($ph->salary_ceiling),
-            ];
-        }
+        // Back to the government's shape: one premium, split by ratio.
+        $phEe = (float) $this->rates['philhealth']['ee'];
+        $phEr = (float) $this->rates['philhealth']['er'];
+        $phTotal = $phEe + $phEr;
+
+        PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first()?->update([
+            'premium_rate' => $phTotal / 100,
+            'employee_share_ratio' => $phTotal > 0 ? $phEe / $phTotal : 0.5,
+            'salary_floor' => (float) $a['ph_floor'],
+            'salary_ceiling' => (float) $a['ph_ceiling'],
+        ]);
 
         $bands = PagibigRate::effectiveOn(now())->orderBy('salary_from')->get();
-        if ($bands->isNotEmpty()) {
-            $low = $bands->first();
-            $high = $bands->last();
-            $snapshot['Pag-IBIG'] = [
-                'Lower rate applies up to' => $money($low->salary_to),
-                'Employee rate — at or below that' => $percent($low->employee_rate),
-                'Employer rate — at or below that' => $percent($low->employer_rate),
-                'Employee rate — above that' => $percent($high->employee_rate),
-                'Employer rate — above that' => $percent($high->employer_rate),
-                'Maximum base' => $money($high->max_contribution_base),
-            ];
-        }
 
-        $snapshot['Withholding Tax'] = [];
-        foreach (BirWithholdingBracket::effectiveOn(now())->where('period', 'semi_monthly')->orderBy('income_from')->get()->values() as $i => $b) {
-            $n = $i + 1;
-            $snapshot['Withholding Tax']["Bracket {$n} — from"] = $money($b->income_from);
-            $snapshot['Withholding Tax']["Bracket {$n} — to"] = $b->income_to === null ? 'and above' : $money($b->income_to);
-            $snapshot['Withholding Tax']["Bracket {$n} — base tax"] = $money($b->base_tax);
-            $snapshot['Withholding Tax']["Bracket {$n} — rate on excess"] = $percent($b->excess_rate);
-        }
+        $bands->first()?->update([
+            'salary_to' => (float) $a['pi_threshold'],
+            'employee_rate' => (float) $a['pi_low_ee'] / 100,
+            'employer_rate' => (float) $a['pi_low_er'] / 100,
+            'max_contribution_base' => (float) $a['pi_cap'],
+        ]);
 
-        return $snapshot;
+        $bands->last()?->update([
+            'salary_from' => (float) $a['pi_threshold'] + 0.01,
+            'employee_rate' => (float) $this->rates['pagibig']['ee'] / 100,
+            'employer_rate' => (float) $this->rates['pagibig']['er'] / 100,
+            'max_contribution_base' => (float) $a['pi_cap'],
+        ]);
+
+        PayrollChangeLog::record($before, $this->snapshot());
+        $this->loadRates();
+        $this->statusMessage = 'Rates saved.';
     }
+
+    // -----------------------------------------------------------------
+    // Withholding tax
+    // -----------------------------------------------------------------
 
     protected function loadTaxBrackets(): void
     {
@@ -193,11 +235,6 @@ new #[Layout('layouts.app')] class extends Component
         $this->taxBrackets = array_values($this->taxBrackets);
     }
 
-    /**
-     * Rewrites the withholding table. The brackets must run in order and meet
-     * end to end — a gap would leave an income with no bracket at all, and
-     * withhold nothing from it.
-     */
     public function saveTaxBrackets(): void
     {
         $this->validate([
@@ -208,7 +245,6 @@ new #[Layout('layouts.app')] class extends Component
             'taxBrackets.*.excess_rate' => ['required', 'numeric', 'min:0', 'max:100'],
         ], [], [
             'taxBrackets.*.income_from' => 'bracket start',
-            'taxBrackets.*.income_to' => 'bracket end',
             'taxBrackets.*.base_tax' => 'base tax',
             'taxBrackets.*.excess_rate' => 'rate on excess',
         ]);
@@ -225,20 +261,16 @@ new #[Layout('layouts.app')] class extends Component
 
         foreach ($rows as $i => $row) {
             if ($row['to'] !== null && $row['to'] < $row['from']) {
-                $this->addError('taxBrackets', 'A bracket cannot end below where it starts. Check bracket ' . ($i + 1) . '.');
-
-                return;
-            }
-
-            if ($i > 0 && $rows[$i - 1]['from'] == $row['from']) {
-                $this->addError('taxBrackets', 'Two brackets start at the same income. Each must start where the previous one ended.');
+                $this->addError('taxBrackets', 'A row cannot end below where it starts. Check row ' . ($i + 1) . '.');
 
                 return;
             }
         }
 
+        // Without an open-ended last row, anyone earning above it falls in no
+        // row at all and has nothing withheld.
         if ($rows->last()['to'] !== null) {
-            $this->addError('taxBrackets', 'Leave the last bracket\'s end blank so the highest earners are still covered.');
+            $this->addError('taxBrackets', 'Leave the last row\'s "To" blank so the highest earners are still covered.');
 
             return;
         }
@@ -251,195 +283,156 @@ new #[Layout('layouts.app')] class extends Component
 
             BirWithholdingBracket::insert($rows->map(fn (array $r) => [
                 'period' => 'semi_monthly',
-                'income_from' => $r['from'],
-                'income_to' => $r['to'],
-                'base_tax' => $r['base'],
-                'excess_rate' => $r['rate'],
-                'effective_from' => $effectiveFrom,
-                'effective_to' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
+                'income_from' => $r['from'], 'income_to' => $r['to'],
+                'base_tax' => $r['base'], 'excess_rate' => $r['rate'],
+                'effective_from' => $effectiveFrom, 'effective_to' => null,
+                'created_at' => now(), 'updated_at' => now(),
             ])->all());
         });
 
         PayrollChangeLog::record($before, $this->snapshot());
         $this->loadTaxBrackets();
-        $this->statusMessage = 'Withholding tax table saved with ' . $rows->count() . ' brackets.';
+        $this->statusMessage = 'Tax table saved.';
     }
 
-    protected function loadRates(): void
+    // -----------------------------------------------------------------
+    // Company policy
+    // -----------------------------------------------------------------
+
+    public function saveSettings(): void
     {
-        $generator = new SssTableGenerator();
-        $brackets = SssBracket::effectiveOn(now())->get();
-        $p = $generator->describe($brackets);
+        $before = $this->snapshot();
 
-        $this->sss = [
-            'employee_rate' => (string) round($p['employee_rate'] * 100, 4),
-            'employer_rate' => (string) round($p['employer_rate'] * 100, 4),
-            'msc_floor' => (string) $p['msc_floor'],
-            'msc_ceiling' => (string) $p['msc_ceiling'],
-            'regular_ceiling' => (string) $p['regular_ceiling'],
-            'ec_low' => (string) $p['ec_low'],
-            'ec_high' => (string) $p['ec_high'],
-            'ec_threshold' => (string) $p['ec_threshold'],
-        ];
+        foreach (PayrollSetting::all() as $setting) {
+            if (! array_key_exists($setting->key, $this->settings)) {
+                continue;
+            }
 
-        $ph = PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first();
-        $this->philhealth = [
-            'premium_rate' => $ph ? (string) round((float) $ph->premium_rate * 100, 4) : '5',
-            'employee_share_ratio' => $ph ? (string) round((float) $ph->employee_share_ratio * 100, 4) : '50',
-            'salary_floor' => $ph ? (string) (float) $ph->salary_floor : '10000',
-            'salary_ceiling' => $ph ? (string) (float) $ph->salary_ceiling : '100000',
-        ];
+            $setting->update([
+                'value' => $setting->type === 'boolean'
+                    ? (filter_var($this->settings[$setting->key], FILTER_VALIDATE_BOOLEAN) ? '1' : '0')
+                    : $this->settings[$setting->key],
+            ]);
+        }
 
-        $bands = PagibigRate::effectiveOn(now())->orderBy('salary_from')->get();
-        $low = $bands->first();
-        $high = $bands->last();
-
-        $this->pagibigLow = [
-            'threshold' => $low ? (string) (float) $low->salary_to : '1500',
-            'employee_rate' => $low ? (string) round((float) $low->employee_rate * 100, 4) : '1',
-            'employer_rate' => $low ? (string) round((float) $low->employer_rate * 100, 4) : '2',
-        ];
-        $this->pagibigHigh = [
-            'employee_rate' => $high ? (string) round((float) $high->employee_rate * 100, 4) : '2',
-            'employer_rate' => $high ? (string) round((float) $high->employer_rate * 100, 4) : '2',
-            'max_contribution_base' => $high ? (string) (float) $high->max_contribution_base : '5000',
-        ];
+        PayrollChangeLog::record($before, $this->snapshot());
+        $this->statusMessage = 'Payroll policy saved.';
     }
 
     /**
-     * Rewrites the rate tables in force today. Earlier effective periods are
-     * untouched, so payslips already computed still reproduce their figures.
+     * The page as displayed, taken before and after a save so the change log
+     * records only what really moved.
+     *
+     * @return array<string, array<string, string>>
      */
-    public function saveRates(SssTableGenerator $generator): void
+    protected function snapshot(): array
     {
-        $this->validate([
-            'sss.employee_rate' => ['required', 'numeric', 'min:0', 'max:100'],
-            'sss.employer_rate' => ['required', 'numeric', 'min:0', 'max:100'],
-            'sss.msc_floor' => ['required', 'numeric', 'min:1'],
-            'sss.msc_ceiling' => ['required', 'numeric', 'gte:sss.msc_floor'],
-            'sss.regular_ceiling' => ['required', 'numeric', 'gte:sss.msc_floor'],
-            'sss.ec_low' => ['required', 'numeric', 'min:0'],
-            'sss.ec_high' => ['required', 'numeric', 'min:0'],
-            'sss.ec_threshold' => ['required', 'numeric', 'min:0'],
-            'philhealth.premium_rate' => ['required', 'numeric', 'min:0', 'max:100'],
-            'philhealth.employee_share_ratio' => ['required', 'numeric', 'min:0', 'max:100'],
-            'philhealth.salary_floor' => ['required', 'numeric', 'min:0'],
-            'philhealth.salary_ceiling' => ['required', 'numeric', 'gte:philhealth.salary_floor'],
-            'pagibigLow.threshold' => ['required', 'numeric', 'min:0'],
-            'pagibigLow.employee_rate' => ['required', 'numeric', 'min:0', 'max:100'],
-            'pagibigLow.employer_rate' => ['required', 'numeric', 'min:0', 'max:100'],
-            'pagibigHigh.employee_rate' => ['required', 'numeric', 'min:0', 'max:100'],
-            'pagibigHigh.employer_rate' => ['required', 'numeric', 'min:0', 'max:100'],
-            'pagibigHigh.max_contribution_base' => ['required', 'numeric', 'min:0'],
-        ], [], [
-            'sss.employee_rate' => 'SSS employee rate',
-            'sss.employer_rate' => 'SSS employer rate',
-            'sss.msc_floor' => 'lowest salary credit',
-            'sss.msc_ceiling' => 'highest salary credit',
-            'sss.regular_ceiling' => 'provident fund threshold',
-            'philhealth.premium_rate' => 'PhilHealth premium rate',
-            'philhealth.employee_share_ratio' => "PhilHealth employee's share",
-            'philhealth.salary_ceiling' => 'PhilHealth ceiling',
-            'pagibigHigh.max_contribution_base' => 'Pag-IBIG maximum base',
-        ]);
+        $money = fn ($v) => '₱' . number_format((float) $v, 2);
+        $pct = fn ($v) => rtrim(rtrim(number_format((float) $v * 100, 4), '0'), '.') . '%';
 
-        $before = $this->snapshot();
-        $effectiveFrom = SssBracket::effectiveOn(now())->min('effective_from') ?? now()->startOfYear()->toDateString();
+        $snapshot = ['Deductions' => [], 'Payroll Policy' => []];
 
-        $rows = $generator->generate([
-            'employee_rate' => (float) $this->sss['employee_rate'] / 100,
-            'employer_rate' => (float) $this->sss['employer_rate'] / 100,
-            'msc_floor' => (float) $this->sss['msc_floor'],
-            'msc_ceiling' => (float) $this->sss['msc_ceiling'],
-            'regular_ceiling' => (float) $this->sss['regular_ceiling'],
-            'ec_low' => (float) $this->sss['ec_low'],
-            'ec_high' => (float) $this->sss['ec_high'],
-            'ec_threshold' => (float) $this->sss['ec_threshold'],
-        ], $effectiveFrom);
+        foreach (StatutoryContributionSetting::all() as $setting) {
+            $snapshot['Deductions'][$setting->label() . ' — deducted'] = $setting->is_active ? 'Yes' : 'No';
+            $snapshot['Deductions'][$setting->label() . ' — cutoff'] =
+                $setting->deduct_on_cutoff === 'first' ? 'First (15th)' : 'Second (30th)';
+        }
 
-        PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first()?->update([
-            'premium_rate' => (float) $this->philhealth['premium_rate'] / 100,
-            'employee_share_ratio' => (float) $this->philhealth['employee_share_ratio'] / 100,
-            'salary_floor' => (float) $this->philhealth['salary_floor'],
-            'salary_ceiling' => (float) $this->philhealth['salary_ceiling'],
-        ]);
+        foreach (PayrollSetting::orderBy('id')->get() as $setting) {
+            $snapshot['Payroll Policy'][$setting->label] = $setting->type === 'boolean'
+                ? (filter_var($setting->value, FILTER_VALIDATE_BOOLEAN) ? 'Yes' : 'No')
+                : (string) $setting->value;
+        }
+
+        $p = (new SssTableGenerator)->describe(SssBracket::effectiveOn(now())->get());
+        $snapshot['SSS'] = [
+            'Employee pays' => $pct($p['employee_rate']),
+            'Employer pays' => $pct($p['employer_rate']),
+            'Lowest salary credit' => $money($p['msc_floor']),
+            'Highest salary credit' => $money($p['msc_ceiling']),
+            'Savings fund starts above' => $money($p['regular_ceiling']),
+            'Work injury insurance — lower' => $money($p['ec_low']),
+            'Work injury insurance — higher' => $money($p['ec_high']),
+            'Work injury insurance rises at' => $money($p['ec_threshold']),
+        ];
+
+        if ($ph = PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first()) {
+            $rate = (float) $ph->premium_rate;
+            $share = (float) $ph->employee_share_ratio;
+            $snapshot['PhilHealth'] = [
+                'Employee pays' => $pct($rate * $share),
+                'Employer pays' => $pct($rate * (1 - $share)),
+                'Lowest salary charged' => $money($ph->salary_floor),
+                'Highest salary charged' => $money($ph->salary_ceiling),
+            ];
+        }
 
         $bands = PagibigRate::effectiveOn(now())->orderBy('salary_from')->get();
+        if ($bands->isNotEmpty()) {
+            $low = $bands->first();
+            $high = $bands->last();
+            $snapshot['Pag-IBIG'] = [
+                'Employee pays' => $pct($high->employee_rate),
+                'Employer pays' => $pct($high->employer_rate),
+                'Rates apply to at most' => $money($high->max_contribution_base),
+                'Reduced rate applies up to' => $money($low->salary_to),
+                'Employee pays below that' => $pct($low->employee_rate),
+                'Employer pays below that' => $pct($low->employer_rate),
+            ];
+        }
 
-        $bands->first()?->update([
-            'salary_to' => (float) $this->pagibigLow['threshold'],
-            'employee_rate' => (float) $this->pagibigLow['employee_rate'] / 100,
-            'employer_rate' => (float) $this->pagibigLow['employer_rate'] / 100,
-            'max_contribution_base' => (float) $this->pagibigHigh['max_contribution_base'],
-        ]);
+        $snapshot['Withholding Tax'] = [];
+        foreach (BirWithholdingBracket::effectiveOn(now())->where('period', 'semi_monthly')->orderBy('income_from')->get()->values() as $i => $b) {
+            $n = $i + 1;
+            $snapshot['Withholding Tax']["Row {$n} — from"] = $money($b->income_from);
+            $snapshot['Withholding Tax']["Row {$n} — to"] = $b->income_to === null ? 'and above' : $money($b->income_to);
+            $snapshot['Withholding Tax']["Row {$n} — base tax"] = $money($b->base_tax);
+            $snapshot['Withholding Tax']["Row {$n} — rate on excess"] = $pct($b->excess_rate);
+        }
 
-        $bands->last()?->update([
-            'salary_from' => (float) $this->pagibigLow['threshold'] + 0.01,
-            'employee_rate' => (float) $this->pagibigHigh['employee_rate'] / 100,
-            'employer_rate' => (float) $this->pagibigHigh['employer_rate'] / 100,
-            'max_contribution_base' => (float) $this->pagibigHigh['max_contribution_base'],
-        ]);
-
-        PayrollChangeLog::record($before, $this->snapshot());
-
-        $this->loadRates();
-        $this->statusMessage = "Contribution rates saved. The SSS table was rebuilt with {$rows} salary brackets.";
+        return $snapshot;
     }
 
     public function with(): array
     {
-        $asOf = now();
-
         return [
             'contributions' => StatutoryContributionSetting::orderByRaw("field(code,'sss','philhealth','pagibig','bir')")->get(),
             'policyGroups' => PayrollSetting::orderBy('group')->orderBy('id')->get()->groupBy('group'),
-            'philhealth' => PhilhealthRate::effectiveOn($asOf)->orderByDesc('effective_from')->first(),
-            'pagibigBands' => PagibigRate::effectiveOn($asOf)->orderBy('salary_from')->get(),
-            'birBrackets' => BirWithholdingBracket::effectiveOn($asOf)->where('period', 'semi_monthly')->orderBy('income_from')->get(),
-            'changeLog' => PayrollChangeLog::latest()->limit(40)->get(),
-            'sssCount' => SssBracket::effectiveOn($asOf)->count(),
-            'sssFirst' => SssBracket::effectiveOn($asOf)->orderBy('monthly_salary_credit')->first(),
-            'sssLast' => SssBracket::effectiveOn($asOf)->orderByDesc('monthly_salary_credit')->first(),
+            'changeLog' => PayrollChangeLog::latest()->limit(30)->get(),
         ];
     }
 };
 ?>
 
+@php
+    $contributionRows = [
+        'sss' => 'SSS',
+        'philhealth' => 'PhilHealth',
+        'pagibig' => 'Pag-IBIG',
+    ];
+@endphp
+
 <div class="space-y-6">
     <div>
         <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Payroll Settings</h1>
-        <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">Government contribution rates and the company's own payroll policy.</p>
+        <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">Government deductions and the company's own payroll rules.</p>
     </div>
 
     @if ($statusMessage)
         <div class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{{ $statusMessage }}</div>
     @endif
 
-    <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-400/20 dark:bg-amber-400/10">
-        <p class="text-sm font-semibold text-amber-800 dark:text-amber-200">Check these figures before your first real payroll</p>
-        <p class="mt-1 text-sm font-medium text-amber-700 dark:text-amber-300">
-            SSS, PhilHealth, Pag-IBIG and BIR change their rates by circular, often every year. The figures below are
-            a starting point so payroll computes something sensible — they are not a substitute for the current issuances.
-        </p>
-    </div>
-
+    {{-- 1. On or off. The only thing most companies ever touch here. --}}
     <x-card :padding="false">
         <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
             <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">What gets deducted</h2>
-            <p class="mt-1 text-sm font-medium text-[#778599]">
-                Anything switched off is not taken from anyone's pay, whatever the rates below say. Once switched on,
-                the whole month is taken in one go rather than split in half — spreading the types across the two
-                cutoffs keeps either payslip from carrying all of them at once.
-            </p>
+            <p class="mt-1 text-sm font-medium text-[#778599]">Anything switched off is not taken from anyone's pay.</p>
         </div>
 
         @if ($contributions->every(fn ($c) => ! $c->is_active))
             <div class="border-b border-neutral-200 bg-[#f8fafc] px-5 py-3 dark:border-neutral-800 dark:bg-neutral-800/50">
                 <p class="text-sm font-medium text-[#65758c] dark:text-neutral-300">
-                    Nothing is being deducted at the moment. Payslips will show gross pay with no government
-                    deductions until one of these is switched on.
+                    Nothing is being deducted right now. Payslips show gross pay with no government deductions.
                 </p>
             </div>
         @endif
@@ -447,42 +440,262 @@ new #[Layout('layouts.app')] class extends Component
         <div class="divide-y divide-neutral-100 dark:divide-neutral-800">
             @foreach ($contributions as $contribution)
                 <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4" wire:key="cut-{{ $contribution->code }}">
-                    <div class="flex min-w-56 items-center gap-3">
-                        <label class="flex cursor-pointer items-center gap-2.5">
-                            <input type="checkbox" wire:model.live="active.{{ $contribution->code }}"
-                                   class="h-4 w-4 rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
-                            <span class="text-sm font-bold text-[#0f172a] dark:text-white">{{ $contribution->label() }}</span>
-                        </label>
+                    <label class="flex cursor-pointer items-center gap-3">
+                        <input type="checkbox" wire:model.live="active.{{ $contribution->code }}"
+                               class="h-4 w-4 rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                        <span class="text-sm font-bold text-[#0f172a] dark:text-white">{{ $contribution->label() }}</span>
                         <x-badge :color="($active[$contribution->code] ?? false) ? 'green' : 'neutral'">
-                            {{ ($active[$contribution->code] ?? false) ? 'Deducting' : 'Not deducted' }}
+                            {{ ($active[$contribution->code] ?? false) ? 'Deducting' : 'Off' }}
                         </x-badge>
-                    </div>
+                    </label>
 
-                    <div class="flex flex-wrap items-center gap-4">
-                        @if ($contribution->code === 'bir')
-                            <p class="text-xs font-medium text-[#778599]">Withheld on every payslip, on what was actually paid.</p>
-                        @else
-                            <div class="w-64">
-                                <x-select wire:model="cutoffs.{{ $contribution->code }}" :disabled="! ($active[$contribution->code] ?? false)">
-                                    <option value="first">First cutoff — paid on the 15th</option>
-                                    <option value="second">Second cutoff — paid on the 30th</option>
-                                </x-select>
-                            </div>
-                        @endif
-                    </div>
+                    @if ($contribution->code !== 'bir')
+                        <div class="w-56">
+                            <x-select wire:model="cutoffs.{{ $contribution->code }}" :disabled="! ($active[$contribution->code] ?? false)">
+                                <option value="first">Taken on the 15th</option>
+                                <option value="second">Taken on the 30th</option>
+                            </x-select>
+                        </div>
+                    @else
+                        <span class="text-xs font-medium text-[#778599]">Taken on every payslip</span>
+                    @endif
                 </div>
             @endforeach
         </div>
 
         <div class="border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
-            <x-button wire:click="saveCutoffs">Save Schedule</x-button>
+            <x-button wire:click="saveCutoffs">Save</x-button>
         </div>
     </x-card>
 
+    {{-- 2. Who pays what. Percentages of monthly salary, nothing else. --}}
     <x-card :padding="false">
         <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Company payroll policy</h2>
-            <p class="mt-1 text-sm font-medium text-[#778599]">Figures the company sets, as opposed to anything the government mandates.</p>
+            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Who pays what</h2>
+            <p class="mt-1 text-sm font-medium text-[#778599]">
+                Percentage of monthly basic salary. Only the employee's share comes off the payslip — the employer's
+                is the company's own cost.
+            </p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+                <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
+                    <tr>
+                        <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]"></th>
+                        <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Employee pays</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Employer pays</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                    @foreach ($contributionRows as $code => $label)
+                        <tr wire:key="rate-{{ $code }}">
+                            <td class="px-5 py-3 font-bold text-[#0f172a] dark:text-white">{{ $label }}</td>
+                            @foreach (['ee', 'er'] as $side)
+                                <td class="px-5 py-3">
+                                    <div class="relative w-28">
+                                        <x-input wire:model="rates.{{ $code }}.{{ $side }}" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                                        <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                                    </div>
+                                    @error("rates.{$code}.{$side}") <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                </td>
+                            @endforeach
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+
+        <div class="border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
+            <x-button wire:click="saveRates">Save Rates</x-button>
+            <button type="button" wire:click="$toggle('showAdvanced')"
+                    class="ml-3 text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">
+                {{ $showAdvanced ? 'Hide' : 'Show' }} the government's other settings
+            </button>
+            <p class="mt-2 text-xs font-medium text-[#778599]">
+                Withholding tax is not here — it uses a table of income ranges rather than one rate. It is under the
+                other settings.
+            </p>
+        </div>
+    </x-card>
+
+    {{-- 3. Everything the agencies set and nobody edits. Out of the way. --}}
+    @if ($showAdvanced)
+        <x-card :padding="false">
+            <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">The government's other settings</h2>
+                <p class="mt-1 text-sm font-medium text-[#778599]">
+                    These are set by the agencies, not by the company. They change only when a new circular comes out,
+                    so most of the time there is nothing to do here.
+                </p>
+            </div>
+
+            <div class="space-y-7 p-5">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">SSS</p>
+                    <p class="mt-1 text-sm font-medium text-[#778599]">
+                        SSS does not charge on the exact salary. It rounds to the nearest ₱500 first, and charges on
+                        that. The lowest and highest below are the limits of that rounded figure.
+                    </p>
+                    <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                        <div>
+                            <x-label>Lowest salary charged</x-label>
+                            <x-input wire:model="advanced.sss_msc_floor" type="number" step="1" min="1" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Earn less, still charged this.</p>
+                        </div>
+                        <div>
+                            <x-label>Highest salary charged</x-label>
+                            <x-input wire:model="advanced.sss_msc_ceiling" type="number" step="1" min="1" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Earn more, still charged this.</p>
+                            @error('advanced.sss_msc_ceiling') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <x-label>Savings fund starts above</x-label>
+                            <x-input wire:model="advanced.sss_regular_ceiling" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Anything above goes to a separate SSS savings fund.</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                        <div>
+                            <x-label>Work injury insurance</x-label>
+                            <x-input wire:model="advanced.sss_ec_low" type="number" step="0.01" min="0" />
+                        </div>
+                        <div>
+                            <x-label>… rises to</x-label>
+                            <x-input wire:model="advanced.sss_ec_high" type="number" step="0.01" min="0" />
+                        </div>
+                        <div>
+                            <x-label>… once salary reaches</x-label>
+                            <x-input wire:model="advanced.sss_ec_threshold" type="number" step="1" min="0" />
+                        </div>
+                    </div>
+                    <p class="mt-2 text-xs font-medium text-[#778599]">
+                        Work injury insurance covers treatment if someone is hurt or falls ill because of their job. SSS
+                        requires it as part of the employer's contribution — it is separate from the company HMO, and it
+                        never comes off anyone's payslip.
+                    </p>
+                </div>
+
+                <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">PhilHealth</p>
+                    <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                        <div>
+                            <x-label>Lowest salary charged</x-label>
+                            <x-input wire:model="advanced.ph_floor" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Earn less, still charged this.</p>
+                        </div>
+                        <div>
+                            <x-label>Highest salary charged</x-label>
+                            <x-input wire:model="advanced.ph_ceiling" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Earn more, still charged this.</p>
+                            @error('advanced.ph_ceiling') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Pag-IBIG</p>
+                    <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                        <div>
+                            <x-label>Rates apply to at most</x-label>
+                            <x-input wire:model="advanced.pi_cap" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">This is what caps it. 2% of ₱5,000 is ₱100, whatever the salary.</p>
+                        </div>
+                        <div>
+                            <x-label>Reduced rate applies up to</x-label>
+                            <x-input wire:model="advanced.pi_threshold" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Only affects very low salaries.</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                        <div>
+                            <x-label>Employee pays below that</x-label>
+                            <div class="relative">
+                                <x-input wire:model="advanced.pi_low_ee" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <x-label>Employer pays below that</x-label>
+                            <div class="relative">
+                                <x-input wire:model="advanced.pi_low_er" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
+                <x-button wire:click="saveRates">Save</x-button>
+            </div>
+        </x-card>
+
+        <x-card :padding="false">
+            <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Withholding tax table</h2>
+                <p class="mt-1 text-sm font-medium text-[#778599]">
+                    Tax is not one rate. Each row covers a range of pay: a fixed amount, plus a percentage of whatever
+                    the pay exceeds the start of the row. Employee only — the company pays no share.
+                </p>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+                    <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Pay from</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Pay to</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Fixed tax</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Plus this % of the excess</th>
+                            <th class="px-4 py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                        @foreach ($taxBrackets as $i => $bracket)
+                            <tr wire:key="tax-{{ $i }}">
+                                <td class="px-4 py-2"><x-input wire:model="taxBrackets.{{ $i }}.income_from" type="number" step="0.01" min="0" class="w-32" /></td>
+                                <td class="px-4 py-2">
+                                    <x-input wire:model="taxBrackets.{{ $i }}.income_to" type="number" step="0.01" min="0"
+                                             placeholder="{{ $loop->last ? 'leave blank' : '' }}" class="w-32" />
+                                </td>
+                                <td class="px-4 py-2"><x-input wire:model="taxBrackets.{{ $i }}.base_tax" type="number" step="0.01" min="0" class="w-32" /></td>
+                                <td class="px-4 py-2">
+                                    <div class="relative w-28">
+                                        <x-input wire:model="taxBrackets.{{ $i }}.excess_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                                        <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-2 text-right">
+                                    @if (count($taxBrackets) > 1)
+                                        <button wire:click="removeTaxBracket({{ $i }})" class="text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400">Remove</button>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            @error('taxBrackets') <p class="px-5 pt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            @error('taxBrackets.*.income_from') <p class="px-5 pt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+
+            <div class="flex flex-wrap items-center gap-2 border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
+                <x-button wire:click="saveTaxBrackets">Save Tax Table</x-button>
+                <x-button variant="secondary" wire:click="addTaxBracket">Add Row</x-button>
+                <p class="w-full text-xs font-medium text-[#778599]">
+                    Leave the last row's <strong class="font-semibold">Pay to</strong> blank, so the highest earners are still covered.
+                </p>
+            </div>
+        </x-card>
+    @endif
+
+    {{-- 4. Company policy. --}}
+    <x-card :padding="false">
+        <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Company payroll rules</h2>
+            <p class="mt-1 text-sm font-medium text-[#778599]">The company's own decisions, not the government's.</p>
         </div>
 
         <div class="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -518,265 +731,15 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
-            <x-button wire:click="saveSettings">Save Policy</x-button>
+            <x-button wire:click="saveSettings">Save</x-button>
         </div>
     </x-card>
 
-    <x-card :padding="false">
-        <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Contribution rates</h2>
-            <p class="mt-1 text-sm font-medium text-[#778599]">
-                SSS, PhilHealth and Pag-IBIG are shared between the employee and the employer, and both sides fund the
-                employee's benefits. Only the employee's share is taken off the payslip; the employer's is recorded for
-                the remittance forms. Every figure is worked out from monthly basic salary, not from what was earned
-                this cutoff — that is how the government tables are published.
-            </p>
-        </div>
-
-        <div class="space-y-8 p-5">
-            <div>
-                <div class="flex flex-wrap items-baseline justify-between gap-2">
-                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">SSS</p>
-                    <p class="text-xs font-medium text-[#778599]">{{ $sssCount }} salary brackets in force</p>
-                </div>
-                <p class="mt-1 text-sm font-medium text-[#778599]">
-                    SSS does not charge on the exact salary. It rounds each salary to the nearest step of 500 — that rounded figure is the <strong class="font-semibold">salary credit</strong>, and the rates apply to it. The full table is rebuilt from these figures when you save, so there is no thirty-row table to retype.
-                </p>
-
-                <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <div>
-                        <x-label>Employee pays</x-label>
-                        <div class="relative">
-                            <x-input wire:model="sss.employee_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
-                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
-                        </div>
-                        @error('sss.employee_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Employer pays</x-label>
-                        <div class="relative">
-                            <x-input wire:model="sss.employer_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
-                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
-                        </div>
-                        @error('sss.employer_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Lowest salary credit</x-label>
-                        <x-input wire:model="sss.msc_floor" type="number" step="1" min="1" />
-                        @error('sss.msc_floor') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Highest salary credit</x-label>
-                        <x-input wire:model="sss.msc_ceiling" type="number" step="1" min="1" />
-                        @error('sss.msc_ceiling') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                </div>
-
-                <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <div>
-                        <x-label>Provident fund starts above</x-label>
-                        <x-input wire:model="sss.regular_ceiling" type="number" step="1" min="0" />
-                        <p class="mt-1 text-xs font-medium text-[#778599]">Anything above this goes into a separate SSS savings fund instead, reported on its own line of the remittance.</p>
-                        @error('sss.regular_ceiling') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Work injury insurance — lower</x-label>
-                        <x-input wire:model="sss.ec_low" type="number" step="0.01" min="0" />
-                        @error('sss.ec_low') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Work injury insurance — higher</x-label>
-                        <x-input wire:model="sss.ec_high" type="number" step="0.01" min="0" />
-                        @error('sss.ec_high') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Higher amount starts at</x-label>
-                        <x-input wire:model="sss.ec_threshold" type="number" step="1" min="0" />
-                        @error('sss.ec_threshold') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                </div>
-
-                <p class="mt-3 text-xs font-medium text-[#778599]">
-                    Work injury insurance is SSS Employee Compensation. It covers treatment and benefits if someone is
-                    hurt or falls ill because of their job. The company pays all of it — it never appears on a payslip.
-                </p>
-            </div>
-
-            <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
-                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">PhilHealth</p>
-                <p class="mt-1 text-sm font-medium text-[#778599]">
-                    PhilHealth charges a percentage of monthly basic salary. That whole amount is the month's bill, which is then split between the employee and the company.
-                </p>
-
-                <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <div>
-                        <x-label>Monthly rate</x-label>
-                        <div class="relative">
-                            <x-input wire:model="philhealth.premium_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
-                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
-                        </div>
-                        @error('philhealth.premium_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Employee pays this much of it</x-label>
-                        <div class="relative">
-                            <x-input wire:model="philhealth.employee_share_ratio" type="number" step="0.01" min="0" max="100" class="pr-8" />
-                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
-                        </div>
-                        <p class="mt-1 text-xs font-medium text-[#778599]">50 splits it evenly. The employer covers the rest.</p>
-                        @error('philhealth.employee_share_ratio') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Salary floor</x-label>
-                        <x-input wire:model="philhealth.salary_floor" type="number" step="1" min="0" />
-                        @error('philhealth.salary_floor') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Salary ceiling</x-label>
-                        <x-input wire:model="philhealth.salary_ceiling" type="number" step="1" min="0" />
-                        @error('philhealth.salary_ceiling') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                </div>
-            </div>
-
-            <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
-                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Pag-IBIG</p>
-                <p class="mt-1 text-sm font-medium text-[#778599]">
-                    Pag-IBIG charges two different rates depending on salary. Almost everyone falls in the higher one. Both sides are held at the maximum by applying the rate to a capped amount rather than to the full salary.
-                </p>
-
-                <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                    <div>
-                        <x-label>Lower rate applies up to</x-label>
-                        <x-input wire:model="pagibigLow.threshold" type="number" step="1" min="0" />
-                        @error('pagibigLow.threshold') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Employee — at or below that</x-label>
-                        <div class="relative">
-                            <x-input wire:model="pagibigLow.employee_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
-                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
-                        </div>
-                        @error('pagibigLow.employee_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Employer — at or below that</x-label>
-                        <div class="relative">
-                            <x-input wire:model="pagibigLow.employer_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
-                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
-                        </div>
-                        @error('pagibigLow.employer_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Employee — above that</x-label>
-                        <div class="relative">
-                            <x-input wire:model="pagibigHigh.employee_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
-                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
-                        </div>
-                        @error('pagibigHigh.employee_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Employer — above that</x-label>
-                        <div class="relative">
-                            <x-input wire:model="pagibigHigh.employer_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
-                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
-                        </div>
-                        @error('pagibigHigh.employer_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <x-label>Rates apply to at most</x-label>
-                        <x-input wire:model="pagibigHigh.max_contribution_base" type="number" step="1" min="0" />
-                        @error('pagibigHigh.max_contribution_base') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                </div>
-            </div>
-
-        </div>
-
-        <div class="border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
-            <x-button wire:click="saveRates">
-                <span wire:loading.remove wire:target="saveRates">Save Rates</span>
-                <span wire:loading wire:target="saveRates">Rebuilding table...</span>
-            </x-button>
-            <p class="mt-2 text-xs font-medium text-[#778599]">
-                Saving rewrites the rates in force today. Payslips already computed keep the figures they were
-                finalised with.
-            </p>
-        </div>
-    </x-card>
-
-    <x-card :padding="false">
-        <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Withholding Tax</h2>
-            <p class="mt-1 text-sm font-medium text-[#778599]">
-                Unlike the three above, this one is the employee's alone — there is no employer share to split, and it
-                is withheld on every payslip rather than on one chosen cutoff. Within a bracket the tax is a fixed
-                amount plus a percentage of whatever the taxable pay exceeds the bracket's start.
-            </p>
-        </div>
-
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-                <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
-                    <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">From</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">To</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Base tax</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Rate on excess</th>
-                        <th class="px-4 py-3"></th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
-                    @foreach ($taxBrackets as $i => $bracket)
-                        <tr wire:key="tax-{{ $i }}">
-                            <td class="px-4 py-2">
-                                <x-input wire:model="taxBrackets.{{ $i }}.income_from" type="number" step="0.01" min="0" class="w-32" />
-                            </td>
-                            <td class="px-4 py-2">
-                                <x-input wire:model="taxBrackets.{{ $i }}.income_to" type="number" step="0.01" min="0"
-                                         placeholder="{{ $loop->last ? 'and above' : '' }}" class="w-32" />
-                            </td>
-                            <td class="px-4 py-2">
-                                <x-input wire:model="taxBrackets.{{ $i }}.base_tax" type="number" step="0.01" min="0" class="w-32" />
-                            </td>
-                            <td class="px-4 py-2">
-                                <div class="relative w-28">
-                                    <x-input wire:model="taxBrackets.{{ $i }}.excess_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
-                                    <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-2 text-right">
-                                @if (count($taxBrackets) > 1)
-                                    <button wire:click="removeTaxBracket({{ $i }})" class="text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400">Remove</button>
-                                @endif
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-
-        @error('taxBrackets') <p class="px-5 pt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-        @error('taxBrackets.*.income_from') <p class="px-5 pt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-        @error('taxBrackets.*.excess_rate') <p class="px-5 pt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-
-        <div class="flex flex-wrap items-center gap-2 border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
-            <x-button wire:click="saveTaxBrackets">Save Tax Table</x-button>
-            <x-button variant="secondary" wire:click="addTaxBracket">Add Bracket</x-button>
-            <p class="w-full text-xs font-medium text-[#778599]">
-                Leave the last bracket's <strong class="font-semibold">To</strong> blank so the highest earners are still covered.
-                Brackets must meet end to end — a gap would leave that pay range untaxed.
-            </p>
-        </div>
-    </x-card>
-
+    {{-- 5. Who changed what. --}}
     <x-card :padding="false">
         <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
             <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Change history</h2>
-            <p class="mt-1 text-sm font-medium text-[#778599]">
-                Everything on this page changes what employees take home. When a payslip is questioned weeks later,
-                this is what says who changed which figure, and what it was before.
-            </p>
+            <p class="mt-1 text-sm font-medium text-[#778599]">Everything here changes what people take home, so every change is recorded.</p>
         </div>
 
         <div class="overflow-x-auto">
@@ -803,7 +766,7 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="whitespace-nowrap px-4 py-3 font-bold text-[#0f172a] dark:text-white">{{ $entry->new_value ?? '—' }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-4 py-8 text-center font-medium text-[#778599]">Nothing has been changed yet.</td></tr>
+                        <tr><td colspan="5" class="px-4 py-8 text-center font-medium text-[#778599]">Nothing changed yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
