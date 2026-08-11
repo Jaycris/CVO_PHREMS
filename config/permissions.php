@@ -61,6 +61,9 @@ return [
         ],
 
         'Payroll' => [
+            'payroll.runs.manage' => 'Payroll — open a run, compute it and review the payslips',
+            'payroll.runs.finalize' => 'Payroll — lock the figures and mark a run as paid',
+            'payroll.runs.unlock' => 'Payroll — reopen a run that was already locked',
             'payroll.settings.manage' => 'Payroll Settings — government contribution rates, which cutoff they come out of, and company payroll policy',
         ],
 

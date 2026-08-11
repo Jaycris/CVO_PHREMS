@@ -2,7 +2,11 @@
 
 namespace App\Providers;
 
+use App\Models\Payslip;
+use App\Models\PayslipAdjustment;
 use App\Models\User;
+use App\Observers\PayslipAdjustmentObserver;
+use App\Observers\PayslipObserver;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -32,5 +36,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::before(function (User $user, string $ability) {
             return $user->hasEffectivePermission($ability) ?: null;
         });
+
+        // Refuses any write to a finalised or paid payslip, whatever code path
+        // it arrives through.
+        Payslip::observe(PayslipObserver::class);
+        PayslipAdjustment::observe(PayslipAdjustmentObserver::class);
     }
 }
