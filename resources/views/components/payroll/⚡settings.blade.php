@@ -2,11 +2,13 @@
 
 use App\Models\BirWithholdingBracket;
 use App\Models\PagibigRate;
+use App\Models\PayrollChangeLog;
 use App\Models\PayrollSetting;
 use App\Models\PhilhealthRate;
 use App\Models\SssBracket;
 use App\Models\StatutoryContributionSetting;
 use App\Services\Payroll\SssTableGenerator;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -29,6 +31,9 @@ new #[Layout('layouts.app')] class extends Component
     public array $pagibigLow = [];
     public array $pagibigHigh = [];
 
+    /** @var list<array{income_from: string, income_to: string, base_tax: string, excess_rate: string}> */
+    public array $taxBrackets = [];
+
     public function mount(): void
     {
         foreach (StatutoryContributionSetting::all() as $setting) {
@@ -37,6 +42,7 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $this->loadRates();
+        $this->loadTaxBrackets();
 
         foreach (PayrollSetting::orderBy('group')->get() as $setting) {
             $this->settings[$setting->key] = (string) $setting->value;
@@ -45,6 +51,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function saveCutoffs(): void
     {
+        $before = $this->snapshot();
+
         foreach (StatutoryContributionSetting::all() as $setting) {
             $setting->update([
                 'deduct_on_cutoff' => in_array($this->cutoffs[$setting->code] ?? null, ['first', 'second'], true)
@@ -54,11 +62,15 @@ new #[Layout('layouts.app')] class extends Component
             ]);
         }
 
+        PayrollChangeLog::record($before, $this->snapshot());
+
         $this->statusMessage = 'Contribution schedule saved. It applies the next time a payroll run is computed.';
     }
 
     public function saveSettings(): void
     {
+        $before = $this->snapshot();
+
         foreach (PayrollSetting::all() as $setting) {
             if (! array_key_exists($setting->key, $this->settings)) {
                 continue;
@@ -73,7 +85,186 @@ new #[Layout('layouts.app')] class extends Component
             ]);
         }
 
+        PayrollChangeLog::record($before, $this->snapshot());
+
         $this->statusMessage = 'Payroll policy saved.';
+    }
+
+    /**
+     * Everything on this page, as it is displayed, keyed by area and label.
+     *
+     * Taken before and after a save so the change log records what actually
+     * moved. Reading from the database rather than from the form properties is
+     * deliberate — it captures what was really stored, not what was typed.
+     *
+     * @return array<string, array<string, string>>
+     */
+    protected function snapshot(): array
+    {
+        $money = fn ($v) => '₱' . number_format((float) $v, 2);
+        $percent = fn ($v) => rtrim(rtrim(number_format((float) $v * 100, 4), '0'), '.') . '%';
+
+        $snapshot = ['Deduction Schedule' => [], 'Payroll Policy' => []];
+
+        foreach (StatutoryContributionSetting::all() as $setting) {
+            $snapshot['Deduction Schedule'][$setting->label() . ' — deducted'] = $setting->is_active ? 'Yes' : 'No';
+            $snapshot['Deduction Schedule'][$setting->label() . ' — cutoff'] =
+                $setting->deduct_on_cutoff === 'first' ? 'First (15th)' : 'Second (30th)';
+        }
+
+        foreach (PayrollSetting::orderBy('id')->get() as $setting) {
+            $snapshot['Payroll Policy'][$setting->label] = $setting->type === 'boolean'
+                ? (filter_var($setting->value, FILTER_VALIDATE_BOOLEAN) ? 'Yes' : 'No')
+                : (string) $setting->value;
+        }
+
+        $generator = new SssTableGenerator();
+        $p = $generator->describe(SssBracket::effectiveOn(now())->get());
+        $snapshot['SSS'] = [
+            'Employee rate' => $percent($p['employee_rate']),
+            'Employer rate' => $percent($p['employer_rate']),
+            'Lowest salary credit' => $money($p['msc_floor']),
+            'Highest salary credit' => $money($p['msc_ceiling']),
+            'Provident fund starts above' => $money($p['regular_ceiling']),
+            'Employer EC — lower' => $money($p['ec_low']),
+            'Employer EC — higher' => $money($p['ec_high']),
+            'EC rises at' => $money($p['ec_threshold']),
+        ];
+
+        if ($ph = PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first()) {
+            $snapshot['PhilHealth'] = [
+                'Premium rate' => $percent($ph->premium_rate),
+                "Employee's share of the premium" => $percent($ph->employee_share_ratio),
+                'Salary floor' => $money($ph->salary_floor),
+                'Salary ceiling' => $money($ph->salary_ceiling),
+            ];
+        }
+
+        $bands = PagibigRate::effectiveOn(now())->orderBy('salary_from')->get();
+        if ($bands->isNotEmpty()) {
+            $low = $bands->first();
+            $high = $bands->last();
+            $snapshot['Pag-IBIG'] = [
+                'Lower band up to' => $money($low->salary_to),
+                'Employee rate — lower band' => $percent($low->employee_rate),
+                'Employer rate — lower band' => $percent($low->employer_rate),
+                'Employee rate — upper band' => $percent($high->employee_rate),
+                'Employer rate — upper band' => $percent($high->employer_rate),
+                'Maximum base' => $money($high->max_contribution_base),
+            ];
+        }
+
+        $snapshot['Withholding Tax'] = [];
+        foreach (BirWithholdingBracket::effectiveOn(now())->where('period', 'semi_monthly')->orderBy('income_from')->get()->values() as $i => $b) {
+            $n = $i + 1;
+            $snapshot['Withholding Tax']["Bracket {$n} — from"] = $money($b->income_from);
+            $snapshot['Withholding Tax']["Bracket {$n} — to"] = $b->income_to === null ? 'and above' : $money($b->income_to);
+            $snapshot['Withholding Tax']["Bracket {$n} — base tax"] = $money($b->base_tax);
+            $snapshot['Withholding Tax']["Bracket {$n} — rate on excess"] = $percent($b->excess_rate);
+        }
+
+        return $snapshot;
+    }
+
+    protected function loadTaxBrackets(): void
+    {
+        $this->taxBrackets = BirWithholdingBracket::effectiveOn(now())
+            ->where('period', 'semi_monthly')
+            ->orderBy('income_from')
+            ->get()
+            ->map(fn (BirWithholdingBracket $b) => [
+                'income_from' => (string) (float) $b->income_from,
+                'income_to' => $b->income_to === null ? '' : (string) (float) $b->income_to,
+                'base_tax' => (string) (float) $b->base_tax,
+                'excess_rate' => (string) round((float) $b->excess_rate * 100, 4),
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function addTaxBracket(): void
+    {
+        $this->taxBrackets[] = ['income_from' => '', 'income_to' => '', 'base_tax' => '0', 'excess_rate' => '0'];
+    }
+
+    public function removeTaxBracket(int $index): void
+    {
+        unset($this->taxBrackets[$index]);
+        $this->taxBrackets = array_values($this->taxBrackets);
+    }
+
+    /**
+     * Rewrites the withholding table. The brackets must run in order and meet
+     * end to end — a gap would leave an income with no bracket at all, and
+     * withhold nothing from it.
+     */
+    public function saveTaxBrackets(): void
+    {
+        $this->validate([
+            'taxBrackets' => ['required', 'array', 'min:1'],
+            'taxBrackets.*.income_from' => ['required', 'numeric', 'min:0'],
+            'taxBrackets.*.income_to' => ['nullable', 'numeric', 'min:0'],
+            'taxBrackets.*.base_tax' => ['required', 'numeric', 'min:0'],
+            'taxBrackets.*.excess_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+        ], [], [
+            'taxBrackets.*.income_from' => 'bracket start',
+            'taxBrackets.*.income_to' => 'bracket end',
+            'taxBrackets.*.base_tax' => 'base tax',
+            'taxBrackets.*.excess_rate' => 'rate on excess',
+        ]);
+
+        $rows = collect($this->taxBrackets)
+            ->map(fn (array $r) => [
+                'from' => (float) $r['income_from'],
+                'to' => $r['income_to'] === '' ? null : (float) $r['income_to'],
+                'base' => (float) $r['base_tax'],
+                'rate' => (float) $r['excess_rate'] / 100,
+            ])
+            ->sortBy('from')
+            ->values();
+
+        foreach ($rows as $i => $row) {
+            if ($row['to'] !== null && $row['to'] < $row['from']) {
+                $this->addError('taxBrackets', 'A bracket cannot end below where it starts. Check bracket ' . ($i + 1) . '.');
+
+                return;
+            }
+
+            if ($i > 0 && $rows[$i - 1]['from'] == $row['from']) {
+                $this->addError('taxBrackets', 'Two brackets start at the same income. Each must start where the previous one ended.');
+
+                return;
+            }
+        }
+
+        if ($rows->last()['to'] !== null) {
+            $this->addError('taxBrackets', 'Leave the last bracket\'s end blank so the highest earners are still covered.');
+
+            return;
+        }
+
+        $before = $this->snapshot();
+        $effectiveFrom = BirWithholdingBracket::effectiveOn(now())->min('effective_from') ?? now()->startOfYear()->toDateString();
+
+        DB::transaction(function () use ($rows, $effectiveFrom) {
+            BirWithholdingBracket::whereDate('effective_from', $effectiveFrom)->where('period', 'semi_monthly')->delete();
+
+            BirWithholdingBracket::insert($rows->map(fn (array $r) => [
+                'period' => 'semi_monthly',
+                'income_from' => $r['from'],
+                'income_to' => $r['to'],
+                'base_tax' => $r['base'],
+                'excess_rate' => $r['rate'],
+                'effective_from' => $effectiveFrom,
+                'effective_to' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ])->all());
+        });
+
+        PayrollChangeLog::record($before, $this->snapshot());
+        $this->loadTaxBrackets();
+        $this->statusMessage = 'Withholding tax table saved with ' . $rows->count() . ' brackets.';
     }
 
     protected function loadRates(): void
@@ -154,6 +345,7 @@ new #[Layout('layouts.app')] class extends Component
             'pagibigHigh.max_contribution_base' => 'Pag-IBIG maximum base',
         ]);
 
+        $before = $this->snapshot();
         $effectiveFrom = SssBracket::effectiveOn(now())->min('effective_from') ?? now()->startOfYear()->toDateString();
 
         $rows = $generator->generate([
@@ -190,6 +382,8 @@ new #[Layout('layouts.app')] class extends Component
             'max_contribution_base' => (float) $this->pagibigHigh['max_contribution_base'],
         ]);
 
+        PayrollChangeLog::record($before, $this->snapshot());
+
         $this->loadRates();
         $this->statusMessage = "Contribution rates saved. The SSS table was rebuilt with {$rows} salary brackets.";
     }
@@ -204,6 +398,7 @@ new #[Layout('layouts.app')] class extends Component
             'philhealth' => PhilhealthRate::effectiveOn($asOf)->orderByDesc('effective_from')->first(),
             'pagibigBands' => PagibigRate::effectiveOn($asOf)->orderBy('salary_from')->get(),
             'birBrackets' => BirWithholdingBracket::effectiveOn($asOf)->where('period', 'semi_monthly')->orderBy('income_from')->get(),
+            'changeLog' => PayrollChangeLog::latest()->limit(40)->get(),
             'sssCount' => SssBracket::effectiveOn($asOf)->count(),
             'sssFirst' => SssBracket::effectiveOn($asOf)->orderBy('monthly_salary_credit')->first(),
             'sssLast' => SssBracket::effectiveOn($asOf)->orderByDesc('monthly_salary_credit')->first(),
@@ -480,41 +675,6 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </div>
 
-            <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
-                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Withholding Tax — semi-monthly</p>
-                <div class="mt-2 overflow-x-auto">
-                    <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-                        <thead>
-                            <tr>
-                                <th class="py-2 pr-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Taxable income</th>
-                                <th class="py-2 pr-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Tax</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
-                            @foreach ($birBrackets as $bracket)
-                                <tr>
-                                    <td class="py-2 pr-4 font-medium text-[#65758c] dark:text-neutral-300">
-                                        ₱{{ number_format((float) $bracket->income_from, 2) }}
-                                        {{ $bracket->income_to ? '– ₱' . number_format((float) $bracket->income_to, 2) : 'and above' }}
-                                    </td>
-                                    <td class="py-2 pr-4 font-medium text-[#778599]">
-                                        @if ((float) $bracket->excess_rate === 0.0 && (float) $bracket->base_tax === 0.0)
-                                            No tax
-                                        @else
-                                            ₱{{ number_format((float) $bracket->base_tax, 2) }} +
-                                            {{ rtrim(rtrim(number_format((float) $bracket->excess_rate * 100, 2), '0'), '.') }}%
-                                            of anything over ₱{{ number_format((float) $bracket->income_from, 2) }}
-                                        @endif
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-                <p class="mt-2 text-xs font-medium text-[#778599]">
-                    Withholding tax is the employee's alone — there is no employer share to split.
-                </p>
-            </div>
         </div>
 
         <div class="border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
@@ -526,6 +686,111 @@ new #[Layout('layouts.app')] class extends Component
                 Saving rewrites the rates in force today. Payslips already computed keep the figures they were
                 finalised with.
             </p>
+        </div>
+    </x-card>
+
+    <x-card :padding="false">
+        <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Withholding Tax</h2>
+            <p class="mt-1 text-sm font-medium text-[#778599]">
+                Unlike the three above, this one is the employee's alone — there is no employer share to split, and it
+                is withheld on every payslip rather than on one chosen cutoff. Within a bracket the tax is a fixed
+                amount plus a percentage of whatever the taxable pay exceeds the bracket's start.
+            </p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+                <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">From</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">To</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Base tax</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Rate on excess</th>
+                        <th class="px-4 py-3"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                    @foreach ($taxBrackets as $i => $bracket)
+                        <tr wire:key="tax-{{ $i }}">
+                            <td class="px-4 py-2">
+                                <x-input wire:model="taxBrackets.{{ $i }}.income_from" type="number" step="0.01" min="0" class="w-32" />
+                            </td>
+                            <td class="px-4 py-2">
+                                <x-input wire:model="taxBrackets.{{ $i }}.income_to" type="number" step="0.01" min="0"
+                                         placeholder="{{ $loop->last ? 'and above' : '' }}" class="w-32" />
+                            </td>
+                            <td class="px-4 py-2">
+                                <x-input wire:model="taxBrackets.{{ $i }}.base_tax" type="number" step="0.01" min="0" class="w-32" />
+                            </td>
+                            <td class="px-4 py-2">
+                                <div class="relative w-28">
+                                    <x-input wire:model="taxBrackets.{{ $i }}.excess_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                                    <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-2 text-right">
+                                @if (count($taxBrackets) > 1)
+                                    <button wire:click="removeTaxBracket({{ $i }})" class="text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400">Remove</button>
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+
+        @error('taxBrackets') <p class="px-5 pt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+        @error('taxBrackets.*.income_from') <p class="px-5 pt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+        @error('taxBrackets.*.excess_rate') <p class="px-5 pt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+
+        <div class="flex flex-wrap items-center gap-2 border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
+            <x-button wire:click="saveTaxBrackets">Save Tax Table</x-button>
+            <x-button variant="secondary" wire:click="addTaxBracket">Add Bracket</x-button>
+            <p class="w-full text-xs font-medium text-[#778599]">
+                Leave the last bracket's <strong class="font-semibold">To</strong> blank so the highest earners are still covered.
+                Brackets must meet end to end — a gap would leave that pay range untaxed.
+            </p>
+        </div>
+    </x-card>
+
+    <x-card :padding="false">
+        <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Change history</h2>
+            <p class="mt-1 text-sm font-medium text-[#778599]">
+                Everything on this page changes what employees take home. When a payslip is questioned weeks later,
+                this is what says who changed which figure, and what it was before.
+            </p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+                <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">When</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Who</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">What</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Was</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Now</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                    @forelse ($changeLog as $entry)
+                        <tr wire:key="log-{{ $entry->id }}">
+                            <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599]">{{ $entry->created_at->format('M d, Y g:i A') }}</td>
+                            <td class="px-4 py-3 font-medium text-[#65758c] dark:text-white">{{ $entry->user_name ?? 'Unknown' }}</td>
+                            <td class="px-4 py-3 font-medium text-[#65758c] dark:text-neutral-300">
+                                <span class="block text-xs font-medium uppercase tracking-wide text-[#778599]">{{ $entry->area }}</span>
+                                {{ $entry->field }}
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] line-through">{{ $entry->old_value ?? '—' }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 font-bold text-[#0f172a] dark:text-white">{{ $entry->new_value ?? '—' }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="5" class="px-4 py-8 text-center font-medium text-[#778599]">Nothing has been changed yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
     </x-card>
 </div>
