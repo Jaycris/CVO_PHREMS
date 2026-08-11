@@ -155,7 +155,12 @@ new #[Layout('layouts.app')] class extends Component
                 <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
                     @forelse ($advances as $advance)
                         <tr wire:key="ca-{{ $advance->id }}">
-                            <td class="px-4 py-3 font-medium text-[#65758c] dark:text-white">{{ $advance->reference_no }}</td>
+                            <td class="px-4 py-3 font-medium text-[#65758c] dark:text-white">
+                                {{ $advance->reference_no }}
+                                <span class="block text-xs font-medium text-[#778599]">
+                                    {{ $advance->source === 'requested' ? 'Approved request' : 'Recorded by HR' }}
+                                </span>
+                            </td>
                             <td class="px-4 py-3 font-medium text-[#65758c] dark:text-white">
                                 {{ $advance->employee->fullName() ?: $advance->employee->employee_id }}
                                 <span class="block text-xs font-medium text-[#778599]">{{ $advance->employee->employee_id }}</span>

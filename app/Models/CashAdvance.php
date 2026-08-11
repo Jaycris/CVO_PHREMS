@@ -17,6 +17,7 @@ class CashAdvance extends Model
         'amount_per_cutoff',
         'start_date',
         'status',
+        'source',
         'approved_by_user_id',
         'note',
     ];

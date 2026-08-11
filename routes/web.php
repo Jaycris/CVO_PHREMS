@@ -25,6 +25,10 @@ Route::middleware('auth')->group(function () {
     Route::livewire('/overtime/create', 'overtime.create')->name('overtime.create');
     Route::livewire('/overtime/{overtimeRequest}', 'overtime.show')->name('overtime.show');
 
+    // Open to everyone: the page shows an employee their own requests and an
+    // approver their queue, so access is decided by the data, not the route.
+    Route::livewire('/cash-advance-requests', 'cash-advance-requests.index')->name('cash-advance-requests.index');
+
     Route::livewire('/leave-requests', 'leave-requests.index')->name('leave-requests.index');
     Route::livewire('/leave-requests/create', 'leave-requests.create')->name('leave-requests.create');
     Route::livewire('/leave-requests/{leaveRequest}', 'leave-requests.show')->name('leave-requests.show');
