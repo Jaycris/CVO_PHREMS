@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
 class PayrollRun extends Model
@@ -59,6 +61,27 @@ class PayrollRun extends Model
     public function paidBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'paid_by_user_id');
+    }
+
+    /**
+     * Runs whose period covers a date and whose figures are already locked.
+     *
+     * Only finalized and paid runs count. A day sitting inside a draft or a
+     * run still being computed is not settled — telling an employee otherwise
+     * and then changing the number is worse than saying nothing.
+     */
+    public function scopeSettledOver(Builder $query, Carbon|string $from, Carbon|string $to): Builder
+    {
+        return $query->whereIn('status', ['finalized', 'paid'])
+            ->whereDate('period_start', '<=', Carbon::parse($to)->toDateString())
+            ->whereDate('period_end', '>=', Carbon::parse($from)->toDateString());
+    }
+
+    public function coversDate(Carbon|string $date): bool
+    {
+        $on = Carbon::parse($date)->startOfDay();
+
+        return $on->betweenIncluded($this->period_start->startOfDay(), $this->period_end->startOfDay());
     }
 
     /**
