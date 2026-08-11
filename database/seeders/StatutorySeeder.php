@@ -8,6 +8,7 @@ use App\Models\PayrollSetting;
 use App\Models\PhilhealthRate;
 use App\Models\SssBracket;
 use App\Models\StatutoryContributionSetting;
+use App\Services\Payroll\SssTableGenerator;
 use Illuminate\Database\Seeder;
 
 /**
@@ -72,42 +73,21 @@ class StatutorySeeder extends Seeder
      */
     protected function seedSssBrackets(): void
     {
-        $employeeRate = 0.05;
-        $employerRate = 0.10;
-        $mscFloor = 5000;
-        $mscCeiling = 35000;
-        $regularCeiling = 20000;   // above this, contributions go to WISP
-        $step = 500;
-
-        for ($msc = $mscFloor; $msc <= $mscCeiling; $msc += $step) {
-            $isFirst = $msc === $mscFloor;
-            $isLast = $msc === $mscCeiling;
-
-            $from = $isFirst ? 0 : $msc - ($step / 2);
-            $to = $isLast ? null : $msc + ($step / 2) - 0.01;
-
-            $regular = min($msc, $regularCeiling);
-            $provident = max(0, $msc - $regularCeiling);
-
-            SssBracket::updateOrCreate(
-                ['monthly_salary_credit' => $msc, 'effective_from' => $this->effectiveFrom],
-                [
-                    'salary_from' => $from,
-                    'salary_to' => $to,
-                    'employee_share' => round($regular * $employeeRate, 2),
-                    'employer_share' => round($regular * $employerRate, 2),
-                    'employee_mpf_share' => round($provident * $employeeRate, 2),
-                    'employer_mpf_share' => round($provident * $employerRate, 2),
-                    'employee_compensation' => $msc >= 15000 ? 30 : 10,
-                    'effective_to' => null,
-                ]
-            );
+        // Only seed if nothing is loaded yet — reseeding must not wipe out a
+        // table HR has since regenerated with their own figures.
+        if (SssBracket::whereDate('effective_from', $this->effectiveFrom)->exists()) {
+            return;
         }
+
+        $generator = new SssTableGenerator();
+        $generator->generate($generator->defaults(), $this->effectiveFrom);
     }
 
     protected function seedPhilhealthRate(): void
     {
-        PhilhealthRate::updateOrCreate(
+        // firstOrCreate, not updateOrCreate — a rate HR has revised must survive
+        // a reseed.
+        PhilhealthRate::firstOrCreate(
             ['effective_from' => $this->effectiveFrom],
             [
                 'premium_rate' => 0.05,
@@ -127,7 +107,7 @@ class StatutorySeeder extends Seeder
         ];
 
         foreach ($bands as $band) {
-            PagibigRate::updateOrCreate(
+            PagibigRate::firstOrCreate(
                 ['salary_from' => $band['from'], 'effective_from' => $this->effectiveFrom],
                 [
                     'salary_to' => $band['to'],
@@ -155,7 +135,7 @@ class StatutorySeeder extends Seeder
         ];
 
         foreach ($brackets as $bracket) {
-            BirWithholdingBracket::updateOrCreate(
+            BirWithholdingBracket::firstOrCreate(
                 ['period' => 'semi_monthly', 'income_from' => $bracket['from'], 'effective_from' => $this->effectiveFrom],
                 [
                     'income_to' => $bracket['to'],

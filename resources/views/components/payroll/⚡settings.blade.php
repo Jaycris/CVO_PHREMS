@@ -6,6 +6,7 @@ use App\Models\PayrollSetting;
 use App\Models\PhilhealthRate;
 use App\Models\SssBracket;
 use App\Models\StatutoryContributionSetting;
+use App\Services\Payroll\SssTableGenerator;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -20,12 +21,22 @@ new #[Layout('layouts.app')] class extends Component
     /** @var array<string, string> key => value */
     public array $settings = [];
 
+    // Rates are typed as percentages, because that is how the circulars are
+    // written and how the company will discuss them. They are converted to
+    // fractions on save.
+    public array $sss = [];
+    public array $philhealth = [];
+    public array $pagibigLow = [];
+    public array $pagibigHigh = [];
+
     public function mount(): void
     {
         foreach (StatutoryContributionSetting::all() as $setting) {
             $this->cutoffs[$setting->code] = $setting->deduct_on_cutoff;
             $this->active[$setting->code] = (bool) $setting->is_active;
         }
+
+        $this->loadRates();
 
         foreach (PayrollSetting::orderBy('group')->get() as $setting) {
             $this->settings[$setting->key] = (string) $setting->value;
@@ -63,6 +74,124 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $this->statusMessage = 'Payroll policy saved.';
+    }
+
+    protected function loadRates(): void
+    {
+        $generator = new SssTableGenerator();
+        $brackets = SssBracket::effectiveOn(now())->get();
+        $p = $generator->describe($brackets);
+
+        $this->sss = [
+            'employee_rate' => (string) round($p['employee_rate'] * 100, 4),
+            'employer_rate' => (string) round($p['employer_rate'] * 100, 4),
+            'msc_floor' => (string) $p['msc_floor'],
+            'msc_ceiling' => (string) $p['msc_ceiling'],
+            'regular_ceiling' => (string) $p['regular_ceiling'],
+            'ec_low' => (string) $p['ec_low'],
+            'ec_high' => (string) $p['ec_high'],
+            'ec_threshold' => (string) $p['ec_threshold'],
+        ];
+
+        $ph = PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first();
+        $this->philhealth = [
+            'premium_rate' => $ph ? (string) round((float) $ph->premium_rate * 100, 4) : '5',
+            'employee_share_ratio' => $ph ? (string) round((float) $ph->employee_share_ratio * 100, 4) : '50',
+            'salary_floor' => $ph ? (string) (float) $ph->salary_floor : '10000',
+            'salary_ceiling' => $ph ? (string) (float) $ph->salary_ceiling : '100000',
+        ];
+
+        $bands = PagibigRate::effectiveOn(now())->orderBy('salary_from')->get();
+        $low = $bands->first();
+        $high = $bands->last();
+
+        $this->pagibigLow = [
+            'threshold' => $low ? (string) (float) $low->salary_to : '1500',
+            'employee_rate' => $low ? (string) round((float) $low->employee_rate * 100, 4) : '1',
+            'employer_rate' => $low ? (string) round((float) $low->employer_rate * 100, 4) : '2',
+        ];
+        $this->pagibigHigh = [
+            'employee_rate' => $high ? (string) round((float) $high->employee_rate * 100, 4) : '2',
+            'employer_rate' => $high ? (string) round((float) $high->employer_rate * 100, 4) : '2',
+            'max_contribution_base' => $high ? (string) (float) $high->max_contribution_base : '5000',
+        ];
+    }
+
+    /**
+     * Rewrites the rate tables in force today. Earlier effective periods are
+     * untouched, so payslips already computed still reproduce their figures.
+     */
+    public function saveRates(SssTableGenerator $generator): void
+    {
+        $this->validate([
+            'sss.employee_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'sss.employer_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'sss.msc_floor' => ['required', 'numeric', 'min:1'],
+            'sss.msc_ceiling' => ['required', 'numeric', 'gte:sss.msc_floor'],
+            'sss.regular_ceiling' => ['required', 'numeric', 'gte:sss.msc_floor'],
+            'sss.ec_low' => ['required', 'numeric', 'min:0'],
+            'sss.ec_high' => ['required', 'numeric', 'min:0'],
+            'sss.ec_threshold' => ['required', 'numeric', 'min:0'],
+            'philhealth.premium_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'philhealth.employee_share_ratio' => ['required', 'numeric', 'min:0', 'max:100'],
+            'philhealth.salary_floor' => ['required', 'numeric', 'min:0'],
+            'philhealth.salary_ceiling' => ['required', 'numeric', 'gte:philhealth.salary_floor'],
+            'pagibigLow.threshold' => ['required', 'numeric', 'min:0'],
+            'pagibigLow.employee_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'pagibigLow.employer_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'pagibigHigh.employee_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'pagibigHigh.employer_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'pagibigHigh.max_contribution_base' => ['required', 'numeric', 'min:0'],
+        ], [], [
+            'sss.employee_rate' => 'SSS employee rate',
+            'sss.employer_rate' => 'SSS employer rate',
+            'sss.msc_floor' => 'lowest salary credit',
+            'sss.msc_ceiling' => 'highest salary credit',
+            'sss.regular_ceiling' => 'provident fund threshold',
+            'philhealth.premium_rate' => 'PhilHealth premium rate',
+            'philhealth.employee_share_ratio' => "PhilHealth employee's share",
+            'philhealth.salary_ceiling' => 'PhilHealth ceiling',
+            'pagibigHigh.max_contribution_base' => 'Pag-IBIG maximum base',
+        ]);
+
+        $effectiveFrom = SssBracket::effectiveOn(now())->min('effective_from') ?? now()->startOfYear()->toDateString();
+
+        $rows = $generator->generate([
+            'employee_rate' => (float) $this->sss['employee_rate'] / 100,
+            'employer_rate' => (float) $this->sss['employer_rate'] / 100,
+            'msc_floor' => (float) $this->sss['msc_floor'],
+            'msc_ceiling' => (float) $this->sss['msc_ceiling'],
+            'regular_ceiling' => (float) $this->sss['regular_ceiling'],
+            'ec_low' => (float) $this->sss['ec_low'],
+            'ec_high' => (float) $this->sss['ec_high'],
+            'ec_threshold' => (float) $this->sss['ec_threshold'],
+        ], $effectiveFrom);
+
+        PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first()?->update([
+            'premium_rate' => (float) $this->philhealth['premium_rate'] / 100,
+            'employee_share_ratio' => (float) $this->philhealth['employee_share_ratio'] / 100,
+            'salary_floor' => (float) $this->philhealth['salary_floor'],
+            'salary_ceiling' => (float) $this->philhealth['salary_ceiling'],
+        ]);
+
+        $bands = PagibigRate::effectiveOn(now())->orderBy('salary_from')->get();
+
+        $bands->first()?->update([
+            'salary_to' => (float) $this->pagibigLow['threshold'],
+            'employee_rate' => (float) $this->pagibigLow['employee_rate'] / 100,
+            'employer_rate' => (float) $this->pagibigLow['employer_rate'] / 100,
+            'max_contribution_base' => (float) $this->pagibigHigh['max_contribution_base'],
+        ]);
+
+        $bands->last()?->update([
+            'salary_from' => (float) $this->pagibigLow['threshold'] + 0.01,
+            'employee_rate' => (float) $this->pagibigHigh['employee_rate'] / 100,
+            'employer_rate' => (float) $this->pagibigHigh['employer_rate'] / 100,
+            'max_contribution_base' => (float) $this->pagibigHigh['max_contribution_base'],
+        ]);
+
+        $this->loadRates();
+        $this->statusMessage = "Contribution rates saved. The SSS table was rebuilt with {$rows} salary brackets.";
     }
 
     public function with(): array
@@ -188,64 +317,170 @@ new #[Layout('layouts.app')] class extends Component
 
     <x-card :padding="false">
         <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Current rates in use</h2>
+            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Contribution rates</h2>
             <p class="mt-1 text-sm font-medium text-[#778599]">
-                Every contribution is worked out from the employee's monthly basic salary, not from what they earned
+                SSS, PhilHealth and Pag-IBIG are shared between the employee and the employer, and both sides fund the
+                employee's benefits. Only the employee's share is taken off the payslip; the employer's is recorded for
+                the remittance forms. Every figure is worked out from monthly basic salary, not from what was earned
                 this cutoff — that is how the government tables are published.
             </p>
         </div>
 
-        <div class="space-y-6 p-5">
+        <div class="space-y-8 p-5">
             <div>
-                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">SSS</p>
-                @if ($sssFirst && $sssLast)
-                    <p class="mt-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
-                        {{ $sssCount }} salary brackets, from a monthly salary credit of
-                        ₱{{ number_format((float) $sssFirst->monthly_salary_credit, 2) }}
-                        to ₱{{ number_format((float) $sssLast->monthly_salary_credit, 2) }}.
-                        The employee pays ₱{{ number_format((float) $sssFirst->employee_share, 2) }} at the bottom and
-                        ₱{{ number_format((float) $sssLast->employee_share + (float) $sssLast->employee_mpf_share, 2) }} at the top.
-                    </p>
-                    <p class="mt-1 text-xs font-medium text-[#778599]">
-                        Anything above the regular ceiling goes to the provident fund (WISP) and is remitted separately.
-                        Salaries under the lowest bracket are treated as the lowest; over the highest, as the highest.
-                    </p>
-                @else
-                    <p class="mt-2 text-sm font-medium text-red-600">No SSS brackets loaded — payroll would deduct nothing.</p>
-                @endif
-            </div>
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">SSS</p>
+                    <p class="text-xs font-medium text-[#778599]">{{ $sssCount }} salary brackets in force</p>
+                </div>
+                <p class="mt-1 text-sm font-medium text-[#778599]">
+                    The salary brackets are rebuilt from these figures when you save, so there is no thirty-row table to retype.
+                </p>
 
-            <div>
-                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">PhilHealth</p>
-                @if ($philhealth)
-                    <p class="mt-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
-                        {{ rtrim(rtrim(number_format((float) $philhealth->premium_rate * 100, 2), '0'), '.') }}% of monthly basic salary,
-                        held between ₱{{ number_format((float) $philhealth->salary_floor, 2) }} and ₱{{ number_format((float) $philhealth->salary_ceiling, 2) }}.
-                        The employee pays {{ rtrim(rtrim(number_format((float) $philhealth->employee_share_ratio * 100, 2), '0'), '.') }}% of the premium.
-                    </p>
-                @else
-                    <p class="mt-2 text-sm font-medium text-red-600">No PhilHealth rate loaded.</p>
-                @endif
-            </div>
+                <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div>
+                        <x-label>Employee pays</x-label>
+                        <div class="relative">
+                            <x-input wire:model="sss.employee_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                        </div>
+                        @error('sss.employee_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Employer pays</x-label>
+                        <div class="relative">
+                            <x-input wire:model="sss.employer_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                        </div>
+                        @error('sss.employer_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Lowest salary credit</x-label>
+                        <x-input wire:model="sss.msc_floor" type="number" step="1" min="1" />
+                        @error('sss.msc_floor') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Highest salary credit</x-label>
+                        <x-input wire:model="sss.msc_ceiling" type="number" step="1" min="1" />
+                        @error('sss.msc_ceiling') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                </div>
 
-            <div>
-                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Pag-IBIG</p>
-                <div class="mt-2 space-y-1">
-                    @forelse ($pagibigBands as $band)
-                        <p class="text-sm font-medium text-[#65758c] dark:text-neutral-300">
-                            ₱{{ number_format((float) $band->salary_from, 2) }}
-                            {{ $band->salary_to ? 'to ₱' . number_format((float) $band->salary_to, 2) : 'and above' }} —
-                            employee {{ rtrim(rtrim(number_format((float) $band->employee_rate * 100, 2), '0'), '.') }}%,
-                            employer {{ rtrim(rtrim(number_format((float) $band->employer_rate * 100, 2), '0'), '.') }}%,
-                            applied to at most ₱{{ number_format((float) $band->max_contribution_base, 2) }}.
-                        </p>
-                    @empty
-                        <p class="text-sm font-medium text-red-600">No Pag-IBIG rates loaded.</p>
-                    @endforelse
+                <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div>
+                        <x-label>Provident fund starts above</x-label>
+                        <x-input wire:model="sss.regular_ceiling" type="number" step="1" min="0" />
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Contributions on salary credit above this go to WISP and are remitted separately.</p>
+                        @error('sss.regular_ceiling') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Employer EC — lower</x-label>
+                        <x-input wire:model="sss.ec_low" type="number" step="0.01" min="0" />
+                        @error('sss.ec_low') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Employer EC — higher</x-label>
+                        <x-input wire:model="sss.ec_high" type="number" step="0.01" min="0" />
+                        @error('sss.ec_high') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>EC rises at</x-label>
+                        <x-input wire:model="sss.ec_threshold" type="number" step="1" min="0" />
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Employee Compensation is paid entirely by the employer.</p>
+                        @error('sss.ec_threshold') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
                 </div>
             </div>
 
-            <div>
+            <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
+                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">PhilHealth</p>
+                <p class="mt-1 text-sm font-medium text-[#778599]">
+                    The premium is a percentage of monthly basic salary, held between a floor and a ceiling, then split between the two sides.
+                </p>
+
+                <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div>
+                        <x-label>Premium rate</x-label>
+                        <div class="relative">
+                            <x-input wire:model="philhealth.premium_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                        </div>
+                        @error('philhealth.premium_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Employee's share of it</x-label>
+                        <div class="relative">
+                            <x-input wire:model="philhealth.employee_share_ratio" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                        </div>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">50 splits it evenly. The employer covers the rest.</p>
+                        @error('philhealth.employee_share_ratio') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Salary floor</x-label>
+                        <x-input wire:model="philhealth.salary_floor" type="number" step="1" min="0" />
+                        @error('philhealth.salary_floor') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Salary ceiling</x-label>
+                        <x-input wire:model="philhealth.salary_ceiling" type="number" step="1" min="0" />
+                        @error('philhealth.salary_ceiling') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
+                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Pag-IBIG</p>
+                <p class="mt-1 text-sm font-medium text-[#778599]">
+                    Two rate bands by salary. Both sides are held at the maximum by applying their rate to a capped base rather than to actual pay.
+                </p>
+
+                <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    <div>
+                        <x-label>Lower band up to</x-label>
+                        <x-input wire:model="pagibigLow.threshold" type="number" step="1" min="0" />
+                        @error('pagibigLow.threshold') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Employee — lower band</x-label>
+                        <div class="relative">
+                            <x-input wire:model="pagibigLow.employee_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                        </div>
+                        @error('pagibigLow.employee_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Employer — lower band</x-label>
+                        <div class="relative">
+                            <x-input wire:model="pagibigLow.employer_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                        </div>
+                        @error('pagibigLow.employer_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Employee — upper band</x-label>
+                        <div class="relative">
+                            <x-input wire:model="pagibigHigh.employee_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                        </div>
+                        @error('pagibigHigh.employee_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Employer — upper band</x-label>
+                        <div class="relative">
+                            <x-input wire:model="pagibigHigh.employer_rate" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                        </div>
+                        @error('pagibigHigh.employer_rate') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Rates apply to at most</x-label>
+                        <x-input wire:model="pagibigHigh.max_contribution_base" type="number" step="1" min="0" />
+                        @error('pagibigHigh.max_contribution_base') <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Withholding Tax — semi-monthly</p>
                 <div class="mt-2 overflow-x-auto">
                     <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
@@ -276,7 +511,21 @@ new #[Layout('layouts.app')] class extends Component
                         </tbody>
                     </table>
                 </div>
+                <p class="mt-2 text-xs font-medium text-[#778599]">
+                    Withholding tax is the employee's alone — there is no employer share to split.
+                </p>
             </div>
+        </div>
+
+        <div class="border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
+            <x-button wire:click="saveRates">
+                <span wire:loading.remove wire:target="saveRates">Save Rates</span>
+                <span wire:loading wire:target="saveRates">Rebuilding table...</span>
+            </x-button>
+            <p class="mt-2 text-xs font-medium text-[#778599]">
+                Saving rewrites the rates in force today. Payslips already computed keep the figures they were
+                finalised with.
+            </p>
         </div>
     </x-card>
 </div>
