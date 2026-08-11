@@ -208,8 +208,10 @@ new #[Layout('layouts.app')] class extends Component
             x-transition:leave="ease-in duration-100"
             x-transition:leave-start="opacity-100 scale-100 translate-y-0"
             x-transition:leave-end="opacity-0 scale-95 translate-y-2"
-            class="professional-panel relative z-10 w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl shadow-ink-950/20">
-            <div class="border-b border-ink-200 bg-ink-50 px-6 py-5 dark:border-white/10 dark:bg-white/5">
+            {{-- Capped to the viewport: the permission list is long, and the Save
+                 button has to stay reachable without scrolling the page behind. --}}
+            class="professional-panel relative z-10 flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl shadow-2xl shadow-ink-950/20">
+            <div class="shrink-0 border-b border-ink-200 bg-ink-50 px-6 py-5 dark:border-white/10 dark:bg-white/5">
                 <div class="flex items-start justify-between gap-4">
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">Position Setup</p>
@@ -223,7 +225,8 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </div>
 
-            <form wire:submit="save" class="space-y-5 p-6">
+            <form wire:submit="save" class="flex min-h-0 flex-1 flex-col">
+              <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
                 <div>
                     <x-label>Title</x-label>
                     <x-input wire:model="title" type="text" placeholder="e.g. Team Leader, QA Analyst, HR Specialist" />
@@ -274,14 +277,15 @@ new #[Layout('layouts.app')] class extends Component
                     </div>
                     @error('permissions.*') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
+              </div>
 
-                <div class="flex flex-col-reverse gap-3 border-t border-ink-100 pt-5 dark:border-white/10 sm:flex-row sm:justify-end">
+              <div class="flex shrink-0 flex-col-reverse gap-3 border-t border-ink-200 bg-ink-50 px-6 py-4 dark:border-white/10 dark:bg-white/5 sm:flex-row sm:justify-end">
                     <x-button type="button" variant="secondary" wire:click="closeForm" @click="formOpen = false" class="sm:min-w-28">Cancel</x-button>
                     <x-button type="submit" class="sm:min-w-36">
                         <span wire:loading.remove wire:target="save">{{ $editingId ? 'Update Position' : 'Add Position' }}</span>
                         <span wire:loading wire:target="save">Saving...</span>
                     </x-button>
-                </div>
+              </div>
             </form>
         </section>
     </div>
