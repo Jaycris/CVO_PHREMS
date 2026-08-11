@@ -34,9 +34,13 @@ class PayslipCalculator
      */
     public function calculate(Employee $employee, array $counters, string $cutoff): array
     {
-        $dailyRate = $employee->dailyRate();
-        $hourlyRate = $employee->hourlyRate();
-        $minuteRate = $employee->minuteRate();
+        // The days this employee was actually scheduled for this cutoff. Feeds
+        // the rates so a short month and a long month both settle exactly.
+        $workingDays = (int) ($counters['days_expected'] ?? 0);
+
+        $dailyRate = $employee->dailyRate($workingDays);
+        $hourlyRate = $employee->hourlyRate($workingDays);
+        $minuteRate = $employee->minuteRate($workingDays);
 
         // --- earnings -------------------------------------------------------
 

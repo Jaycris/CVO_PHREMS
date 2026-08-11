@@ -724,6 +724,9 @@ new #[Layout('layouts.app')] class extends Component
                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">{{ $group }}</p>
                     <div class="mt-3 space-y-4">
                         @foreach ($items as $setting)
+                            {{-- The fixed divisor is meaningless while the rate follows the calendar. --}}
+                            @continue($setting->key === 'daily_rate_divisor' && ($settings['daily_rate_basis'] ?? 'actual') === 'actual')
+
                             <div class="flex flex-wrap items-start justify-between gap-4" wire:key="set-{{ $setting->key }}">
                                 <div class="max-w-xl">
                                     <p class="text-sm font-medium text-[#65758c] dark:text-white">{{ $setting->label }}</p>
@@ -731,8 +734,13 @@ new #[Layout('layouts.app')] class extends Component
                                         <p class="mt-0.5 text-xs font-medium text-[#778599]">{{ $setting->description }}</p>
                                     @endif
                                 </div>
-                                <div class="w-40 shrink-0">
-                                    @if ($setting->type === 'boolean')
+                                <div class="{{ $setting->type === 'choice' ? 'w-64' : 'w-40' }} shrink-0">
+                                    @if ($setting->type === 'choice' && $setting->key === 'daily_rate_basis')
+                                        <x-select wire:model.live="settings.{{ $setting->key }}">
+                                            <option value="actual">Each month's real working days</option>
+                                            <option value="fixed">A fixed number every month</option>
+                                        </x-select>
+                                    @elseif ($setting->type === 'boolean')
                                         <x-select wire:model="settings.{{ $setting->key }}">
                                             <option value="1">Yes</option>
                                             <option value="0">No</option>

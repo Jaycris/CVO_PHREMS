@@ -159,6 +159,14 @@ class StatutorySeeder extends Seeder
     {
         $settings = [
             [
+                'key' => 'daily_rate_basis',
+                'value' => 'actual',
+                'label' => 'How a day\'s pay is worked out',
+                'description' => 'Actual working days recalculates each cutoff from the days scheduled, so being absent all period always deducts exactly that period\'s pay. Fixed uses the same number every month instead.',
+                'type' => 'choice',
+                'group' => 'Daily and Hourly Rates',
+            ],
+            [
                 'key' => 'daily_rate_divisor',
                 // 22, not 30: over 30, an employee absent every working day of a
                 // 22-day month still keeps about a quarter of their salary,

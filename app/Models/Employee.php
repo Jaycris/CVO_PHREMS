@@ -172,30 +172,49 @@ class Employee extends Model
      * A day's pay. Prices an absence directly, and lateness and overtime
      * through the hour and minute rates below.
      *
-     * The divisor is a company setting rather than a constant. Dividing by 30
-     * spreads the salary over every calendar day; dividing by 22 spreads it
-     * over working days only, which makes a day absent cost more and an hour
-     * of overtime pay more. Both are used in practice and the choice moves
-     * real money, so it belongs on the settings screen.
+     * $workingDays is how many days the employee was actually scheduled for the
+     * period being paid. Passing it makes the rate self-correcting: a cutoff
+     * with 10 scheduled days prices each at a tenth of the half-salary, so
+     * missing all ten deducts exactly the half-salary and lands on zero. That
+     * holds in a 20-day February and a 23-day July alike, which no fixed
+     * divisor manages — 22 leaves 1,818 behind in February and overdraws by
+     * 909 in July.
+     *
+     * The cost is that a day is worth more in a short month than a long one,
+     * and overtime moves with it. That is the company's decision, recorded as
+     * daily_rate_basis.
+     *
+     * Omitting it falls back to the fixed divisor, which is what screens
+     * showing a rate outside any payroll period want.
      */
-    public function dailyRate(): float
+    public function dailyRate(?int $workingDays = null): float
     {
-        $divisor = PayrollSetting::number('daily_rate_divisor', 30);
+        $salary = (float) $this->basic_salary;
 
-        return $divisor > 0 ? (float) $this->basic_salary / $divisor : 0.0;
+        if ($workingDays !== null
+            && $workingDays > 0
+            && PayrollSetting::get('daily_rate_basis', 'actual') === 'actual') {
+            // Each cutoff pays half the monthly salary, so the day rate is that
+            // half spread over the days this cutoff actually scheduled.
+            return ($salary / 2) / $workingDays;
+        }
+
+        $divisor = PayrollSetting::number('daily_rate_divisor', 22);
+
+        return $divisor > 0 ? $salary / $divisor : 0.0;
     }
 
     /** Hours in a working day — a 12-hour shift is not an 8-hour one. */
-    public function hourlyRate(): float
+    public function hourlyRate(?int $workingDays = null): float
     {
         $hours = PayrollSetting::number('hours_per_day', 8);
 
-        return $hours > 0 ? $this->dailyRate() / $hours : 0.0;
+        return $hours > 0 ? $this->dailyRate($workingDays) / $hours : 0.0;
     }
 
-    public function minuteRate(): float
+    public function minuteRate(?int $workingDays = null): float
     {
-        return $this->hourlyRate() / 60;
+        return $this->hourlyRate($workingDays) / 60;
     }
 
     /**
