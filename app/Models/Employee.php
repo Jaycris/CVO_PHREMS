@@ -168,14 +168,29 @@ class Employee extends Model
      * round() behave unexpectedly.
      */
 
+    /**
+     * A day's pay. Prices an absence directly, and lateness and overtime
+     * through the hour and minute rates below.
+     *
+     * The divisor is a company setting rather than a constant. Dividing by 30
+     * spreads the salary over every calendar day; dividing by 22 spreads it
+     * over working days only, which makes a day absent cost more and an hour
+     * of overtime pay more. Both are used in practice and the choice moves
+     * real money, so it belongs on the settings screen.
+     */
     public function dailyRate(): float
     {
-        return (float) $this->basic_salary / 30;
+        $divisor = PayrollSetting::number('daily_rate_divisor', 30);
+
+        return $divisor > 0 ? (float) $this->basic_salary / $divisor : 0.0;
     }
 
+    /** Hours in a working day — a 12-hour shift is not an 8-hour one. */
     public function hourlyRate(): float
     {
-        return $this->dailyRate() / 8;
+        $hours = PayrollSetting::number('hours_per_day', 8);
+
+        return $hours > 0 ? $this->dailyRate() / $hours : 0.0;
     }
 
     public function minuteRate(): float

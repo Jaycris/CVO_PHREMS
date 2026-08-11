@@ -159,6 +159,22 @@ class StatutorySeeder extends Seeder
     {
         $settings = [
             [
+                'key' => 'daily_rate_divisor',
+                'value' => '30',
+                'label' => 'Days per month used to price a day',
+                'description' => 'Divides the monthly salary to get a day\'s pay. 30 spreads it over every calendar day; 22 spreads it over working days only, which makes an absence cost more and overtime pay more. This drives absences, lateness and overtime.',
+                'type' => 'decimal',
+                'group' => 'Daily and Hourly Rates',
+            ],
+            [
+                'key' => 'hours_per_day',
+                'value' => '8',
+                'label' => 'Hours in a working day',
+                'description' => 'Divides a day\'s pay to get an hour\'s pay, which prices overtime and lateness.',
+                'type' => 'decimal',
+                'group' => 'Daily and Hourly Rates',
+            ],
+            [
                 'key' => 'night_diff_divisor',
                 'value' => '22',
                 'label' => 'Night differential divisor',
