@@ -54,6 +54,7 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" icon="home">Dashboard</x-nav-link>
                     <x-nav-link :href="route('my-profile')" :active="request()->routeIs('my-profile')" icon="user-circle">My Profile</x-nav-link>
                     <x-nav-link :href="route('attendance.punch')" :active="request()->routeIs('attendance.punch')" icon="clock">My Attendance</x-nav-link>
+                    <x-nav-link :href="route('my-payslips')" :active="request()->routeIs('my-payslips*')" icon="money">My Payslips</x-nav-link>
                     <x-nav-link :href="route('leave-requests.index')" :active="request()->routeIs('leave-requests.*')" icon="clipboard">Leave Requests</x-nav-link>
                     <x-nav-link :href="route('overtime.index')" :active="request()->routeIs('overtime.*')" icon="clock">Overtime</x-nav-link>
                     <x-nav-link :href="route('cash-advance-requests.index')" :active="request()->routeIs('cash-advance-requests.*')" icon="clipboard">Cash Advance Requests</x-nav-link>
@@ -115,6 +116,7 @@
                     $pageTitle = match (true) {
                         request()->routeIs('dashboard') => 'Dashboard',
                         request()->routeIs('my-profile') => 'My Profile',
+                        request()->routeIs('my-payslips*') => 'My Payslips',
                         request()->routeIs('attendance.punch') => 'My Attendance',
                         request()->routeIs('leave-requests.*') => 'Leave Requests',
                         request()->routeIs('overtime.*') => 'Overtime',

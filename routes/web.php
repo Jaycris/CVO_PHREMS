@@ -24,6 +24,11 @@ Route::middleware('auth')->group(function () {
     Route::livewire('/attendance', 'attendance.punch-clock')->name('attendance.punch');
     Route::livewire('/my-profile', 'my-profile')->name('my-profile');
 
+    // The page decides what belongs to the signer; there is no permission for
+    // "your own payslip".
+    Route::livewire('/my-payslips', 'my-payslips')->name('my-payslips');
+    Route::livewire('/my-payslips/{payslip}', 'my-payslips')->name('my-payslips.show');
+
     /*
      * Filing and approving. Everyone may file; the pages themselves decide what
      * else is shown, since a supervisor's queue comes from who reports to them

@@ -72,6 +72,17 @@ new #[Layout('layouts.app')] class extends Component
         });
     }
 
+    public function sendPayslips(\App\Services\Payroll\PayslipNotifier $notifier): void
+    {
+        $this->attempt(function () use ($notifier) {
+            $result = $notifier->sendForRun($this->run());
+
+            $this->statusMessage = $result['sent'] . ' payslip(s) sent.'
+                . ($result['skipped'] ? ' ' . $result['skipped'] . ' skipped — no login yet.' : '')
+                . ($result['failed'] ? ' ' . $result['failed'] . ' could not be delivered.' : '');
+        });
+    }
+
     public function unlock(PayrollService $service): void
     {
         $this->attempt(function () use ($service) {
@@ -96,6 +107,9 @@ new #[Layout('layouts.app')] class extends Component
             'logs' => $run->logs()->limit(15)->get(),
             'canFinalize' => $user->can('payroll.runs.finalize'),
             'canUnlock' => $user->can('payroll.runs.unlock'),
+            'unsentPayslips' => in_array($run->status, ['finalized', 'paid'], true)
+                ? $run->payslips()->whereNull('notified_at')->count()
+                : 0,
         ];
     }
 };
@@ -188,10 +202,24 @@ new #[Layout('layouts.app')] class extends Component
                 @endif
             @endif
 
-            @if ($run->payslips_count ?? $payslips->isNotEmpty())
+            @if ($unsentPayslips > 0)
+                <x-button variant="secondary" wire:click="sendPayslips"
+                          wire:confirm="Email {{ $unsentPayslips }} payslip(s) to employees?">
+                    <span wire:loading.remove wire:target="sendPayslips">Send Payslips ({{ $unsentPayslips }})</span>
+                    <span wire:loading wire:target="sendPayslips">Sending…</span>
+                </x-button>
+            @endif
+
+            @if ($payslips->isNotEmpty())
                 <x-button as="a" href="{{ route('payroll.export', $run) }}" variant="secondary">Download Register</x-button>
             @endif
         </div>
+
+        @if (in_array($run->status, ['finalized', 'paid'], true) && $unsentPayslips === 0 && $payslips->isNotEmpty())
+            <p class="mt-3 text-xs font-medium text-[#778599]">
+                All payslips have been sent. Sending again is not possible — each one goes out once.
+            </p>
+        @endif
 
         @if ($run->status === 'computed')
             <p class="mt-3 text-xs font-medium text-[#778599]">
