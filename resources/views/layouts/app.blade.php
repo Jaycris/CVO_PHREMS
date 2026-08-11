@@ -37,6 +37,7 @@
 
                 <nav class="mt-2 flex-1 space-y-1 overflow-y-auto px-2.5 pb-6">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" icon="home">Dashboard</x-nav-link>
+                    <x-nav-link :href="route('my-profile')" :active="request()->routeIs('my-profile')" icon="user-circle">My Profile</x-nav-link>
                     <x-nav-link :href="route('attendance.punch')" :active="request()->routeIs('attendance.punch')" icon="clock">My Attendance</x-nav-link>
                     <x-nav-link :href="route('leave-requests.index')" :active="request()->routeIs('leave-requests.*')" icon="clipboard">Leave Requests</x-nav-link>
                     <x-nav-link :href="route('overtime.index')" :active="request()->routeIs('overtime.*')" icon="clock">Overtime</x-nav-link>
@@ -66,6 +67,7 @@
                 @php
                     $pageTitle = match (true) {
                         request()->routeIs('dashboard') => 'Dashboard',
+                        request()->routeIs('my-profile') => 'My Profile',
                         request()->routeIs('attendance.punch') => 'My Attendance',
                         request()->routeIs('leave-requests.*') => 'Leave Requests',
                         request()->routeIs('overtime.*') => 'Overtime',

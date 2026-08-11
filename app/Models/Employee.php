@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class Employee extends Model
 {
@@ -45,6 +46,7 @@ class Employee extends Model
         'last_name',
         'birthdate',
         'gender',
+        'photo_path',
         'address',
         'personal_contact_number',
         'personal_email',
@@ -89,6 +91,30 @@ class Employee extends Model
     public function fullName(): string
     {
         return trim("{$this->first_name} " . ($this->middle_name ? "{$this->middle_name} " : '') . $this->last_name);
+    }
+
+    /** Public URL for the profile photo, or null when none has been uploaded. */
+    public function photoUrl(): ?string
+    {
+        if (! $this->photo_path) {
+            return null;
+        }
+
+        // Guards against a row pointing at a file that was removed on disk,
+        // which would otherwise render a broken image.
+        return Storage::disk('public')->exists($this->photo_path)
+            ? Storage::disk('public')->url($this->photo_path)
+            : null;
+    }
+
+    /** Up to two letters for the avatar fallback. */
+    public function initials(): string
+    {
+        $first = mb_substr(trim((string) $this->first_name), 0, 1);
+        $last = mb_substr(trim((string) $this->last_name), 0, 1);
+        $initials = mb_strtoupper($first . $last);
+
+        return $initials !== '' ? $initials : mb_strtoupper(mb_substr($this->employee_id ?? '?', 0, 2));
     }
 
     public function isRegular(): bool

@@ -3,14 +3,21 @@
 use App\Models\Employee;
 use App\Models\User;
 use App\Notifications\EmployeeOnboardingCompleted;
+use App\Support\StoresProfilePhoto;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 new #[Layout('layouts.guest')] class extends Component
 {
+    use StoresProfilePhoto, WithFileUploads;
+
     public Employee $employee;
 
     public string $step = 'form';
+
+    /** Temporary upload; written to disk only once the form is submitted. */
+    public $photo = null;
 
     public string $birthdate = '';
     public string $address = '';
@@ -47,6 +54,7 @@ new #[Layout('layouts.guest')] class extends Component
     protected function rules(): array
     {
         return [
+            'photo' => $this->photoRules(),
             'birthdate' => ['required', 'date', 'before:today'],
             'address' => ['required', 'string'],
             'personal_contact_number' => ['required', 'string', 'max:50'],
@@ -78,6 +86,11 @@ new #[Layout('layouts.guest')] class extends Component
         $data = $this->validate($this->rules());
 
         abort_if($this->employee->onboarding_completed_at, 403, 'This onboarding form has already been submitted.');
+
+        // The upload is written to disk only now, so abandoning the form at the
+        // review step leaves nothing behind.
+        $data['photo_path'] = $this->storeProfilePhoto($this->employee, $this->photo);
+        unset($data['photo']);
 
         $data['onboarding_completed_at'] = now();
         $this->employee->update($data);
@@ -242,6 +255,29 @@ new #[Layout('layouts.guest')] class extends Component
                                             />
                                         </div>
                                     @endforeach
+                                </div>
+                            </section>
+
+                            <section class="border-t border-ink-200 pt-7 dark:border-white/10">
+                                <h3 class="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-ink-500 dark:text-ink-400">Profile Photo</h3>
+
+                                <div class="flex flex-wrap items-center gap-5">
+                                    @if ($photo)
+                                        <img src="{{ $photo->temporaryUrl() }}" alt="Selected photo preview"
+                                             class="h-24 w-24 shrink-0 rounded-full object-cover ring-1 ring-black/5 dark:ring-white/10">
+                                    @else
+                                        <x-avatar :employee="$employee" size="xl" />
+                                    @endif
+
+                                    <div class="min-w-[14rem] flex-1">
+                                        <input type="file" wire:model="photo" accept="image/jpeg,image/png,image/webp"
+                                               class="block w-full text-sm text-ink-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-700 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-brand-800 dark:text-ink-300">
+                                        <p class="mt-2 text-xs font-medium text-ink-500 dark:text-ink-400">
+                                            Optional. JPG, PNG or WEBP, up to 4MB. You can change it later from your profile.
+                                        </p>
+                                        <p wire:loading wire:target="photo" class="mt-1 text-xs font-semibold text-brand-700 dark:text-brand-300">Uploading...</p>
+                                        @error('photo') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                                    </div>
                                 </div>
                             </section>
 

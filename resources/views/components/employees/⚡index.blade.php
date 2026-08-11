@@ -186,8 +186,13 @@ new #[Layout('layouts.app')] class extends Component
                             </td>
                             <td class="whitespace-nowrap px-4 py-4 text-sm font-bold text-ink-800 dark:text-ink-100">{{ $employee->employee_id }}</td>
                             <td class="min-w-56 px-4 py-4">
-                                <p class="text-sm font-bold text-brand-800 dark:text-brand-300">{{ $employee->fullName() ?: $employee->phone_name }}</p>
-                                <p class="mt-1 max-w-56 truncate text-xs font-medium text-ink-500 dark:text-ink-400">{{ $employee->company_email ?: 'No company email' }}</p>
+                                <div class="flex items-center gap-3">
+                                    <x-avatar :employee="$employee" size="md" />
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-bold text-brand-800 dark:text-brand-300">{{ $employee->fullName() ?: $employee->phone_name }}</p>
+                                        <p class="mt-1 max-w-56 truncate text-xs font-medium text-ink-500 dark:text-ink-400">{{ $employee->company_email ?: 'No company email' }}</p>
+                                    </div>
+                                </div>
                             </td>
                             <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-ink-700 dark:text-ink-200">{{ $employee->department?->name ?? '-' }}</td>
                             <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-ink-700 dark:text-ink-200">{{ $employee->position?->title ?? '-' }}</td>
