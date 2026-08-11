@@ -39,11 +39,12 @@ class CashAdvanceRequestStatusUpdated extends Notification implements ShouldQueu
 
         if ($request->status === 'approved') {
             $mail->line('Amount: PHP ' . number_format($request->effectiveAmount(), 2))
-                ->line('Deducted per cutoff: PHP ' . number_format($request->effectivePerCutoff(), 2));
+                ->line('Deduction: ' . $request->deductionPlanLabel()
+                    . ' (PHP ' . number_format($request->perCutoffAmount(), 2) . ' per cutoff)');
         }
 
-        if ($note = $request->ceo_note ?: $request->manager_note) {
-            $mail->line('Note: ' . $note);
+        if ($request->decision_note) {
+            $mail->line('Note: ' . $request->decision_note);
         }
 
         return $mail->action('View Request', url('/cash-advance-requests'));

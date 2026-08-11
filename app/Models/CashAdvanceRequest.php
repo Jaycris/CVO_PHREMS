@@ -10,20 +10,16 @@ class CashAdvanceRequest extends Model
     protected $fillable = [
         'employee_id',
         'amount_requested',
-        'per_cutoff_requested',
         'amount_approved',
-        'per_cutoff_approved',
+        'deduction_plan',
         'needed_by',
         'reason',
         'status',
-        'manager_id',
-        'manager_decision',
-        'manager_decided_at',
-        'manager_note',
-        'ceo_id',
-        'ceo_decision',
-        'ceo_decided_at',
-        'ceo_note',
+        'amended_by_user_id',
+        'amended_at',
+        'decided_by_user_id',
+        'decided_at',
+        'decision_note',
         'cash_advance_id',
     ];
 
@@ -31,12 +27,10 @@ class CashAdvanceRequest extends Model
     {
         return [
             'amount_requested' => 'decimal:2',
-            'per_cutoff_requested' => 'decimal:2',
             'amount_approved' => 'decimal:2',
-            'per_cutoff_approved' => 'decimal:2',
             'needed_by' => 'date',
-            'manager_decided_at' => 'datetime',
-            'ceo_decided_at' => 'datetime',
+            'amended_at' => 'datetime',
+            'decided_at' => 'datetime',
         ];
     }
 
@@ -45,14 +39,14 @@ class CashAdvanceRequest extends Model
         return $this->belongsTo(Employee::class);
     }
 
-    public function manager(): BelongsTo
+    public function amendedBy(): BelongsTo
     {
-        return $this->belongsTo(Employee::class, 'manager_id');
+        return $this->belongsTo(User::class, 'amended_by_user_id');
     }
 
-    public function ceo(): BelongsTo
+    public function decidedBy(): BelongsTo
     {
-        return $this->belongsTo(Employee::class, 'ceo_id');
+        return $this->belongsTo(User::class, 'decided_by_user_id');
     }
 
     public function cashAdvance(): BelongsTo
@@ -62,25 +56,56 @@ class CashAdvanceRequest extends Model
 
     public function isPending(): bool
     {
-        return in_array($this->status, ['pending_manager', 'pending_ceo'], true);
+        return $this->status === 'pending';
     }
 
-    /** The figures that will be released, falling back to what was asked for. */
+    /** What will actually be released, falling back to what was asked for. */
     public function effectiveAmount(): float
     {
         return (float) ($this->amount_approved ?? $this->amount_requested);
     }
 
-    public function effectivePerCutoff(): float
+    /** True once an approver has changed the amount away from the request. */
+    public function wasAmended(): bool
     {
-        return (float) ($this->per_cutoff_approved ?? $this->per_cutoff_requested);
+        return $this->amount_approved !== null
+            && (float) $this->amount_approved !== (float) $this->amount_requested;
+    }
+
+    /**
+     * Per-cutoff repayment, derived rather than stored so it can never disagree
+     * with the plan the employee chose.
+     */
+    public function perCutoffAmount(): float
+    {
+        return static::perCutoffFor($this->effectiveAmount(), $this->deduction_plan);
+    }
+
+    public static function perCutoffFor(float $amount, string $plan): float
+    {
+        return $plan === 'full_next_payroll'
+            ? round($amount, 2)
+            : round($amount / 2, 2);
+    }
+
+    /** @return array<string, string> */
+    public static function deductionPlans(): array
+    {
+        return [
+            'split_two_cutoffs' => 'Split over two cutoffs (15th and 30th)',
+            'full_next_payroll' => 'Full amount on the next payroll',
+        ];
+    }
+
+    public function deductionPlanLabel(): string
+    {
+        return static::deductionPlans()[$this->deduction_plan] ?? $this->deduction_plan;
     }
 
     public function statusLabel(): string
     {
         return match ($this->status) {
-            'pending_manager' => 'Pending Manager Approval',
-            'pending_ceo' => 'Pending CEO/COO Approval',
+            'pending' => 'Pending CEO/COO Approval',
             'approved' => 'Approved',
             'declined' => 'Declined',
             'cancelled' => 'Cancelled',

@@ -18,6 +18,7 @@ class CashAdvance extends Model
         'start_date',
         'status',
         'source',
+        'deduction_plan',
         'approved_by_user_id',
         'note',
     ];

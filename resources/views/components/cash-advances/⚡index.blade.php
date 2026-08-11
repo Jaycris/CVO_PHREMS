@@ -162,6 +162,7 @@ new #[Layout('layouts.app')] class extends Component
                                 {{ $advance->reference_no }}
                                 <span class="block text-xs font-medium text-[#778599]">
                                     {{ $advance->source === 'requested' ? 'Approved request' : 'Recorded by HR' }}
+                                    &middot; {{ $advance->deduction_plan === 'full_next_payroll' ? 'one cutoff' : 'two cutoffs' }}
                                 </span>
                             </td>
                             <td class="px-4 py-3 font-medium text-[#65758c] dark:text-white">
