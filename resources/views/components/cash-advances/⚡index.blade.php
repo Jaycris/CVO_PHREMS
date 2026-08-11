@@ -119,8 +119,11 @@ new #[Layout('layouts.app')] class extends Component
 <div class="space-y-6">
     <div class="flex items-center justify-between">
         <div>
-            <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Cash Advances</h1>
-            <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">Repaid automatically each cutoff until the balance clears.</p>
+            <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Advance Register</h1>
+            <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">
+                Money already released — repaid automatically each cutoff until the balance clears.
+                Approved <a href="{{ route('cash-advance-requests.index') }}" wire:navigate class="font-medium text-brand-700 underline-offset-2 hover:underline dark:text-brand-400">requests</a> land here on their own.
+            </p>
         </div>
         <x-button wire:click="create" pill>
             <x-icon name="plus" class="h-4 w-4" /> Record Advance
@@ -133,7 +136,7 @@ new #[Layout('layouts.app')] class extends Component
 
     <x-card :padding="false">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Advance Register</h2>
+            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">All Advances</h2>
             <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search employee or reference…"
                    class="w-64 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm text-[#65758c] shadow-sm placeholder:text-[#778599] focus:border-brand-500 focus:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-white">
         </div>
