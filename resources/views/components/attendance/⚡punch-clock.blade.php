@@ -124,15 +124,19 @@ new #[Layout('layouts.app')] class extends Component
         $resolver = new \App\Services\Payroll\PayrollPeriodResolver();
         $current = $resolver->containing($today);
 
-        $currentRun = \App\Models\PayrollRun::query()
-            ->whereDate('period_start', $current['start']->toDateString())
-            ->whereDate('period_end', $current['end']->toDateString())
-            ->first();
+        /*
+         * Both cards read this employee's own released payslips, not the run's
+         * status. HR finalizing locks the figures, but it is HR pressing Send
+         * that releases them — until then the employee is told nothing, because
+         * a number they see and HR then corrects is worse than no number.
+         */
+        $released = \App\Models\Payslip::with('payrollRun')
+            ->where('employee_id', $this->employee->id)
+            ->whereNotNull('notified_at')
+            ->get()
+            ->sortByDesc(fn ($p) => $p->payrollRun->pay_date);
 
-        $lastSettled = \App\Models\PayrollRun::whereIn('status', ['finalized', 'paid'])
-            ->whereHas('payslips', fn ($q) => $q->where('employee_id', $this->employee->id))
-            ->orderByDesc('pay_date')
-            ->first();
+        $currentReleased = $released->first(fn ($p) => $p->payrollRun->coversDate($current['start']));
 
         return [
             'day' => $day,
@@ -141,12 +145,8 @@ new #[Layout('layouts.app')] class extends Component
             'today' => $today,
             'schedule' => $scheduleAssignment?->workSchedule,
             'currentPeriod' => $current,
-            // Only a locked run counts as settled; a draft or a run still being
-            // computed can still move.
-            'currentSettled' => $currentRun && in_array($currentRun->status, ['finalized', 'paid'], true)
-                ? $currentRun
-                : null,
-            'lastSettled' => $lastSettled,
+            'currentSettled' => $currentReleased?->payrollRun,
+            'lastSettled' => $released->first()?->payrollRun,
         ];
     }
 };

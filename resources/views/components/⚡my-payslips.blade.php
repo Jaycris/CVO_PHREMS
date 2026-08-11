@@ -21,16 +21,20 @@ new #[Layout('layouts.app')] class extends Component
         }
     }
 
+    /**
+     * A payslip belongs to its employee, and only once HR has released it.
+     *
+     * The gate is notified_at rather than the run's status: finalizing locks
+     * the figures, but it is HR pressing Send that decides the employee may
+     * see them. Those are separate moments on purpose — HR finalizes, checks,
+     * and releases when ready.
+     */
     protected function authorizeOwn(Payslip $payslip): void
     {
         $employee = Auth::user()?->employee;
 
         abort_unless($employee && $payslip->employee_id === $employee->id, 403, 'That payslip is not yours.');
-        abort_unless(
-            in_array($payslip->payrollRun?->status, ['finalized', 'paid'], true),
-            403,
-            'That payslip is not ready yet.'
-        );
+        abort_unless($payslip->notified_at !== null, 403, 'That payslip has not been released yet.');
     }
 
     public function open(int $id): void
@@ -51,10 +55,9 @@ new #[Layout('layouts.app')] class extends Component
         $payslips = $employee
             ? Payslip::with('payrollRun')
                 ->where('employee_id', $employee->id)
-                // A payslip still being computed is not shown at all — the
-                // figure could still move, and an employee who sees two
-                // different numbers has no reason to trust either.
-                ->whereHas('payrollRun', fn ($q) => $q->whereIn('status', ['finalized', 'paid']))
+                // Nothing appears until HR releases it. A payslip seen before
+                // then could still be a figure HR was about to correct.
+                ->whereNotNull('notified_at')
                 ->get()
                 ->sortByDesc(fn (Payslip $p) => $p->payrollRun->pay_date)
                 ->values()
