@@ -77,6 +77,10 @@ Route::middleware('auth')->group(function () {
         Route::livewire('/cash-advances', 'cash-advances.index')->name('cash-advances.index');
     });
 
+    Route::middleware('can:payroll.settings.manage')->group(function () {
+        Route::livewire('/payroll/settings', 'payroll.settings')->name('payroll.settings');
+    });
+
     Route::middleware('can:reports.view')->group(function () {
         Route::livewire('/reports/attendance-summary', 'reports.attendance-summary')->name('reports.attendance-summary');
         Route::get('/reports/employees/export', EmployeeExportController::class)->name('reports.employees.export');

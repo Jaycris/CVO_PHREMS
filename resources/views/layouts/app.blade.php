@@ -90,6 +90,11 @@
                         @endcan
                     @endif
 
+                    @can('payroll.settings.manage')
+                        <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Payroll</p>
+                        <x-nav-link :href="route('payroll.settings')" :active="request()->routeIs('payroll.settings')" icon="money">Payroll Settings</x-nav-link>
+                    @endcan
+
                     @can('reports.view')
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Reports</p>
                         <x-nav-link :href="route('reports.attendance-summary')" :active="request()->routeIs('reports.attendance-summary')" icon="chart">Attendance Summary</x-nav-link>
@@ -117,6 +122,7 @@
                         request()->routeIs('attendance.dtr') => 'DTR',
                         request()->routeIs('leave-types.*') => 'Leave Types',
                         request()->routeIs('cash-advances.*') => 'Advance Register',
+                        request()->routeIs('payroll.settings') => 'Payroll Settings',
                         request()->routeIs('reports.attendance-summary') => 'Attendance Summary',
                         default => $title ?? '',
                     };
