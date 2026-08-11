@@ -1,0 +1,69 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| Permission catalogue
+|--------------------------------------------------------------------------
+|
+| Access has three separate layers, and it helps to keep them straight:
+|
+|   Role      Admin or Employee. The access tier — whether a user can hold
+|             administrative permissions at all. Nothing more.
+|
+|   Position  The job title (Human Resources, Accountant, Team Leader). Carries
+|             the default permission set for everyone doing that job, so a new
+|             HR hire is set up by assigning the position, not by ticking boxes.
+|
+|   Permission  What may actually be opened or done. Granted to a position, and
+|             optionally to one user on top of their position's set.
+|
+| An Employee-tier user has no administrative permissions no matter what
+| position they hold. Self-service pages — own profile, own attendance, filing
+| leave, overtime and cash advance — are open to every signed-in user and are
+| deliberately not listed here.
+|
+| Adding a permission here and reseeding makes it appear in the Positions and
+| Users screens automatically.
+|
+*/
+
+return [
+
+    'groups' => [
+
+        'Organization' => [
+            'org.departments.manage' => 'Departments — add, edit and remove',
+            'org.positions.manage' => 'Positions — add, edit and set what each position may access',
+        ],
+
+        'People' => [
+            'employees.manage' => 'Employees — view the directory, onboard and edit records',
+            'users.manage' => 'Users — create sign-in accounts and grant access',
+        ],
+
+        'Time & Attendance' => [
+            'schedules.manage' => 'Work Schedules — create and assign shifts',
+            'attendance.view_all' => 'DTR — view everyone\'s daily time records',
+            'overtime.view_all' => 'Overtime — view all filings across the company',
+        ],
+
+        'Leave' => [
+            'leave.types.manage' => 'Leave Types — configure entitlements and accrual',
+            'leave.view_all' => 'Leave — view all requests across the company',
+            'leave.approve' => 'Leave — give final approval',
+        ],
+
+        'Cash Advance' => [
+            'cash_advances.view_all' => 'Cash Advance — view all requests and be notified of each one',
+            'cash_advances.amend' => 'Cash Advance — change the amount and deduction plan on a pending request',
+            'cash_advances.approve' => 'Cash Advance — give final approval and release the money',
+            'cash_advances.manage' => 'Advance Register — record advances directly, pause and cancel them',
+        ],
+
+        'Reports' => [
+            'reports.view' => 'Reports — attendance summary and exports',
+        ],
+
+    ],
+
+];

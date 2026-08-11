@@ -23,7 +23,7 @@ new #[Layout('layouts.app')] class extends Component
             );
         }
 
-        if ($user->hasRole('CEO')) {
+        if ($user->can('leave.approve')) {
             $awaitingApproval = $awaitingApproval->merge(
                 LeaveRequest::with(['employee', 'leaveType'])->where('status', 'pending_ceo')->get()
             );
@@ -33,7 +33,7 @@ new #[Layout('layouts.app')] class extends Component
             ? LeaveRequest::with('leaveType')->where('employee_id', $employee->id)->latest()->get()
             : collect();
 
-        $allRequests = $user->hasAnyRole(['Admin', 'HR'])
+        $allRequests = $user->can('leave.view_all')
             ? LeaveRequest::with(['employee', 'leaveType'])->latest()->get()
             : collect();
 
@@ -41,11 +41,11 @@ new #[Layout('layouts.app')] class extends Component
             'awaitingApproval' => $awaitingApproval->unique('id'),
             'myRequests' => $myRequests,
             'allRequests' => $allRequests,
-            'totalVisibleRequests' => $user->hasAnyRole(['Admin', 'HR']) ? $allRequests->count() : $myRequests->count(),
-            'pendingVisibleRequests' => $user->hasAnyRole(['Admin', 'HR'])
+            'totalVisibleRequests' => $user->can('leave.view_all') ? $allRequests->count() : $myRequests->count(),
+            'pendingVisibleRequests' => $user->can('leave.view_all')
                 ? $allRequests->whereIn('status', ['pending_manager', 'pending_ceo'])->count()
                 : $myRequests->whereIn('status', ['pending_manager', 'pending_ceo'])->count(),
-            'approvedVisibleRequests' => $user->hasAnyRole(['Admin', 'HR'])
+            'approvedVisibleRequests' => $user->can('leave.view_all')
                 ? $allRequests->where('status', 'approved')->count()
                 : $myRequests->where('status', 'approved')->count(),
         ];
@@ -151,7 +151,7 @@ new #[Layout('layouts.app')] class extends Component
         </x-card>
     @endif
 
-    @if (auth()->user()->hasAnyRole(['Admin', 'HR']))
+    @if (auth()->user()->can('leave.view_all'))
         <x-card :padding="false" class="overflow-hidden rounded-2xl">
             <div class="border-b border-ink-200 px-6 py-5 dark:border-white/10">
                 <p class="muted-label">HR View</p>

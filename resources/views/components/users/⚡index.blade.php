@@ -16,11 +16,19 @@ new #[Layout('layouts.app')] class extends Component
 {
     public bool $showForm = false;
     public bool $showConfirmation = false;
+    public bool $showAccess = false;
     public string $confirmationMessage = '';
 
     public ?int $employeeId = null;
     public string $email = '';
     public string $role = 'Employee';
+
+    #[Locked]
+    public ?int $accessUserId = null;
+    public string $accessRole = 'Employee';
+    /** @var list<string> */
+    public array $accessGrants = [];
+    public bool $accessSuperAdmin = false;
 
     // System-assigned. Locked so a crafted request cannot swap it for a
     // chosen value — disabling the input only stops honest editing.
@@ -104,10 +112,74 @@ new #[Layout('layouts.app')] class extends Component
         $this->confirmationMessage = '';
     }
 
+    // -----------------------------------------------------------------
+    // Access
+    //
+    // A user's access is the sum of their tier, the position they hold and
+    // anything granted here on top. Position-derived permissions are shown
+    // but not editable from this screen — they belong to the job, and
+    // changing them here would silently change every other holder.
+    // -----------------------------------------------------------------
+
+    public function manageAccess(int $id): void
+    {
+        $user = User::with(['permissions', 'employee.position.permissions'])->findOrFail($id);
+
+        $this->accessUserId = $user->id;
+        $this->accessRole = $user->getRoleNames()->first() ?? 'Employee';
+        $this->accessGrants = $user->directPermissionNames()->all();
+        $this->accessSuperAdmin = (bool) $user->is_super_admin;
+        $this->resetValidation();
+        $this->showAccess = true;
+    }
+
+    public function saveAccess(): void
+    {
+        $data = $this->validate([
+            'accessRole' => ['required', 'in:Admin,Employee'],
+            'accessGrants' => ['array'],
+            'accessGrants.*' => ['string', 'exists:permissions,name'],
+        ]);
+
+        $user = User::findOrFail($this->accessUserId);
+
+        $superAdmin = $this->accessSuperAdmin && $data['accessRole'] === 'Admin';
+
+        // Without this the last administrator can be demoted through the UI and
+        // nobody is left able to restore anyone's access.
+        if ($user->is_super_admin && ! $superAdmin && User::where('is_super_admin', true)->count() <= 1) {
+            $this->addError('accessSuperAdmin', 'This is the only full administrator. Promote someone else first.');
+
+            return;
+        }
+
+        $user->syncRoles([$data['accessRole']]);
+        $user->syncPermissions($data['accessRole'] === 'Admin' ? ($data['accessGrants'] ?? []) : []);
+        $user->update(['is_super_admin' => $superAdmin]);
+
+        $this->closeAccess();
+        $this->confirmationMessage = "Access updated for {$user->name}.";
+        $this->showConfirmation = true;
+    }
+
+    public function closeAccess(): void
+    {
+        $this->reset(['accessUserId', 'accessRole', 'accessGrants', 'accessSuperAdmin']);
+        $this->resetValidation();
+        $this->showAccess = false;
+    }
+
     public function with(): array
     {
+        $accessUser = $this->accessUserId
+            ? User::with(['employee.position.permissions'])->find($this->accessUserId)
+            : null;
+
         return [
-            'users' => User::with('employee')
+            'accessUser' => $accessUser,
+            'positionGrants' => $accessUser?->positionPermissionNames() ?? collect(),
+            'permissionGroups' => config('permissions.groups'),
+            'users' => User::with(['employee.position', 'roles', 'permissions'])
                 ->when($this->search !== '', fn ($q) => $q->where(fn ($w) => $w
                     ->where('name', 'like', "%{$this->search}%")
                     ->orWhere('email', 'like', "%{$this->search}%")
@@ -118,6 +190,24 @@ new #[Layout('layouts.app')] class extends Component
             'availableEmployees' => Employee::whereNull('user_id')->orderBy('employee_id')->get(),
             'roles' => Role::orderBy('name')->pluck('name'),
         ];
+    }
+
+    /** Summary shown in the directory, so access is legible without opening each user. */
+    public function accessSummary(User $user): string
+    {
+        if (! $user->isAdminTier()) {
+            return 'Self-service only';
+        }
+
+        if ($user->is_super_admin) {
+            return 'Full administrator';
+        }
+
+        $count = $user->effectivePermissionNames()->count();
+
+        return $count === 0
+            ? 'Admin tier, nothing granted'
+            : $count . ' ' . Str::plural('permission', $count);
     }
 };
 ?>
@@ -147,8 +237,11 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">User ID</th>
                         <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Employee</th>
                         <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Email</th>
-                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Role</th>
+                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Position</th>
+                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Tier</th>
+                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Access</th>
                         <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Password</th>
+                        <th class="px-4 py-5"></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -160,15 +253,22 @@ new #[Layout('layouts.app')] class extends Component
                                 <span class="block text-xs font-medium text-[#778599]">{{ $user->employee?->employee_id ?? 'No employee linked' }}</span>
                             </td>
                             <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $user->email }}</td>
-                            <td class="px-4 py-3 text-sm"><x-badge color="brand">{{ $user->getRoleNames()->join(', ') ?: 'No role' }}</x-badge></td>
+                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $user->employee?->position?->title ?? '—' }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <x-badge :color="$user->isAdminTier() ? 'brand' : 'neutral'">{{ $user->getRoleNames()->join(', ') ?: 'No role' }}</x-badge>
+                            </td>
+                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $this->accessSummary($user) }}</td>
                             <td class="px-4 py-3 text-sm">
                                 <x-badge :color="$user->password_set_at ? 'green' : 'amber'">
                                     {{ $user->password_set_at ? 'Set' : 'Invite pending' }}
                                 </x-badge>
                             </td>
+                            <td class="px-4 py-3 text-right">
+                                <button wire:click="manageAccess({{ $user->id }})" class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Access</button>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-4 py-8 text-center text-sm font-medium text-[#778599]">No users yet.</td></tr>
+                        <tr><td colspan="8" class="px-4 py-8 text-center text-sm font-medium text-[#778599]">No users yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -211,12 +311,16 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
 
                 <div>
-                    <x-label>Role</x-label>
+                    <x-label>Access Tier</x-label>
                     <x-select wire:model="role">
                         @foreach ($roles as $roleName)
                             <option value="{{ $roleName }}">{{ $roleName }}</option>
                         @endforeach
                     </x-select>
+                    <p class="mt-1 text-xs font-medium text-[#778599]">
+                        <strong class="font-semibold">Employee</strong> — own profile, attendance, and filing leave, overtime and cash advance.
+                        <strong class="font-semibold">Admin</strong> — the above, plus whatever their position grants.
+                    </p>
                     @error('role') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
 
@@ -225,6 +329,99 @@ new #[Layout('layouts.app')] class extends Component
                     <x-button type="button" variant="secondary" wire:click="closeForm">Cancel</x-button>
                 </div>
             </form>
+        @endif
+    </x-modal>
+
+    <x-modal :show="$showAccess" onClose="closeAccess" maxWidth="lg">
+        @if ($accessUser)
+            <h2 class="mb-1 text-lg font-bold text-[#0f172a] dark:text-white">Access — {{ $accessUser->name }}</h2>
+            <p class="mb-5 text-sm font-medium text-[#778599]">
+                {{ $accessUser->employee?->position?->title ?? 'No position assigned' }}
+                @if ($accessUser->employee) &middot; {{ $accessUser->employee->employee_id }} @endif
+            </p>
+
+            <div class="space-y-5">
+                <div>
+                    <x-label>Access Tier</x-label>
+                    <x-select wire:model.live="accessRole">
+                        <option value="Employee">Employee — self-service only</option>
+                        <option value="Admin">Admin — may hold the permissions below</option>
+                    </x-select>
+                    @error('accessRole') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+
+                @if ($accessRole === 'Employee')
+                    <div class="rounded-lg bg-[#f8fafc] p-3 text-sm font-medium text-[#65758c] dark:bg-neutral-800/50 dark:text-neutral-300">
+                        On the Employee tier this account sees only its own profile, attendance and filings —
+                        even while holding the {{ $accessUser->employee?->position?->title ?? 'assigned' }} position.
+                    </div>
+                @else
+                    <div>
+                        <label class="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+                            <input type="checkbox" wire:model.live="accessSuperAdmin"
+                                   class="mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500">
+                            <span>
+                                Full administrator
+                                <span class="block text-xs font-normal">Passes every permission check, present and future. Keep this to one or two people.</span>
+                            </span>
+                        </label>
+                        @error('accessSuperAdmin') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+
+                    @unless ($accessSuperAdmin)
+                        @if ($positionGrants->isNotEmpty())
+                            <div class="rounded-lg bg-[#f8fafc] p-3 dark:bg-neutral-800/50">
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">
+                                    From the {{ $accessUser->employee?->position?->title }} position
+                                </p>
+                                <p class="mt-1 text-xs font-medium text-[#778599]">
+                                    Already held, and shared by everyone in this position. Change these on the Positions page.
+                                </p>
+                                <ul class="mt-2 space-y-1">
+                                    @foreach ($permissionGroups as $items)
+                                        @foreach ($items as $name => $label)
+                                            @if ($positionGrants->contains($name))
+                                                <li class="flex items-start gap-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
+                                                    <x-icon name="check" class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> {{ $label }}
+                                                </li>
+                                            @endif
+                                        @endforeach
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
+                        <div>
+                            <x-label>Grant on top of the position</x-label>
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Extra access for this person only. Does not affect anyone else in their position.</p>
+
+                            <div class="mt-3 space-y-5">
+                                @foreach ($permissionGroups as $group => $items)
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">{{ $group }}</p>
+                                        <div class="mt-2 space-y-1.5">
+                                            @foreach ($items as $name => $label)
+                                                @continue($positionGrants->contains($name))
+                                                <label class="flex items-start gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium text-[#65758c] transition hover:bg-[#f8fafc] dark:text-neutral-300 dark:hover:bg-white/5">
+                                                    <input type="checkbox" wire:model="accessGrants" value="{{ $name }}"
+                                                           class="mt-0.5 rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                                                    <span>{{ $label }}</span>
+                                                </label>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            @error('accessGrants.*') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                        </div>
+                    @endunless
+                @endif
+
+                <div class="flex gap-2 border-t border-neutral-100 pt-4 dark:border-neutral-800">
+                    <x-button wire:click="saveAccess">Save Access</x-button>
+                    <x-button variant="secondary" wire:click="closeAccess">Cancel</x-button>
+                </div>
+            </div>
         @endif
     </x-modal>
 

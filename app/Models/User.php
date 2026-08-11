@@ -7,13 +7,16 @@ use App\Support\GeneratesReferenceCode;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['user_code', 'name', 'email', 'password', 'password_set_at'])]
+#[Fillable(['user_code', 'name', 'email', 'password', 'password_set_at', 'is_super_admin'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -50,11 +53,76 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'password_set_at' => 'datetime',
+            'is_super_admin' => 'boolean',
         ];
     }
 
     public function employee(): HasOne
     {
         return $this->hasOne(Employee::class);
+    }
+
+    // -----------------------------------------------------------------
+    // Access
+    //
+    // Role is the tier, position carries the job's default permissions,
+    // and individual grants layer on top. Employee-tier users hold no
+    // administrative permission whatever position they sit in — that
+    // separation is the whole point of keeping the two apart.
+    // -----------------------------------------------------------------
+
+    public function isAdminTier(): bool
+    {
+        return $this->hasRole('Admin');
+    }
+
+    /** @return Collection<int, string> */
+    public function effectivePermissionNames(): Collection
+    {
+        if (! $this->isAdminTier()) {
+            return collect();
+        }
+
+        if ($this->is_super_admin) {
+            return Permission::query()->pluck('name');
+        }
+
+        return $this->permissions->pluck('name')
+            ->merge($this->positionPermissionNames())
+            ->unique()
+            ->sort()
+            ->values();
+    }
+
+    /** @return Collection<int, string> */
+    public function positionPermissionNames(): Collection
+    {
+        return $this->employee?->position?->permissions->pluck('name') ?? collect();
+    }
+
+    /** @return Collection<int, string> */
+    public function directPermissionNames(): Collection
+    {
+        return $this->permissions->pluck('name');
+    }
+
+    public function hasEffectivePermission(string $permission): bool
+    {
+        return $this->effectivePermissionNames()->contains($permission);
+    }
+
+    /**
+     * Users who genuinely hold a permission, counting the position they sit in
+     * and the super admin override. Spatie's own permission scope sees only
+     * direct grants, so notification recipients must be resolved through this.
+     */
+    public function scopeWithPermission(Builder $query, string $permission): Builder
+    {
+        return $query
+            ->whereHas('roles', fn (Builder $r) => $r->where('name', 'Admin'))
+            ->where(fn (Builder $q) => $q
+                ->where('is_super_admin', true)
+                ->orWhereHas('permissions', fn (Builder $p) => $p->where('name', $permission))
+                ->orWhereHas('employee.position.permissions', fn (Builder $p) => $p->where('name', $permission)));
     }
 }

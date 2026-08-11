@@ -96,7 +96,7 @@ new #[Layout('layouts.guest')] class extends Component
         $this->employee->update($data);
         $this->employee->refresh();
 
-        User::role(['HR', 'Admin'])->get()->each(function (User $hr): void {
+        User::withPermission('employees.manage')->get()->each(function (User $hr): void {
             try {
                 $hr->notify(new EmployeeOnboardingCompleted($this->employee));
             } catch (\Throwable $e) {

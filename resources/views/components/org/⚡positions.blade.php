@@ -13,13 +13,15 @@ new #[Layout('layouts.app')] class extends Component
     public string $title = '';
     public string $description = '';
     public bool $is_supervisory = false;
+    /** @var list<string> */
+    public array $permissions = [];
     public ?int $editingId = null;
     public string $search = '';
     public int $perPage = 10;
 
     public function create(): void
     {
-        $this->reset(['title', 'description', 'is_supervisory', 'editingId']);
+        $this->reset(['title', 'description', 'is_supervisory', 'permissions', 'editingId']);
         $this->showForm = true;
     }
 
@@ -29,22 +31,32 @@ new #[Layout('layouts.app')] class extends Component
             'title' => ['required', 'string', 'max:255', 'unique:positions,title,' . $this->editingId],
             'description' => ['nullable', 'string'],
             'is_supervisory' => ['boolean'],
+            'permissions' => ['array'],
+            'permissions.*' => ['string', 'exists:permissions,name'],
         ]);
 
-        Position::updateOrCreate(['id' => $this->editingId], $data);
+        $position = Position::updateOrCreate(
+            ['id' => $this->editingId],
+            collect($data)->except('permissions')->all()
+        );
 
-        $this->reset(['title', 'description', 'is_supervisory', 'editingId']);
+        // The link is live rather than copied, so revising a position updates
+        // everyone holding it on their next request.
+        $position->syncPermissions($data['permissions'] ?? []);
+
+        $this->reset(['title', 'description', 'is_supervisory', 'permissions', 'editingId']);
         $this->showForm = false;
         $this->resetPage();
     }
 
     public function edit(int $id): void
     {
-        $position = Position::findOrFail($id);
+        $position = Position::with('permissions')->findOrFail($id);
         $this->editingId = $position->id;
         $this->title = $position->title;
         $this->description = (string) $position->description;
         $this->is_supervisory = (bool) $position->is_supervisory;
+        $this->permissions = $position->permissions->pluck('name')->all();
         $this->showForm = true;
     }
 
@@ -57,7 +69,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function closeForm(): void
     {
-        $this->reset(['title', 'description', 'is_supervisory', 'editingId']);
+        $this->reset(['title', 'description', 'is_supervisory', 'permissions', 'editingId']);
         $this->showForm = false;
     }
 
@@ -75,8 +87,9 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         return [
-            'positions' => Position::search($this->search)->orderBy('title')->paginate($this->perPage),
+            'positions' => Position::with('permissions')->search($this->search)->orderBy('title')->paginate($this->perPage),
             'totalPositions' => Position::count(),
+            'permissionGroups' => config('permissions.groups'),
         ];
     }
 };
@@ -148,6 +161,7 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Title</th>
                         <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Description</th>
                         <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Supervisory</th>
+                        <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Access</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
@@ -162,9 +176,16 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="px-5 py-4 text-sm">
                                 <x-badge :color="$position->is_supervisory ? 'brand' : 'neutral'">{{ $position->is_supervisory ? 'Yes' : 'No' }}</x-badge>
                             </td>
+                            <td class="px-5 py-4 text-sm">
+                                @if ($position->permissions->isEmpty())
+                                    <span class="text-sm font-medium text-ink-500">Self-service only</span>
+                                @else
+                                    <x-badge color="brand">{{ $position->permissions->count() }} {{ Str::plural('permission', $position->permissions->count()) }}</x-badge>
+                                @endif
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="px-5 py-10 text-center text-sm font-medium text-ink-500">No positions yet.</td></tr>
+                        <tr><td colspan="5" class="px-5 py-10 text-center text-sm font-medium text-ink-500">No positions yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -226,6 +247,32 @@ new #[Layout('layouts.app')] class extends Component
                             </span>
                         </span>
                     </label>
+                </div>
+
+                <div class="border-t border-ink-100 pt-5 dark:border-white/10">
+                    <x-label>What this position may access</x-label>
+                    <p class="mt-1 text-xs font-medium text-[#778599]">
+                        Everyone holding this position gets these, provided their user account is on the
+                        Admin tier. An Employee-tier account stays on self-service no matter what is ticked here.
+                    </p>
+
+                    <div class="mt-4 space-y-5">
+                        @foreach ($permissionGroups as $group => $items)
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-ink-300">{{ $group }}</p>
+                                <div class="mt-2 space-y-1.5">
+                                    @foreach ($items as $name => $label)
+                                        <label class="flex items-start gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium text-[#65758c] transition hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-white/5">
+                                            <input type="checkbox" wire:model="permissions" value="{{ $name }}"
+                                                   class="mt-0.5 rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                                            <span>{{ $label }}</span>
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                    @error('permissions.*') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
 
                 <div class="flex flex-col-reverse gap-3 border-t border-ink-100 pt-5 dark:border-white/10 sm:flex-row sm:justify-end">

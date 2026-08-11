@@ -11,7 +11,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         $user = Auth::user();
         $employee = $user->employee;
-        $isAdminHr = $user->hasAnyRole(['Admin', 'HR']);
+        $isAdminHr = $user->can('overtime.view_all');
 
         $awaitingApproval = collect();
 

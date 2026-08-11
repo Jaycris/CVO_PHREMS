@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\User;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +21,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        /*
+         * Routes, menus and pages all gate on can(), so this single hook is
+         * what makes position-derived and individually granted permissions
+         * work everywhere at once.
+         *
+         * Returning null rather than false when the permission is absent lets
+         * any policy or gate defined elsewhere still have its say.
+         */
+        Gate::before(function (User $user, string $ability) {
+            return $user->hasEffectivePermission($ability) ?: null;
+        });
     }
 }

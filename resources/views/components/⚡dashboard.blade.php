@@ -15,7 +15,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         $user = Auth::user();
         $employee = $user->employee;
-        $isAdminHr = $user->hasAnyRole(['Admin', 'HR']);
+        $isAdminHr = $user->can('employees.manage');
 
         $today = now('Asia/Manila');
         $hour = $today->hour;

@@ -63,10 +63,11 @@ class OvertimeService
         abort_unless($request->isPending(), 403, 'This overtime request has already been decided.');
 
         // Whoever the request routes to may decide it. When an employee has no
-        // manager on file it falls to HR/Admin rather than becoming undecidable.
+        // manager on file it falls to whoever oversees overtime company-wide,
+        // rather than becoming undecidable.
         $isAssignedManager = $request->manager_id !== null && $request->manager_id === $actor->id;
         $isFallbackApprover = $request->manager_id === null
-            && $actor->user?->hasAnyRole(['HR', 'Admin', 'CEO']);
+            && (bool) $actor->user?->can('overtime.view_all');
 
         abort_unless($isAssignedManager || $isFallbackApprover, 403, 'You cannot decide this overtime request.');
 
@@ -166,8 +167,9 @@ class OvertimeService
             return;
         }
 
-        // No manager on file — fall back to HR/Admin so it does not sit unseen.
-        User::role(['HR', 'Admin'])->get()->each(function (User $user) use ($request) {
+        // No manager on file — fall back to whoever oversees overtime so it
+        // does not sit unseen.
+        User::withPermission('overtime.view_all')->get()->each(function (User $user) use ($request) {
             try {
                 $user->notify(new OvertimeRequestActionNeeded($request));
             } catch (\Throwable $e) {

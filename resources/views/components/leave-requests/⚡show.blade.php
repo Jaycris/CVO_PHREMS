@@ -28,7 +28,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function canActAsCeo(): bool
     {
-        return $this->leaveRequest->status === 'pending_ceo' && Auth::user()->hasRole('CEO');
+        return $this->leaveRequest->status === 'pending_ceo' && Auth::user()->can('leave.approve');
     }
 
     public function managerApprove(LeaveService $leaveService): void

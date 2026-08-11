@@ -15,43 +15,69 @@ Route::middleware('signed')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    /*
+     * Self-service. Open to every signed-in user, whatever their access tier —
+     * these pages only ever show the signer's own record.
+     */
     Route::livewire('/dashboard', 'dashboard')->name('dashboard');
-
     Route::livewire('/attendance', 'attendance.punch-clock')->name('attendance.punch');
-
     Route::livewire('/my-profile', 'my-profile')->name('my-profile');
 
+    /*
+     * Filing and approving. Everyone may file; the pages themselves decide what
+     * else is shown, since a supervisor's queue comes from who reports to them
+     * rather than from a permission.
+     */
     Route::livewire('/overtime', 'overtime.index')->name('overtime.index');
     Route::livewire('/overtime/create', 'overtime.create')->name('overtime.create');
     Route::livewire('/overtime/{overtimeRequest}', 'overtime.show')->name('overtime.show');
 
-    // Open to everyone: the page shows an employee their own requests and an
-    // approver their queue, so access is decided by the data, not the route.
     Route::livewire('/cash-advance-requests', 'cash-advance-requests.index')->name('cash-advance-requests.index');
 
     Route::livewire('/leave-requests', 'leave-requests.index')->name('leave-requests.index');
     Route::livewire('/leave-requests/create', 'leave-requests.create')->name('leave-requests.create');
     Route::livewire('/leave-requests/{leaveRequest}', 'leave-requests.show')->name('leave-requests.show');
 
-    Route::middleware('role:Admin|HR')->group(function () {
+    /*
+     * Administration. Each page is gated on the permission it needs, resolved
+     * from the user's position and any individual grants.
+     */
+    Route::middleware('can:org.departments.manage')->group(function () {
         Route::livewire('/org/departments', 'org.departments')->name('org.departments');
+    });
+
+    Route::middleware('can:org.positions.manage')->group(function () {
         Route::livewire('/org/positions', 'org.positions')->name('org.positions');
+    });
 
+    Route::middleware('can:users.manage')->group(function () {
         Route::livewire('/users', 'users.index')->name('users.index');
+    });
 
+    Route::middleware('can:employees.manage')->group(function () {
         Route::livewire('/employees', 'employees.index')->name('employees.index');
         Route::livewire('/employees/create', 'employees.create')->name('employees.create');
         Route::livewire('/employees/{employee}/edit', 'employees.edit')->name('employees.edit');
         Route::livewire('/employees/{employee}', 'employees.show')->name('employees.show');
+    });
 
+    Route::middleware('can:schedules.manage')->group(function () {
         Route::livewire('/schedules', 'schedules.index')->name('schedules.index');
+    });
 
+    Route::middleware('can:attendance.view_all')->group(function () {
         Route::livewire('/dtr', 'attendance.dtr')->name('attendance.dtr');
+    });
 
+    Route::middleware('can:leave.types.manage')->group(function () {
         Route::livewire('/leave-types', 'leave-types.index')->name('leave-types.index');
+    });
 
+    Route::middleware('can:cash_advances.manage')->group(function () {
         Route::livewire('/cash-advances', 'cash-advances.index')->name('cash-advances.index');
+    });
 
+    Route::middleware('can:reports.view')->group(function () {
         Route::livewire('/reports/attendance-summary', 'reports.attendance-summary')->name('reports.attendance-summary');
         Route::get('/reports/employees/export', EmployeeExportController::class)->name('reports.employees.export');
     });

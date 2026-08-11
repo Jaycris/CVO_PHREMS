@@ -31,6 +31,21 @@
                     <img src="{{ asset('images/logo.png') }}" alt="CreatiVision" class="h-auto w-full object-contain">
                 </div>
 
+                @php
+                    /*
+                     * The menu is the permission set made visible: a section
+                     * appears only when the signer holds something inside it, so
+                     * an employee sees a short self-service menu and an HR user
+                     * sees HR work — without either being told what they cannot
+                     * reach.
+                     */
+                    $showOrganization = auth()->user()->canAny(['org.departments.manage', 'org.positions.manage']);
+                    $showPeople = auth()->user()->canAny([
+                        'employees.manage', 'users.manage', 'schedules.manage',
+                        'attendance.view_all', 'leave.types.manage', 'cash_advances.manage',
+                    ]);
+                @endphp
+
                 <div class="px-4 pt-4">
                     <p class="px-1 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-400">Human Resources</p>
                 </div>
@@ -43,22 +58,42 @@
                     <x-nav-link :href="route('overtime.index')" :active="request()->routeIs('overtime.*')" icon="clock">Overtime</x-nav-link>
                     <x-nav-link :href="route('cash-advance-requests.index')" :active="request()->routeIs('cash-advance-requests.*')" icon="clipboard">Cash Advance Requests</x-nav-link>
 
-                    @hasanyrole('Admin|HR')
+                    @if ($showOrganization)
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Organization</p>
-                        <x-nav-link :href="route('org.departments')" :active="request()->routeIs('org.departments')" icon="building">Departments</x-nav-link>
-                        <x-nav-link :href="route('org.positions')" :active="request()->routeIs('org.positions')" icon="tag">Positions</x-nav-link>
+                        @can('org.departments.manage')
+                            <x-nav-link :href="route('org.departments')" :active="request()->routeIs('org.departments')" icon="building">Departments</x-nav-link>
+                        @endcan
+                        @can('org.positions.manage')
+                            <x-nav-link :href="route('org.positions')" :active="request()->routeIs('org.positions')" icon="tag">Positions</x-nav-link>
+                        @endcan
+                    @endif
 
+                    @if ($showPeople)
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">People</p>
-                        <x-nav-link :href="route('employees.index')" :active="request()->routeIs('employees.*')" icon="people-group">Employees</x-nav-link>
-                        <x-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')" icon="users">Users</x-nav-link>
-                        <x-nav-link :href="route('schedules.index')" :active="request()->routeIs('schedules.*')" icon="calendar">Work Schedules</x-nav-link>
-                        <x-nav-link :href="route('attendance.dtr')" :active="request()->routeIs('attendance.dtr')" icon="clock">DTR</x-nav-link>
-                        <x-nav-link :href="route('leave-types.index')" :active="request()->routeIs('leave-types.*')" icon="document">Leave Types</x-nav-link>
-                        <x-nav-link :href="route('cash-advances.index')" :active="request()->routeIs('cash-advances.*')" icon="money">Advance Register</x-nav-link>
+                        @can('employees.manage')
+                            <x-nav-link :href="route('employees.index')" :active="request()->routeIs('employees.*')" icon="people-group">Employees</x-nav-link>
+                        @endcan
+                        @can('users.manage')
+                            <x-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')" icon="users">Users</x-nav-link>
+                        @endcan
+                        @can('schedules.manage')
+                            <x-nav-link :href="route('schedules.index')" :active="request()->routeIs('schedules.*')" icon="calendar">Work Schedules</x-nav-link>
+                        @endcan
+                        @can('attendance.view_all')
+                            <x-nav-link :href="route('attendance.dtr')" :active="request()->routeIs('attendance.dtr')" icon="clock">DTR</x-nav-link>
+                        @endcan
+                        @can('leave.types.manage')
+                            <x-nav-link :href="route('leave-types.index')" :active="request()->routeIs('leave-types.*')" icon="document">Leave Types</x-nav-link>
+                        @endcan
+                        @can('cash_advances.manage')
+                            <x-nav-link :href="route('cash-advances.index')" :active="request()->routeIs('cash-advances.*')" icon="money">Advance Register</x-nav-link>
+                        @endcan
+                    @endif
 
+                    @can('reports.view')
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Reports</p>
                         <x-nav-link :href="route('reports.attendance-summary')" :active="request()->routeIs('reports.attendance-summary')" icon="chart">Attendance Summary</x-nav-link>
-                    @endhasanyrole
+                    @endcan
                 </nav>
             </aside>
 

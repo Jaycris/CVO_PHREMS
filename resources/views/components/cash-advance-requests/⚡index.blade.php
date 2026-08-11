@@ -133,7 +133,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         $user = Auth::user();
         $service = app(CashAdvanceService::class);
-        $isBackOffice = $user->hasAnyRole(['Admin', 'HR', 'Accountant']);
+        $isBackOffice = $user->can('cash_advances.view_all');
 
         return [
             // Anyone who can approve or amend needs to see what is waiting.

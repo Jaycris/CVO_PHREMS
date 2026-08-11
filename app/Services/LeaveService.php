@@ -119,14 +119,14 @@ class LeaveService
 
     protected function notifyHr(LeaveRequest $leaveRequest, string $summary): void
     {
-        User::role('HR')->get()->each(
+        User::withPermission('leave.view_all')->get()->each(
             fn (User $hrUser) => $hrUser->notify(new LeaveRequestStatusUpdated($leaveRequest, $summary))
         );
     }
 
     protected function firstCeoUser(): ?User
     {
-        return User::role('CEO')->first();
+        return User::withPermission('leave.approve')->first();
     }
 
     protected function employeeName(Employee $employee): string

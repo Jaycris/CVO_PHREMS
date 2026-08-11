@@ -344,14 +344,13 @@ class CashAdvanceService
 
     public function canApprove(User $actor): bool
     {
-        // Admin is included so the system is never left with no one able to
-        // decide — a company this size may not have a CEO account day one.
-        return $actor->hasAnyRole(['CEO', 'Admin']);
+        return $actor->can('cash_advances.approve');
     }
 
     public function canAmend(User $actor): bool
     {
-        return $actor->hasAnyRole(['CEO', 'HR', 'Accountant', 'Admin']);
+        // Approving implies being able to set the figure being approved.
+        return $actor->can('cash_advances.amend') || $this->canApprove($actor);
     }
 
     protected function guardDeductionPlan(string $plan): void
@@ -363,29 +362,10 @@ class CashAdvanceService
         );
     }
 
-    /**
-     * Roles copied on every request. Resolving recipients by role rather than by
-     * a stored list is what lets a future hire — an accountant, say — start
-     * receiving these the moment the role is assigned on the Users page.
-     *
-     * @return list<string>
-     */
-    protected function backOfficeRoles(): array
-    {
-        return ['HR', 'Accountant', 'Admin'];
-    }
-
     protected function notifyApprovers(CashAdvanceRequest $request): void
     {
-        $approvers = User::role('CEO')->get();
-
-        // No CEO account on file — fall back to Admin so the request does not
-        // sit unseen and undecidable.
-        if ($approvers->isEmpty()) {
-            $approvers = User::role('Admin')->get();
-        }
-
-        $approvers->each(fn (User $user) => $this->safeNotify($user, new CashAdvanceRequestActionNeeded($request)));
+        User::withPermission('cash_advances.approve')->get()
+            ->each(fn (User $user) => $this->safeNotify($user, new CashAdvanceRequestActionNeeded($request)));
     }
 
     protected function notifyRequestor(CashAdvanceRequest $request): void
@@ -441,9 +421,15 @@ class CashAdvanceService
         $this->notifyBackOffice($request, $message, "Cash advance request {$request->status} - {$name}");
     }
 
+    /**
+     * Whoever oversees cash advances gets a copy. Resolving recipients by
+     * permission rather than by a stored list is what lets a future hire — an
+     * accountant, say — start receiving these the moment their position is
+     * granted the permission. No code change needed.
+     */
     protected function notifyBackOffice(CashAdvanceRequest $request, string $message, string $subject): void
     {
-        User::role($this->backOfficeRoles())->get()
+        User::withPermission('cash_advances.view_all')->get()
             ->each(fn (User $user) => $this->safeNotify(
                 $user,
                 new CashAdvanceRequestStatusUpdated($request, $message, $subject)

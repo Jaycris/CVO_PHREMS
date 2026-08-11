@@ -22,7 +22,7 @@ new #[Layout('layouts.app')] class extends Component
         $employee = $user->employee;
 
         // Visible to the requester, the assigned approver, and HR/Admin only.
-        $canView = $user->hasAnyRole(['Admin', 'HR'])
+        $canView = $user->can('overtime.view_all')
             || ($employee && $employee->id === $overtimeRequest->employee_id)
             || ($employee && $employee->id === $overtimeRequest->manager_id);
 
@@ -44,7 +44,7 @@ new #[Layout('layouts.app')] class extends Component
             return true;
         }
 
-        return $this->overtimeRequest->manager_id === null && $user->hasAnyRole(['HR', 'Admin', 'CEO']);
+        return $this->overtimeRequest->manager_id === null && $user->can('overtime.view_all');
     }
 
     public function canCancel(): bool
