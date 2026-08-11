@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\EmployeeExportController;
+use App\Http\Controllers\PayrollRegisterExportController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
@@ -79,6 +80,13 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('can:payroll.settings.manage')->group(function () {
         Route::livewire('/payroll/settings', 'payroll.settings')->name('payroll.settings');
+    });
+
+    Route::middleware('can:payroll.runs.manage')->group(function () {
+        Route::livewire('/payroll', 'payroll.index')->name('payroll.index');
+        Route::livewire('/payroll/runs/{run}', 'payroll.show')->name('payroll.show');
+        Route::livewire('/payroll/payslips/{payslip}', 'payroll.payslip')->name('payroll.payslip');
+        Route::get('/payroll/runs/{run}/export', PayrollRegisterExportController::class)->name('payroll.export');
     });
 
     Route::middleware('can:reports.view')->group(function () {
