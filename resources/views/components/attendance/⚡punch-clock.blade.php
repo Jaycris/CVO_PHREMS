@@ -125,18 +125,23 @@ new #[Layout('layouts.app')] class extends Component
         $current = $resolver->containing($today);
 
         /*
-         * Both cards read this employee's own released payslips, not the run's
-         * status. HR finalizing locks the figures, but it is HR pressing Send
-         * that releases them — until then the employee is told nothing, because
-         * a number they see and HR then corrects is worse than no number.
+         * Two different questions, answered from two different things.
+         *
+         * "Has payroll been done?" comes from the run's status — the employee
+         * should know their pay has been worked out as soon as HR locks it.
+         *
+         * "Can I see my payslip?" comes from notified_at, which HR sets by
+         * pressing Send. Between locking and releasing, the employee is told
+         * payroll is processed but not yet shown the figures.
          */
-        $released = \App\Models\Payslip::with('payrollRun')
+        $mine = \App\Models\Payslip::with('payrollRun')
             ->where('employee_id', $this->employee->id)
-            ->whereNotNull('notified_at')
+            ->whereHas('payrollRun', fn ($q) => $q->whereIn('status', ['finalized', 'paid']))
             ->get()
             ->sortByDesc(fn ($p) => $p->payrollRun->pay_date);
 
-        $currentReleased = $released->first(fn ($p) => $p->payrollRun->coversDate($current['start']));
+        $currentSlip = $mine->first(fn ($p) => $p->payrollRun->coversDate($current['start']));
+        $lastSlip = $mine->first();
 
         return [
             'day' => $day,
@@ -145,8 +150,10 @@ new #[Layout('layouts.app')] class extends Component
             'today' => $today,
             'schedule' => $scheduleAssignment?->workSchedule,
             'currentPeriod' => $current,
-            'currentSettled' => $currentReleased?->payrollRun,
-            'lastSettled' => $released->first()?->payrollRun,
+            'currentSettled' => $currentSlip?->payrollRun,
+            'lastSettled' => $lastSlip?->payrollRun,
+            // Only then does the link to it appear.
+            'lastReleased' => $lastSlip?->notified_at !== null,
         ];
     }
 };
@@ -195,10 +202,16 @@ new #[Layout('layouts.app')] class extends Component
                     <x-badge :color="$lastSettled->status === 'paid' ? 'green' : 'brand'">
                         {{ $lastSettled->status === 'paid' ? 'Paid' : 'Processed' }}
                     </x-badge>
-                    <a href="{{ route('my-payslips') }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View payslip</a>
+                    @if ($lastReleased)
+                        <a href="{{ route('my-payslips') }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View payslip</a>
+                    @endif
                 </div>
                 <p class="mt-1.5 text-xs font-medium text-[#778599]">
-                    Tell HR within three working days if anything looks wrong.
+                    @if ($lastReleased)
+                        Tell HR within three working days if anything looks wrong.
+                    @else
+                        Your payslip will be sent shortly.
+                    @endif
                 </p>
             @else
                 <p class="mt-1 text-sm font-medium text-[#778599]">None yet.</p>

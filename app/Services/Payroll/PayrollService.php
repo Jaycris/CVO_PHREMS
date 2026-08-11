@@ -253,15 +253,31 @@ class PayrollService
         abort_unless($actor->can('payroll.runs.unlock'), 403, 'You cannot reopen a finalized payroll run.');
         abort_if(trim($reason) === '', 422, 'A reason is required to reopen a finalized run.');
 
-        $run->update([
-            'status' => 'computed',
-            'finalized_at' => null,
-            'finalized_by_user_id' => null,
-        ]);
+        return DB::transaction(function () use ($run, $reason) {
+            // Withdraw whatever was already released. Without this an employee
+            // keeps seeing a payslip that is now being changed, and re-sending
+            // after the correction would skip them as already notified — so
+            // they would never see the corrected figure at all.
+            $withdrawn = $run->payslips()->whereNotNull('notified_at')->count();
 
-        $run->log('unfinalized', $reason);
+            if ($withdrawn > 0) {
+                $run->payslips()->newQuery()
+                    ->where('payroll_run_id', $run->id)
+                    ->update(['notified_at' => null]);
+            }
 
-        return $run->fresh();
+            $run->update([
+                'status' => 'computed',
+                'finalized_at' => null,
+                'finalized_by_user_id' => null,
+            ]);
+
+            $run->log('unfinalized', $reason . ($withdrawn > 0
+                ? ' — ' . $withdrawn . ' released payslip(s) withdrawn from employees'
+                : ''));
+
+            return $run->fresh();
+        });
     }
 
     public function markPaid(PayrollRun $run, ?User $actor = null): PayrollRun
