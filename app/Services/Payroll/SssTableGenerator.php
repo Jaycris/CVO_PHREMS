@@ -23,7 +23,12 @@ class SssTableGenerator
     /**
      * Replaces the whole table for an effective date.
      *
-     * @param  array{employee_rate: float, employer_rate: float, msc_floor: float, msc_ceiling: float, regular_ceiling: float, ec_low: float, ec_high: float, ec_threshold: float}  $p
+     * ec_enabled off writes zero into every bracket's work injury premium
+     * rather than remembering the amounts elsewhere, so nothing downstream has
+     * to know the difference between "switched off" and "costs nothing". The
+     * amounts are typed back in when it is switched on again.
+     *
+     * @param  array{employee_rate: float, employer_rate: float, msc_floor: float, msc_ceiling: float, regular_ceiling: float, ec_low: float, ec_high: float, ec_threshold: float, ec_enabled?: bool}  $p
      */
     public function generate(array $p, Carbon|string $effectiveFrom): int
     {
@@ -33,7 +38,9 @@ class SssTableGenerator
         abort_if($p['msc_ceiling'] < $p['msc_floor'], 422, 'The highest salary credit cannot be below the lowest.');
         abort_if($p['employee_rate'] < 0 || $p['employer_rate'] < 0, 422, 'Contribution rates cannot be negative.');
 
-        return DB::transaction(function () use ($p, $from) {
+        $ecEnabled = $p['ec_enabled'] ?? true;
+
+        return DB::transaction(function () use ($p, $from, $ecEnabled) {
             // Regenerating replaces this effective period outright. Earlier
             // periods are untouched, so historical payslips still reproduce.
             SssBracket::whereDate('effective_from', $from)->delete();
@@ -57,7 +64,9 @@ class SssTableGenerator
                     'employer_share' => round($regular * $p['employer_rate'], 2),
                     'employee_mpf_share' => round($provident * $p['employee_rate'], 2),
                     'employer_mpf_share' => round($provident * $p['employer_rate'], 2),
-                    'employee_compensation' => $msc >= $p['ec_threshold'] ? $p['ec_high'] : $p['ec_low'],
+                    'employee_compensation' => $ecEnabled
+                        ? ($msc >= $p['ec_threshold'] ? $p['ec_high'] : $p['ec_low'])
+                        : 0,
                     'effective_from' => $from,
                     'effective_to' => null,
                     'created_at' => now(),
@@ -99,15 +108,22 @@ class SssTableGenerator
             ->sortBy('monthly_salary_credit')
             ->first();
 
+        // Zero across every bracket means it is switched off. The amounts to
+        // restore are not recoverable from the table then, so the defaults
+        // stand in until someone types the current ones.
+        $ecEnabled = $brackets->contains(fn (SssBracket $b) => (float) $b->employee_compensation > 0);
+        $defaults = $this->defaults();
+
         return [
             'employee_rate' => $floor > 0 ? round((float) $first->employee_share / $floor, 4) : 0,
             'employer_rate' => $floor > 0 ? round((float) $first->employer_share / $floor, 4) : 0,
             'msc_floor' => $floor,
             'msc_ceiling' => (float) $last->monthly_salary_credit,
             'regular_ceiling' => $regularCeiling,
-            'ec_low' => (float) $first->employee_compensation,
-            'ec_high' => (float) ($withEc?->employee_compensation ?? $first->employee_compensation),
-            'ec_threshold' => (float) ($withEc?->monthly_salary_credit ?? 0),
+            'ec_enabled' => $ecEnabled,
+            'ec_low' => $ecEnabled ? (float) $first->employee_compensation : $defaults['ec_low'],
+            'ec_high' => $ecEnabled ? (float) ($withEc?->employee_compensation ?? $first->employee_compensation) : $defaults['ec_high'],
+            'ec_threshold' => $ecEnabled ? (float) ($withEc?->monthly_salary_credit ?? 0) : $defaults['ec_threshold'],
         ];
     }
 
@@ -120,6 +136,7 @@ class SssTableGenerator
             'msc_floor' => 5000,
             'msc_ceiling' => 35000,
             'regular_ceiling' => 20000,
+            'ec_enabled' => true,
             'ec_low' => 10,
             'ec_high' => 30,
             'ec_threshold' => 15000,

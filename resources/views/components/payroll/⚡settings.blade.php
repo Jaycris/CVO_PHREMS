@@ -114,6 +114,7 @@ new #[Layout('layouts.app')] class extends Component
             'sss_msc_floor' => (string) $p['msc_floor'],
             'sss_msc_ceiling' => (string) $p['msc_ceiling'],
             'sss_regular_ceiling' => (string) $p['regular_ceiling'],
+            'sss_ec_enabled' => $p['ec_enabled'] ? '1' : '0',
             'sss_ec_low' => (string) $p['ec_low'],
             'sss_ec_high' => (string) $p['ec_high'],
             'sss_ec_threshold' => (string) $p['ec_threshold'],
@@ -166,6 +167,7 @@ new #[Layout('layouts.app')] class extends Component
             'msc_floor' => (float) $a['sss_msc_floor'],
             'msc_ceiling' => (float) $a['sss_msc_ceiling'],
             'regular_ceiling' => (float) $a['sss_regular_ceiling'],
+            'ec_enabled' => filter_var($a['sss_ec_enabled'] ?? '1', FILTER_VALIDATE_BOOLEAN),
             'ec_low' => (float) $a['sss_ec_low'],
             'ec_high' => (float) $a['sss_ec_high'],
             'ec_threshold' => (float) $a['sss_ec_threshold'],
@@ -351,9 +353,10 @@ new #[Layout('layouts.app')] class extends Component
             'Lowest salary credit' => $money($p['msc_floor']),
             'Highest salary credit' => $money($p['msc_ceiling']),
             'Savings fund starts above' => $money($p['regular_ceiling']),
-            'Work injury insurance — lower' => $money($p['ec_low']),
-            'Work injury insurance — higher' => $money($p['ec_high']),
-            'Work injury insurance rises at' => $money($p['ec_threshold']),
+            'Work injury insurance — charged' => $p['ec_enabled'] ? 'Yes' : 'No',
+            'Work injury insurance — lower' => $p['ec_enabled'] ? $money($p['ec_low']) : '—',
+            'Work injury insurance — higher' => $p['ec_enabled'] ? $money($p['ec_high']) : '—',
+            'Work injury insurance rises at' => $p['ec_enabled'] ? $money($p['ec_threshold']) : '—',
         ];
 
         if ($ph = PhilhealthRate::effectiveOn(now())->orderByDesc('effective_from')->first()) {
@@ -510,7 +513,7 @@ new #[Layout('layouts.app')] class extends Component
             <x-button wire:click="saveRates">Save Rates</x-button>
             <button type="button" wire:click="$toggle('showAdvanced')"
                     class="ml-3 text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">
-                {{ $showAdvanced ? 'Hide' : 'Edit' }} the withholding tax table
+                {{ $showAdvanced ? 'Hide' : 'Show' }} the government's own settings
             </button>
         </div>
     </x-card>
@@ -526,6 +529,128 @@ new #[Layout('layouts.app')] class extends Component
         the right trade for a screen the company can actually use.
     --}}
     @if ($showAdvanced)
+        <x-card :padding="false">
+            <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">The government's other settings</h2>
+                <p class="mt-1 text-sm font-medium text-[#778599]">
+                    These are set by the agencies, not by the company. They change only when a new circular comes out,
+                    so most of the time there is nothing to do here.
+                </p>
+            </div>
+
+            <div class="space-y-7 p-5">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">SSS</p>
+                    <p class="mt-1 text-sm font-medium text-[#778599]">
+                        SSS does not charge on the exact salary. It rounds to the nearest ₱500 first, and charges on
+                        that. The lowest and highest below are the limits of that rounded figure.
+                    </p>
+                    <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                        <div>
+                            <x-label>Lowest salary charged</x-label>
+                            <x-input wire:model="advanced.sss_msc_floor" type="number" step="1" min="1" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Earn less, still charged this.</p>
+                        </div>
+                        <div>
+                            <x-label>Highest salary charged</x-label>
+                            <x-input wire:model="advanced.sss_msc_ceiling" type="number" step="1" min="1" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Earn more, still charged this.</p>
+                            @error('advanced.sss_msc_ceiling') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <x-label>Savings fund starts above</x-label>
+                            <x-input wire:model="advanced.sss_regular_ceiling" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Anything above goes to a separate SSS savings fund.</p>
+                        </div>
+                    </div>
+
+                    <label class="mt-4 flex cursor-pointer items-center gap-2.5">
+                        <input type="checkbox" wire:model.live="advanced.sss_ec_enabled" value="1"
+                               class="h-4 w-4 rounded border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
+                        <span class="text-sm font-bold text-[#0f172a] dark:text-white">Charge work injury insurance</span>
+                        <x-badge :color="filter_var($advanced['sss_ec_enabled'] ?? '1', FILTER_VALIDATE_BOOLEAN) ? 'green' : 'neutral'">
+                            {{ filter_var($advanced['sss_ec_enabled'] ?? '1', FILTER_VALIDATE_BOOLEAN) ? 'Charged' : 'Off' }}
+                        </x-badge>
+                    </label>
+
+                    @if (filter_var($advanced['sss_ec_enabled'] ?? '1', FILTER_VALIDATE_BOOLEAN))
+                        <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                            <div>
+                                <x-label>Amount per month</x-label>
+                                <x-input wire:model="advanced.sss_ec_low" type="number" step="0.01" min="0" />
+                            </div>
+                            <div>
+                                <x-label>… rises to</x-label>
+                                <x-input wire:model="advanced.sss_ec_high" type="number" step="0.01" min="0" />
+                            </div>
+                            <div>
+                                <x-label>… once salary reaches</x-label>
+                                <x-input wire:model="advanced.sss_ec_threshold" type="number" step="1" min="0" />
+                            </div>
+                        </div>
+                    @endif
+                    <p class="mt-2 text-xs font-medium text-[#778599]">
+                        Work injury insurance covers treatment if someone is hurt or falls ill because of their job. SSS
+                        requires it as part of the employer's contribution — it is separate from the company HMO, and it
+                        never comes off anyone's payslip.
+                    </p>
+                </div>
+
+                <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">PhilHealth</p>
+                    <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                        <div>
+                            <x-label>Lowest salary charged</x-label>
+                            <x-input wire:model="advanced.ph_floor" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Earn less, still charged this.</p>
+                        </div>
+                        <div>
+                            <x-label>Highest salary charged</x-label>
+                            <x-input wire:model="advanced.ph_ceiling" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Earn more, still charged this.</p>
+                            @error('advanced.ph_ceiling') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-neutral-100 pt-6 dark:border-neutral-800">
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Pag-IBIG</p>
+                    <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                        <div>
+                            <x-label>Rates apply to at most</x-label>
+                            <x-input wire:model="advanced.pi_cap" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">This is what caps it. 2% of ₱5,000 is ₱100, whatever the salary.</p>
+                        </div>
+                        <div>
+                            <x-label>Reduced rate applies up to</x-label>
+                            <x-input wire:model="advanced.pi_threshold" type="number" step="1" min="0" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Only affects very low salaries.</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                        <div>
+                            <x-label>Employee pays below that</x-label>
+                            <div class="relative">
+                                <x-input wire:model="advanced.pi_low_ee" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <x-label>Employer pays below that</x-label>
+                            <div class="relative">
+                                <x-input wire:model="advanced.pi_low_er" type="number" step="0.01" min="0" max="100" class="pr-8" />
+                                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#778599]">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
+                <x-button wire:click="saveRates">Save</x-button>
+            </div>
+        </x-card>
+
 
         <x-card :padding="false">
             <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
