@@ -46,6 +46,8 @@ Route::middleware('auth')->group(function () {
 
         Route::livewire('/leave-types', 'leave-types.index')->name('leave-types.index');
 
+        Route::livewire('/cash-advances', 'cash-advances.index')->name('cash-advances.index');
+
         Route::livewire('/reports/attendance-summary', 'reports.attendance-summary')->name('reports.attendance-summary');
         Route::get('/reports/employees/export', EmployeeExportController::class)->name('reports.employees.export');
     });

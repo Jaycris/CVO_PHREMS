@@ -64,6 +64,21 @@ class CashAdvance extends Model
         return $this->remainingBalance() <= 0.0;
     }
 
+    public function statusLabel(): string
+    {
+        return str($this->status)->replace('_', ' ')->title()->toString();
+    }
+
+    public function statusColor(): string
+    {
+        return match ($this->status) {
+            'paid' => 'green',
+            'on_hold' => 'amber',
+            'cancelled' => 'red',
+            default => 'blue',
+        };
+    }
+
     /**
      * What to deduct on one payslip: the agreed instalment, but never more than
      * the outstanding balance, and never more than the payslip can bear.

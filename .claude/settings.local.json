@@ -14,7 +14,13 @@
       "Bash(npm run *)",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8010/login --max-time 5)",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8010/login --max-time 8)",
-      "Bash(D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe -r ' *)"
+      "Bash(D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe -r ' *)",
+      "Bash(\"D:/laragon/bin/php/php-8.3.30-Ju-Win32-vs16-x64/php.exe\" --version)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8010/cash-advances --max-time 10)",
+      "Bash(rm -rf storage/framework/views/livewire)",
+      "Bash(rm -f storage/framework/views/*.php)",
+      "Bash(\"D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe\" -l \"C:/Users/JAY-AR~1/AppData/Local/Temp/ca_class.php\")",
+      "Bash(\"D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe\" -l storage/framework/views/47aff9bddf2b6b9c29c3a4436fa721bc.php)"
     ]
   }
 }
