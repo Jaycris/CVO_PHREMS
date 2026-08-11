@@ -160,9 +160,13 @@ class StatutorySeeder extends Seeder
         $settings = [
             [
                 'key' => 'daily_rate_divisor',
-                'value' => '30',
+                // 22, not 30: over 30, an employee absent every working day of a
+                // 22-day month still keeps about a quarter of their salary,
+                // because 22 x (salary/30) is less than the salary. Over 22 the
+                // same absences deduct the whole month and land on zero.
+                'value' => '22',
                 'label' => 'Days per month used to price a day',
-                'description' => 'Divides the monthly salary to get a day\'s pay. 30 spreads it over every calendar day; 22 spreads it over working days only, which makes an absence cost more and overtime pay more. This drives absences, lateness and overtime.',
+                'description' => 'Divides the monthly salary to get a day\'s pay. 22 counts working days only, so being absent every working day deducts exactly one month. 30 counts every calendar day instead, which leaves part of the salary behind. This drives absences, lateness and overtime.',
                 'type' => 'decimal',
                 'group' => 'Daily and Hourly Rates',
             ],
