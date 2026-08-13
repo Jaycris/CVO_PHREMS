@@ -2,9 +2,13 @@
 
 namespace App\Providers;
 
+use App\Models\AttendanceBreak;
+use App\Models\AttendanceDay;
+use App\Models\PayrollRun;
 use App\Models\Payslip;
 use App\Models\PayslipAdjustment;
 use App\Models\User;
+use App\Observers\AttendanceLockObserver;
 use App\Observers\PayslipAdjustmentObserver;
 use App\Observers\PayslipObserver;
 use Illuminate\Support\Facades\Gate;
@@ -41,5 +45,18 @@ class AppServiceProvider extends ServiceProvider
         // it arrives through.
         Payslip::observe(PayslipObserver::class);
         PayslipAdjustment::observe(PayslipAdjustmentObserver::class);
+
+        // Same for the attendance underneath a settled payslip — editing it
+        // afterwards makes the record and the payslip disagree with nothing to
+        // say which is right.
+        AttendanceDay::observe(AttendanceLockObserver::class);
+
+        AttendanceBreak::saving(fn (AttendanceBreak $b) => (new AttendanceLockObserver)->savingBreak($b));
+        AttendanceBreak::deleting(fn (AttendanceBreak $b) => (new AttendanceLockObserver)->deletingBreak($b));
+
+        // A run changing status changes what is locked, so the observer's
+        // per-request memo has to be dropped.
+        PayrollRun::saved(fn () => AttendanceLockObserver::flush());
+        PayrollRun::deleted(fn () => AttendanceLockObserver::flush());
     }
 }
