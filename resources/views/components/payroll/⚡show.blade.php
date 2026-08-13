@@ -100,8 +100,11 @@ new #[Layout('layouts.app')] class extends Component
 
         return [
             'run' => $run,
-            // Preflight is only meaningful while the figures can still change.
-            'preflight' => $run->isMutable() ? $service->preflight($run) : null,
+            // Preflight checks attendance against a cutoff, which a 13th month
+            // run has none of — it is worked out from finalized payslips.
+            'preflight' => $run->isMutable() && $run->run_type === 'regular'
+                ? $service->preflight($run)
+                : null,
             'payslips' => $run->payslips()->with('employee')->get()
                 ->sortBy(fn ($p) => $p->employeeName())->values(),
             'logs' => $run->logs()->limit(15)->get(),
@@ -121,8 +124,12 @@ new #[Layout('layouts.app')] class extends Component
             <a href="{{ route('payroll.index') }}" wire:navigate class="text-sm font-medium text-[#778599] hover:text-[#65758c]">&larr; All payroll runs</a>
             <h1 class="mt-1 text-xl font-bold text-[#0f172a] dark:text-white">{{ $run->periodLabel() }}</h1>
             <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">
-                {{ $run->cutoff === 'first' ? 'First cutoff' : 'Second cutoff' }} &middot;
-                paid {{ $run->pay_date->format('M j, Y') }}
+                @if ($run->run_type === 'thirteenth_month')
+                    13th month pay
+                @else
+                    {{ $run->cutoff === 'first' ? 'First cutoff' : 'Second cutoff' }}
+                @endif
+                &middot; paid {{ $run->pay_date->format('M j, Y') }}
             </p>
         </div>
         <x-badge :color="$run->statusColor()">{{ $run->statusLabel() }}</x-badge>
@@ -182,11 +189,13 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="mt-5 flex flex-wrap gap-2 border-t border-neutral-100 pt-5 dark:border-neutral-800">
-            @if ($run->isMutable())
+            @if ($run->isMutable() && $run->run_type === 'regular')
                 <x-button wire:click="compute" :disabled="(bool) ($preflight['blocking'] ?? false)">
                     <span wire:loading.remove wire:target="compute">{{ $run->status === 'draft' ? 'Compute Payroll' : 'Recompute' }}</span>
                     <span wire:loading wire:target="compute">Computing…</span>
                 </x-button>
+            @elseif ($run->isMutable())
+                <x-button as="a" href="{{ route('payroll.thirteenth-month') }}" wire:navigate variant="secondary">Back to 13th Month</x-button>
             @endif
 
             @if ($run->status === 'computed' && $canFinalize)

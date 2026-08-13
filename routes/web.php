@@ -89,6 +89,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('can:payroll.runs.manage')->group(function () {
         Route::livewire('/payroll', 'payroll.index')->name('payroll.index');
+        Route::livewire('/payroll/13th-month', 'payroll.thirteenth-month')->name('payroll.thirteenth-month');
         Route::livewire('/payroll/runs/{run}', 'payroll.show')->name('payroll.show');
         Route::livewire('/payroll/payslips/{payslip}', 'payroll.payslip')->name('payroll.payslip');
         Route::get('/payroll/runs/{run}/export', PayrollRegisterExportController::class)->name('payroll.export');
