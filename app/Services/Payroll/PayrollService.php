@@ -4,6 +4,8 @@ namespace App\Services\Payroll;
 
 use App\Models\CashAdvance;
 use App\Models\Employee;
+use App\Models\LeaveConversionPayout;
+use App\Models\LeaveCreditTransaction;
 use App\Models\OvertimeRequest;
 use App\Models\PayrollRun;
 use App\Models\PayrollSetting;
@@ -187,6 +189,7 @@ class PayrollService
                     $this->payslipAttributes($employee, $counters[$employee->id] ?? [], $figures)
                 );
 
+                $this->applyLeaveConversion($payslip, $employee, $run);
                 $this->applyCashAdvance($payslip, $advances->get($employee->id), $run, $clampNegative);
                 $this->applyAdjustments($payslip);
                 $this->writeLines($payslip);
@@ -326,6 +329,10 @@ class PayrollService
         OvertimeRequest::where('consumed_payroll_run_id', $run->id)
             ->update(['consumed_payroll_run_id' => null]);
 
+        // Releases the leave conversions this run paid, so recomputing prices
+        // them again rather than skipping them as already settled.
+        LeaveConversionPayout::where('payroll_run_id', $run->id)->delete();
+
         PayslipLine::whereIn('payslip_id', $run->payslips()->select('id'))->delete();
     }
 
@@ -399,9 +406,72 @@ class PayrollService
 
             // Reset each compute; filled in by the steps that follow.
             'cash_advance_deduction' => 0,
+            'leave_conversion_pay' => 0,
             'adjustments_earning' => 0,
             'adjustments_deduction' => 0,
         ];
+    }
+
+    /**
+     * Pays out unused leave the annual reset converted to cash.
+     *
+     * The reset takes the days off the balance; this prices them and puts them
+     * on a payslip. A day is priced over working days rather than calendar days
+     * — a leave day is a working day, and using the calendar divisor would
+     * underpay the conversion by roughly a quarter.
+     *
+     * The unique key on the transaction is what makes this safe: a recompute or
+     * a reopened run cannot pay the same days twice, and unlike most payroll
+     * mistakes that one is invisible because the balance is already zero.
+     */
+    protected function applyLeaveConversion(Payslip $payslip, Employee $employee, PayrollRun $run): void
+    {
+        $pending = LeaveCreditTransaction::where('employee_id', $employee->id)
+            ->unpaidConversions()
+            ->get();
+
+        if ($pending->isEmpty()) {
+            return;
+        }
+
+        $divisor = PayrollSetting::number('leave_conversion_daily_divisor', 22);
+
+        if ($divisor <= 0) {
+            return;
+        }
+
+        $rate = (float) $employee->basic_salary / $divisor;
+        $total = 0.0;
+
+        foreach ($pending as $transaction) {
+            // The reset writes the days as a negative, being a deduction from
+            // the balance; what is owed is the size of it.
+            $days = abs((float) $transaction->amount);
+            $amount = round($rate * $days, 2);
+
+            LeaveConversionPayout::create([
+                'leave_credit_transaction_id' => $transaction->id,
+                'employee_id' => $employee->id,
+                'payroll_run_id' => $run->id,
+                'payslip_id' => $payslip->id,
+                'days' => $days,
+                'daily_rate' => round($rate, 4),
+                'amount' => $amount,
+                'for_year' => $transaction->transaction_date->year,
+            ]);
+
+            $total += $amount;
+        }
+
+        if ($total <= 0) {
+            return;
+        }
+
+        $payslip->update([
+            'leave_conversion_pay' => round($total, 2),
+            'gross_pay' => round((float) $payslip->gross_pay + $total, 2),
+            'net_pay' => round((float) $payslip->net_pay + $total, 2),
+        ]);
     }
 
     /**
@@ -491,6 +561,8 @@ class PayrollService
         $add('earning', 'Overtime', (float) $payslip->overtime_pay, $payslip->overtime_hours . ' hour(s)');
         $add('earning', 'Night differential', (float) $payslip->night_differential_pay, $payslip->night_diff_days . ' day(s)');
         $add('earning', 'Allowance', (float) $payslip->allowance);
+        $add('earning', 'Unused leave paid out', (float) $payslip->leave_conversion_pay,
+            $payslip->leaveConversionDays() . ' day(s)');
 
         foreach ($payslip->adjustments()->where('type', 'earning')->get() as $adjustment) {
             $add('earning', $adjustment->label, (float) $adjustment->amount, $adjustment->note);

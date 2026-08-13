@@ -42,6 +42,19 @@ class Payslip extends Model
         return $this->hasMany(PayslipAdjustment::class);
     }
 
+    public function leaveConversionPayouts(): HasMany
+    {
+        return $this->hasMany(LeaveConversionPayout::class);
+    }
+
+    /** Days behind the conversion figure, for the payslip line. */
+    public function leaveConversionDays(): string
+    {
+        $days = (float) $this->leaveConversionPayouts()->sum('days');
+
+        return rtrim(rtrim(number_format($days, 2), '0'), '.');
+    }
+
     public function cashAdvancePayments(): HasMany
     {
         return $this->hasMany(CashAdvancePayment::class);
