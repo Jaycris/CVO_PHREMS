@@ -25,7 +25,18 @@ new class extends Component
 };
 ?>
 
-<div class="relative" x-data @click.outside="
+{{--
+    Polled rather than pushed.
+
+    True real-time would mean websockets, and those need a process running
+    permanently — which shared hosting does not give us. Polling every fifteen
+    seconds gets a notification in front of someone while they are still looking
+    at the screen, which is what "real-time" has to mean here.
+
+    .visible stops the polling while the tab is in the background, so a browser
+    left open all day costs nothing.
+--}}
+<div class="relative" wire:poll.15s.visible x-data @click.outside="
         $refs.bellPanel.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
         $refs.bellPanel.classList.remove('opacity-100', 'scale-100');
     ">
