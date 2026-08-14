@@ -58,6 +58,7 @@
                     <x-nav-link :href="route('leave-requests.index')" :active="request()->routeIs('leave-requests.*')" icon="clipboard">Leave Requests</x-nav-link>
                     <x-nav-link :href="route('overtime.index')" :active="request()->routeIs('overtime.*')" icon="clock">Overtime</x-nav-link>
                     <x-nav-link :href="route('cash-advance-requests.index')" :active="request()->routeIs('cash-advance-requests.*')" icon="clipboard">Cash Advance Requests</x-nav-link>
+                    <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.*')" icon="money">Reimbursements</x-nav-link>
 
                     @if ($showOrganization)
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Organization</p>
@@ -124,6 +125,7 @@
                         request()->routeIs('leave-requests.*') => 'Leave Requests',
                         request()->routeIs('overtime.*') => 'Overtime',
                         request()->routeIs('cash-advance-requests.*') => 'Cash Advance Requests',
+                        request()->routeIs('reimbursements.*') => 'Reimbursements',
                         request()->routeIs('org.departments') => 'Departments',
                         request()->routeIs('org.positions') => 'Positions',
                         request()->routeIs('employees.*') => 'Employees',

@@ -39,6 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::livewire('/overtime/{overtimeRequest}', 'overtime.show')->name('overtime.show');
 
     Route::livewire('/cash-advance-requests', 'cash-advance-requests.index')->name('cash-advance-requests.index');
+    Route::livewire('/reimbursements', 'reimbursements.index')->name('reimbursements.index');
 
     Route::livewire('/leave-requests', 'leave-requests.index')->name('leave-requests.index');
     Route::livewire('/leave-requests/create', 'leave-requests.create')->name('leave-requests.create');

@@ -60,6 +60,11 @@ return [
             'cash_advances.manage' => 'Advance Register — record advances directly, pause and cancel them',
         ],
 
+        'Reimbursements' => [
+            'reimbursements.approve' => 'Reimbursements — approve what the company pays back for expenses',
+            'reimbursements.view_all' => 'Reimbursements — view every claim across the company',
+        ],
+
         'Payroll' => [
             'payroll.runs.manage' => 'Payroll — open a run, compute it and review the payslips',
             'payroll.runs.finalize' => 'Payroll — lock the figures and mark a run as paid',

@@ -11,6 +11,7 @@ use App\Models\PayrollRun;
 use App\Models\PayrollSetting;
 use App\Models\Payslip;
 use App\Models\PayslipLine;
+use App\Models\ReimbursementRequest;
 use App\Models\User;
 use App\Services\CashAdvanceService;
 use Illuminate\Support\Carbon;
@@ -191,6 +192,7 @@ class PayrollService
                 );
 
                 $this->applyLeaveConversion($payslip, $employee, $run);
+                $this->applyReimbursements($payslip, $employee, $run);
                 $this->applyCashAdvance($payslip, $advances->get($employee->id), $run, $clampNegative);
                 $this->applyAdjustments($payslip);
                 $this->writeLines($payslip);
@@ -335,6 +337,11 @@ class PayrollService
         // them again rather than skipping them as already settled.
         LeaveConversionPayout::where('payroll_run_id', $run->id)->delete();
 
+        // Frees the expense claims this run paid, so recomputing pays them
+        // again rather than skipping them as already settled.
+        ReimbursementRequest::where('payroll_run_id', $run->id)
+            ->update(['payroll_run_id' => null, 'payslip_id' => null, 'paid_on' => null]);
+
         PayslipLine::whereIn('payslip_id', $run->payslips()->select('id'))->delete();
     }
 
@@ -409,6 +416,7 @@ class PayrollService
             // Reset each compute; filled in by the steps that follow.
             'cash_advance_deduction' => 0,
             'leave_conversion_pay' => 0,
+            'reimbursement_pay' => 0,
             'adjustments_earning' => 0,
             'adjustments_deduction' => 0,
         ];
@@ -471,6 +479,54 @@ class PayrollService
 
         $payslip->update([
             'leave_conversion_pay' => round($total, 2),
+            'gross_pay' => round((float) $payslip->gross_pay + $total, 2),
+            'net_pay' => round((float) $payslip->net_pay + $total, 2),
+        ]);
+    }
+
+    /**
+     * Pays back approved expense claims.
+     *
+     * Added after the calculator has finished, which is what keeps it out of
+     * taxable income and out of basic_earned. A reimbursement is the employee's
+     * own money coming back — taxing it would charge them for spending it, and
+     * counting it as basic pay would inflate their thirteenth month by however
+     * much they happened to travel.
+     *
+     * Attaching the payslip is what marks a claim paid, so the same receipt
+     * cannot be picked up by a later run.
+     */
+    protected function applyReimbursements(Payslip $payslip, Employee $employee, PayrollRun $run): void
+    {
+        $claims = ReimbursementRequest::where('employee_id', $employee->id)
+            ->awaitingPayment()
+            ->orderBy('expense_date')
+            ->get();
+
+        if ($claims->isEmpty()) {
+            return;
+        }
+
+        $total = 0.0;
+
+        foreach ($claims as $claim) {
+            $amount = $claim->effectiveAmount();
+
+            $claim->update([
+                'payroll_run_id' => $run->id,
+                'payslip_id' => $payslip->id,
+                'paid_on' => $run->pay_date->toDateString(),
+            ]);
+
+            $total += $amount;
+        }
+
+        if ($total <= 0) {
+            return;
+        }
+
+        $payslip->update([
+            'reimbursement_pay' => round($total, 2),
             'gross_pay' => round((float) $payslip->gross_pay + $total, 2),
             'net_pay' => round((float) $payslip->net_pay + $total, 2),
         ]);
@@ -563,6 +619,7 @@ class PayrollService
         $add('earning', 'Overtime', (float) $payslip->overtime_pay, $payslip->overtime_hours . ' hour(s)');
         $add('earning', 'Night differential', (float) $payslip->night_differential_pay, $payslip->night_diff_days . ' day(s)');
         $add('earning', 'Allowance', (float) $payslip->allowance);
+        $add('earning', 'Expenses reimbursed', (float) $payslip->reimbursement_pay, 'Not taxed — your own money back');
         $add('earning', 'Unused leave paid out', (float) $payslip->leave_conversion_pay,
             $payslip->leaveConversionDays() . ' day(s)');
 
