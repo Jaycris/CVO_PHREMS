@@ -92,7 +92,7 @@
                             <x-nav-link :href="route('cash-advances.index')" :active="request()->routeIs('cash-advances.*')" icon="money">Cash Advance Record</x-nav-link>
                         @endcan
                         @can('reimbursements.view_all')
-                            <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.index')" icon="clipboard">Reimbursement</x-nav-link>
+                            <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.index')" icon="clipboard">Reimbursement Record</x-nav-link>
                         @endcan
                     @endif
 
@@ -130,7 +130,7 @@
                         request()->routeIs('overtime.*') => 'Overtime',
                         request()->routeIs('cash-advance-requests.*') => 'Cash Advance Requests',
                         request()->routeIs('my-reimbursements') => 'My Reimbursement',
-                        request()->routeIs('reimbursements.*') => 'Reimbursement',
+                        request()->routeIs('reimbursements.*') => 'Reimbursement Record',
                         request()->routeIs('org.departments') => 'Departments',
                         request()->routeIs('org.positions') => 'Positions',
                         request()->routeIs('employees.*') => 'Employees',

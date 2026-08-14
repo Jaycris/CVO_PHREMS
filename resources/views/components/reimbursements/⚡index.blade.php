@@ -100,7 +100,7 @@ new #[Layout('layouts.app')] class extends Component
 
 <div class="space-y-6">
     <div>
-        <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Reimbursement</h1>
+        <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Reimbursement Record</h1>
         <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">
             Expenses staff paid out of pocket. Approving does not pay anything — the next payroll run does.
         </p>
