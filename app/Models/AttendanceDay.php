@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,6 +10,8 @@ use Illuminate\Support\Carbon;
 
 class AttendanceDay extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'employee_id',
         'work_date',
@@ -75,9 +78,23 @@ class AttendanceDay extends Model
 
         $scheduledStart = Carbon::parse($this->work_date->toDateString() . ' ' . $assignment->workSchedule->start_time->format('H:i:s'));
 
-        return $this->time_in->gt($scheduledStart)
-            ? (int) floor($scheduledStart->diffInMinutes($this->time_in))
-            : 0;
+        if (! $this->time_in->gt($scheduledStart)) {
+            return 0;
+        }
+
+        $minutes = (int) floor($scheduledStart->diffInMinutes($this->time_in));
+
+        /*
+         * The grace period forgives the whole lateness, it does not shave it.
+         * With 15 minutes' grace, arriving 14 minutes late is not late at all;
+         * arriving 20 minutes late is 20 minutes, not 5.
+         *
+         * That is the usual reading — grace covers traffic and the lift, and
+         * once someone is past it the allowance was not the point.
+         */
+        $grace = (int) PayrollSetting::number('late_grace_minutes', 0);
+
+        return $minutes <= $grace ? 0 : $minutes;
     }
 
     /**

@@ -159,6 +159,14 @@ class StatutorySeeder extends Seeder
     {
         $settings = [
             [
+                'key' => 'late_grace_minutes',
+                'value' => '0',
+                'label' => 'Grace period before someone counts as late',
+                'description' => 'Minutes after the shift start that are forgiven entirely. With 15, arriving 14 minutes late is not late; arriving 20 minutes late is 20 minutes, not 5. Set to 0 for no grace period.',
+                'type' => 'integer',
+                'group' => 'Attendance',
+            ],
+            [
                 'key' => 'daily_rate_basis',
                 'value' => 'actual',
                 'label' => 'How a day\'s pay is worked out',

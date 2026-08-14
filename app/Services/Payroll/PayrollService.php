@@ -130,7 +130,8 @@ class PayrollService
 
         $pendingOvertime = OvertimeRequest::whereIn('employee_id', $employees->pluck('id'))
             ->where('status', 'pending_manager')
-            ->whereBetween('work_date', [$run->period_start->toDateString(), $run->period_end->toDateString()])
+            ->whereDate('work_date', '>=', $run->period_start->toDateString())
+            ->whereDate('work_date', '<=', $run->period_end->toDateString())
             ->count();
 
         if ($pendingOvertime > 0) {
@@ -206,7 +207,8 @@ class PayrollService
             OvertimeRequest::whereIn('employee_id', $employees->pluck('id'))
                 ->where('status', 'approved')
                 ->whereNull('consumed_payroll_run_id')
-                ->whereBetween('work_date', [$run->period_start->toDateString(), $run->period_end->toDateString()])
+                ->whereDate('work_date', '>=', $run->period_start->toDateString())
+            ->whereDate('work_date', '<=', $run->period_end->toDateString())
                 ->update(['consumed_payroll_run_id' => $run->id]);
 
             $run->update([

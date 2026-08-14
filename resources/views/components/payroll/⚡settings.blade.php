@@ -399,7 +399,11 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         return [
-            'contributions' => StatutoryContributionSetting::orderByRaw("field(code,'sss','philhealth','pagibig','bir')")->get(),
+            // Ordered in memory rather than with MySQL's field() so the page
+            // also works under the test suite's SQLite.
+            'contributions' => StatutoryContributionSetting::all()
+                ->sortBy(fn ($c) => array_search($c->code, ['sss', 'philhealth', 'pagibig', 'bir']))
+                ->values(),
             'policyGroups' => PayrollSetting::orderBy('group')->orderBy('id')->get()->groupBy('group'),
             'changeLog' => PayrollChangeLog::latest()->limit(30)->get(),
         ];

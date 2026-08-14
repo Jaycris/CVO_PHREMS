@@ -15,6 +15,13 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // SQLite has no enum — the column is already a plain string there, so
+        // there is nothing to widen. Guarding by driver keeps the test suite,
+        // which runs on in-memory SQLite, able to migrate.
+        if (! $this->isMySql()) {
+            return;
+        }
+
         DB::statement("ALTER TABLE payroll_settings MODIFY COLUMN type ENUM('decimal','integer','boolean','time','choice') NOT NULL DEFAULT 'decimal'");
     }
 
@@ -22,6 +29,15 @@ return new class extends Migration
     {
         DB::table('payroll_settings')->where('type', 'choice')->update(['type' => 'decimal']);
 
+        if (! $this->isMySql()) {
+            return;
+        }
+
         DB::statement("ALTER TABLE payroll_settings MODIFY COLUMN type ENUM('decimal','integer','boolean','time') NOT NULL DEFAULT 'decimal'");
+    }
+
+    protected function isMySql(): bool
+    {
+        return DB::connection()->getDriverName() === 'mysql';
     }
 };

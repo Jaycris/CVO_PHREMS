@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 class OvertimeRequest extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'employee_id',
         'work_date',
@@ -83,10 +86,11 @@ class OvertimeRequest extends Model
     /** Approved overtime within a payroll period. */
     public function scopeApprovedBetween(Builder $query, Carbon|string $start, Carbon|string $end): Builder
     {
+        // whereDate rather than whereBetween: the latter compares raw strings,
+        // and a driver that stores a date with a time part sorts past the upper
+        // bound, dropping the last day of every period.
         return $query->where('status', 'approved')
-            ->whereBetween('work_date', [
-                Carbon::parse($start)->toDateString(),
-                Carbon::parse($end)->toDateString(),
-            ]);
+            ->whereDate('work_date', '>=', Carbon::parse($start)->toDateString())
+            ->whereDate('work_date', '<=', Carbon::parse($end)->toDateString());
     }
 }

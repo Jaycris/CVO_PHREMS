@@ -22,7 +22,11 @@ return new class extends Migration
             $table->string('value')->nullable();
             $table->string('label');
             $table->string('description')->nullable();
-            $table->enum('type', ['decimal', 'integer', 'boolean', 'time'])->default('decimal');
+            // 'choice' is for settings that pick between named options rather
+            // than holding a number. Listed here as well as in the later ALTER
+            // so a database built from scratch — the test suite's, and any
+            // future install — has it from the start.
+            $table->enum('type', ['decimal', 'integer', 'boolean', 'time', 'choice'])->default('decimal');
             $table->string('group')->default('General');
             $table->timestamps();
         });

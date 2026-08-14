@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 class WorkSchedule extends Model
 {
+    use HasFactory;
+
     /** Fallback when work_days has never been set (MySQL forbids json defaults). */
     public const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5];
 

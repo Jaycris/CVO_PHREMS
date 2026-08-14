@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Permission\Traits\HasPermissions;
@@ -15,6 +16,8 @@ use Spatie\Permission\Traits\HasPermissions;
  */
 class Position extends Model
 {
+    use HasFactory;
+
     use HasPermissions;
 
     /**
