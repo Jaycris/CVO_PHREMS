@@ -161,10 +161,10 @@ class StatutorySeeder extends Seeder
             [
                 'key' => 'late_grace_minutes',
                 'value' => '0',
-                'label' => 'Grace period before someone counts as late',
+                'label' => 'Minutes forgiven before someone counts as late',
                 'description' => 'Minutes after the shift start that are forgiven entirely. With 15, arriving 14 minutes late is not late; arriving 20 minutes late is 20 minutes, not 5. Set to 0 for no grace period.',
                 'type' => 'integer',
-                'group' => 'Attendance',
+                'group' => 'Grace Period',
             ],
             [
                 'key' => 'daily_rate_basis',
