@@ -89,7 +89,7 @@
                             <x-nav-link :href="route('leave-types.index')" :active="request()->routeIs('leave-types.*')" icon="document">Leave Types</x-nav-link>
                         @endcan
                         @can('cash_advances.manage')
-                            <x-nav-link :href="route('cash-advances.index')" :active="request()->routeIs('cash-advances.*')" icon="money">Cash Advance</x-nav-link>
+                            <x-nav-link :href="route('cash-advances.index')" :active="request()->routeIs('cash-advances.*')" icon="money">Cash Advance Record</x-nav-link>
                         @endcan
                         @can('reimbursements.view_all')
                             <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.index')" icon="clipboard">Reimbursement</x-nav-link>
@@ -138,7 +138,7 @@
                         request()->routeIs('schedules.*') => 'Work Schedules',
                         request()->routeIs('attendance.dtr') => 'DTR',
                         request()->routeIs('leave-types.*') => 'Leave Types',
-                        request()->routeIs('cash-advances.*') => 'Cash Advance',
+                        request()->routeIs('cash-advances.*') => 'Cash Advance Record',
                         request()->routeIs('payroll.settings') => 'Payroll Settings',
                         request()->routeIs('payroll.thirteenth-month') => '13th Month Pay',
                         request()->routeIs('payroll.payslip') => 'Payslip',

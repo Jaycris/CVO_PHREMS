@@ -119,7 +119,7 @@ new #[Layout('layouts.app')] class extends Component
 <div class="space-y-6">
     <div class="flex items-center justify-between">
         <div>
-            <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Cash Advance</h1>
+            <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Cash Advance Record</h1>
             <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">
                 Money already released — repaid automatically each cutoff until the balance clears.
                 Approved <a href="{{ route('cash-advance-requests.index') }}" wire:navigate class="font-medium text-brand-700 underline-offset-2 hover:underline dark:text-brand-400">requests</a> land here on their own.
