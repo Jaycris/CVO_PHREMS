@@ -190,17 +190,26 @@ new #[Layout('layouts.app')] class extends Component
             <p class="mt-1 text-sm font-bold text-ink-950 dark:text-white">
                 {{ $currentPeriod['start']->format('M j') }} – {{ $currentPeriod['end']->format('M j, Y') }}
             </p>
-            <div class="mt-1.5">
+            <div class="mt-1.5 flex flex-wrap items-center gap-3">
                 @if ($currentSettled)
                     <x-badge :color="$currentSettled->status === 'paid' ? 'green' : 'brand'">
                         {{ $currentSettled->status === 'paid' ? 'Paid' : 'Processed' }}
                     </x-badge>
+                    {{-- A period can be processed and released while it is still
+                         the current one, when HR runs payroll on the last day. --}}
+                    @if ($currentReleased)
+                        <a href="{{ route('my-payslips') }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View payslip</a>
+                    @endif
                 @else
                     <x-badge color="neutral">Not yet processed</x-badge>
                 @endif
             </div>
             <p class="mt-1.5 text-xs font-medium text-[#778599]">
-                Pay date {{ $currentPeriod['pay_date']->format('F j, Y') }}
+                @if ($currentSettled && ! $currentReleased)
+                    Your payslip will be sent shortly.
+                @else
+                    Pay date {{ $currentPeriod['pay_date']->format('F j, Y') }}
+                @endif
             </p>
         </div>
 
