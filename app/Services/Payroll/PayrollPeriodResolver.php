@@ -60,6 +60,21 @@ class PayrollPeriodResolver
     }
 
     /**
+     * The period immediately before a given one.
+     *
+     * Found by asking which period the day before it started belongs to, so the
+     * month-spanning first cutoff and the short February one both work out
+     * without a special case.
+     *
+     * @param  array{start: Carbon, ...}  $period
+     * @return array{cutoff: string, start: Carbon, end: Carbon, pay_date: Carbon}
+     */
+    public function previous(array $period): array
+    {
+        return $this->containing($period['start']->copy()->subDay());
+    }
+
+    /**
      * @return array{cutoff: string, start: Carbon, end: Carbon, pay_date: Carbon}
      */
     public function payDateFor(int $year, int $month, string $cutoff): array

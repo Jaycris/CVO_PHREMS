@@ -123,25 +123,34 @@ new #[Layout('layouts.app')] class extends Component
          */
         $resolver = new \App\Services\Payroll\PayrollPeriodResolver();
         $current = $resolver->containing($today);
+        $previous = $resolver->previous($current);
 
         /*
-         * Two different questions, answered from two different things.
+         * Two fixed periods rather than "current" and "whatever was paid last".
          *
-         * "Has payroll been done?" comes from the run's status — the employee
-         * should know their pay has been worked out as soon as HR locks it.
+         * The cutoff ends on the 25th but is not paid until the 30th, so for
+         * those five days the period an employee most wants to see is the one
+         * they have just finished — and it is no longer the current one. Pinning
+         * the second card to the previous period keeps it on screen through that
+         * gap, and stops both cards showing the same period the rest of the time.
          *
-         * "Can I see my payslip?" comes from notified_at, which HR sets by
-         * pressing Send. Between locking and releasing, the employee is told
-         * payroll is processed but not yet shown the figures.
+         * Within each card, two different questions are answered from two
+         * different things: whether payroll has been done comes from the run's
+         * status, while whether the payslip can be opened comes from
+         * notified_at, which HR sets by pressing Send.
          */
-        $mine = \App\Models\Payslip::with('payrollRun')
-            ->where('employee_id', $this->employee->id)
-            ->whereHas('payrollRun', fn ($q) => $q->whereIn('status', ['finalized', 'paid']))
-            ->get()
-            ->sortByDesc(fn ($p) => $p->payrollRun->pay_date);
+        $runFor = function (array $period) {
+            return \App\Models\Payslip::with('payrollRun')
+                ->where('employee_id', $this->employee->id)
+                ->whereHas('payrollRun', fn ($q) => $q
+                    ->whereIn('status', ['finalized', 'paid'])
+                    ->whereDate('period_start', $period['start']->toDateString())
+                    ->whereDate('period_end', $period['end']->toDateString()))
+                ->first();
+        };
 
-        $currentSlip = $mine->first(fn ($p) => $p->payrollRun->coversDate($current['start']));
-        $lastSlip = $mine->first();
+        $currentSlip = $runFor($current);
+        $previousSlip = $runFor($previous);
 
         return [
             'day' => $day,
@@ -151,9 +160,10 @@ new #[Layout('layouts.app')] class extends Component
             'schedule' => $scheduleAssignment?->workSchedule,
             'currentPeriod' => $current,
             'currentSettled' => $currentSlip?->payrollRun,
-            'lastSettled' => $lastSlip?->payrollRun,
-            // Only then does the link to it appear.
-            'lastReleased' => $lastSlip?->notified_at !== null,
+            'currentReleased' => $currentSlip?->notified_at !== null,
+            'previousPeriod' => $previous,
+            'previousSettled' => $previousSlip?->payrollRun,
+            'previousReleased' => $previousSlip?->notified_at !== null,
         ];
     }
 };
@@ -195,27 +205,31 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="rounded-xl border border-ink-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-ink-900">
-            <p class="text-xs font-semibold uppercase tracking-[0.14em] text-[#778599]">Last payroll</p>
-            @if ($lastSettled)
-                <p class="mt-1 text-sm font-bold text-ink-950 dark:text-white">{{ $lastSettled->periodLabel() }}</p>
-                <div class="mt-1.5 flex flex-wrap items-center gap-3">
-                    <x-badge :color="$lastSettled->status === 'paid' ? 'green' : 'brand'">
-                        {{ $lastSettled->status === 'paid' ? 'Paid' : 'Processed' }}
+            <p class="text-xs font-semibold uppercase tracking-[0.14em] text-[#778599]">Previous period</p>
+            <p class="mt-1 text-sm font-bold text-ink-950 dark:text-white">
+                {{ $previousPeriod['start']->format('M j') }} – {{ $previousPeriod['end']->format('M j, Y') }}
+            </p>
+            <div class="mt-1.5 flex flex-wrap items-center gap-3">
+                @if ($previousSettled)
+                    <x-badge :color="$previousSettled->status === 'paid' ? 'green' : 'brand'">
+                        {{ $previousSettled->status === 'paid' ? 'Paid' : 'Processed' }}
                     </x-badge>
-                    @if ($lastReleased)
+                    @if ($previousReleased)
                         <a href="{{ route('my-payslips') }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View payslip</a>
                     @endif
-                </div>
-                <p class="mt-1.5 text-xs font-medium text-[#778599]">
-                    @if ($lastReleased)
-                        Tell HR within three working days if anything looks wrong.
-                    @else
-                        Your payslip will be sent shortly.
-                    @endif
-                </p>
-            @else
-                <p class="mt-1 text-sm font-medium text-[#778599]">None yet.</p>
-            @endif
+                @else
+                    <x-badge color="neutral">Not yet processed</x-badge>
+                @endif
+            </div>
+            <p class="mt-1.5 text-xs font-medium text-[#778599]">
+                @if ($previousSettled && $previousReleased)
+                    Tell HR within three working days if anything looks wrong.
+                @elseif ($previousSettled)
+                    Your payslip will be sent shortly.
+                @else
+                    Pay date {{ $previousPeriod['pay_date']->format('F j, Y') }}
+                @endif
+            </p>
         </div>
     </div>
 
