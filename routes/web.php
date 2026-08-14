@@ -57,6 +57,10 @@ Route::middleware('auth')->group(function () {
         Route::livewire('/org/positions', 'org.positions')->name('org.positions');
     });
 
+    Route::middleware('can:recruitment.manage')->group(function () {
+        Route::livewire('/recruitment', 'recruitment.index')->name('recruitment.index');
+    });
+
     Route::middleware('can:users.manage')->group(function () {
         Route::livewire('/users', 'users.index')->name('users.index');
     });

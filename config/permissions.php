@@ -37,6 +37,7 @@ return [
         ],
 
         'People' => [
+            'recruitment.manage' => 'Recruitment — open roles, applicants and hiring',
             'employees.manage' => 'Employees — view the directory, onboard and edit records',
             'users.manage' => 'Users — create sign-in accounts and grant access',
         ],

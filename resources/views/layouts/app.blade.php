@@ -43,6 +43,7 @@
                     $showPeople = auth()->user()->canAny([
                         'employees.manage', 'users.manage', 'schedules.manage',
                         'attendance.view_all', 'leave.types.manage', 'cash_advances.manage',
+                        'recruitment.manage',
                         'reimbursements.view_all',
                     ]);
                 @endphp
@@ -73,6 +74,9 @@
 
                     @if ($showPeople)
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">People</p>
+                        @can('recruitment.manage')
+                            <x-nav-link :href="route('recruitment.index')" :active="request()->routeIs('recruitment.*')" icon="user-plus">Recruitment</x-nav-link>
+                        @endcan
                         @can('employees.manage')
                             <x-nav-link :href="route('employees.index')" :active="request()->routeIs('employees.*')" icon="people-group">Employees</x-nav-link>
                         @endcan
@@ -135,6 +139,7 @@
                         request()->routeIs('org.positions') => 'Positions',
                         request()->routeIs('employees.*') => 'Employees',
                         request()->routeIs('users.*') => 'Users',
+                        request()->routeIs('recruitment.*') => 'Recruitment',
                         request()->routeIs('schedules.*') => 'Work Schedules',
                         request()->routeIs('attendance.dtr') => 'DTR',
                         request()->routeIs('leave-types.*') => 'Leave Types',
