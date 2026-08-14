@@ -8,6 +8,11 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
+/**
+ * Goes to the person who filed the claim, so it links to My Reimbursement.
+ * Sending them to the approval screen would be a 403 — that page is gated on a
+ * permission an employee does not hold.
+ */
 class ReimbursementStatusUpdated extends Notification implements ShouldQueue
 {
     use Queueable;
@@ -39,7 +44,7 @@ class ReimbursementStatusUpdated extends Notification implements ShouldQueue
             $mail->line('Note: ' . $this->claim->decision_note);
         }
 
-        return $mail->action('View Claim', url('/reimbursements'));
+        return $mail->action('View Claim', url('/my-reimbursements'));
     }
 
     /** @return array<string, mixed> */
@@ -47,7 +52,7 @@ class ReimbursementStatusUpdated extends Notification implements ShouldQueue
     {
         return [
             'reimbursement_request_id' => $this->claim->id,
-            'url' => '/reimbursements',
+            'url' => '/my-reimbursements',
             'message' => $this->message,
         ];
     }

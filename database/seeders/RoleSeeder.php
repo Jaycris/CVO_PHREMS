@@ -29,8 +29,27 @@ class RoleSeeder extends Seeder
             }
         }
 
-        // Permissions dropped from the catalogue should not linger as grants.
-        Permission::whereNotIn('name', $this->catalogueNames())->delete();
+        /*
+         * Permissions no longer in the catalogue are reported, not deleted.
+         *
+         * Deleting one cascades through model_has_permissions and silently
+         * takes every grant with it — a position that could approve payroll
+         * yesterday simply cannot today, with nothing on screen to say why.
+         * That is far too destructive for a seeder that runs on every deploy,
+         * and it only takes a config file not yet in place, or a cached one,
+         * for the catalogue to look empty.
+         *
+         * Retiring a permission is a deliberate act. Do it in a migration that
+         * says what it is dropping.
+         */
+        $orphans = Permission::whereNotIn('name', $this->catalogueNames())->pluck('name');
+
+        if ($orphans->isNotEmpty()) {
+            $this->command?->warn(
+                'These permissions are no longer in config/permissions.php and were left alone: '
+                . $orphans->implode(', ')
+            );
+        }
 
         // Roles that used to double as job titles. Anyone holding one was
         // administrative staff, so they move to the Admin tier and their job

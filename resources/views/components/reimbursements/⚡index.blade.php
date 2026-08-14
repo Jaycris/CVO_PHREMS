@@ -257,10 +257,20 @@ new #[Layout('layouts.app')] class extends Component
                     <x-textarea wire:model="decisionNote" rows="2" placeholder="The employee sees this" />
                 </div>
 
-                <div class="flex flex-wrap gap-2 pt-2">
-                    <x-button wire:click="decide(true)">Approve</x-button>
-                    <x-button variant="danger" wire:click="decide(false)">Decline</x-button>
-                    <x-button variant="secondary" wire:click="closeDecision">Cancel</x-button>
+                {{-- Deciding sends an email, which on a slow mail host takes a
+                     second or two. Without a busy state the button looks dead and
+                     gets clicked again, so every control is disabled for the
+                     duration and the one that was pressed says what it is doing. --}}
+                <div class="flex flex-wrap gap-2 pt-2" wire:loading.class="opacity-70" wire:target="decide">
+                    <x-button wire:click="decide(true)" wire:loading.attr="disabled" wire:target="decide">
+                        <span wire:loading.remove wire:target="decide(true)">Approve</span>
+                        <span wire:loading wire:target="decide(true)">Approving…</span>
+                    </x-button>
+                    <x-button variant="danger" wire:click="decide(false)" wire:loading.attr="disabled" wire:target="decide">
+                        <span wire:loading.remove wire:target="decide(false)">Decline</span>
+                        <span wire:loading wire:target="decide(false)">Declining…</span>
+                    </x-button>
+                    <x-button variant="secondary" wire:click="closeDecision" wire:loading.attr="disabled" wire:target="decide">Cancel</x-button>
                 </div>
 
                 <p class="text-xs font-medium text-[#778599]">
