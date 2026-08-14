@@ -43,6 +43,7 @@
                     $showPeople = auth()->user()->canAny([
                         'employees.manage', 'users.manage', 'schedules.manage',
                         'attendance.view_all', 'leave.types.manage', 'cash_advances.manage',
+                        'reimbursements.view_all',
                     ]);
                 @endphp
 
@@ -58,7 +59,7 @@
                     <x-nav-link :href="route('leave-requests.index')" :active="request()->routeIs('leave-requests.*')" icon="clipboard">Leave Requests</x-nav-link>
                     <x-nav-link :href="route('overtime.index')" :active="request()->routeIs('overtime.*')" icon="clock">Overtime</x-nav-link>
                     <x-nav-link :href="route('cash-advance-requests.index')" :active="request()->routeIs('cash-advance-requests.*')" icon="clipboard">Cash Advance Requests</x-nav-link>
-                    <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.*')" icon="money">Reimbursements</x-nav-link>
+                    <x-nav-link :href="route('my-reimbursements')" :active="request()->routeIs('my-reimbursements')" icon="money">My Reimbursement</x-nav-link>
 
                     @if ($showOrganization)
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Organization</p>
@@ -88,7 +89,10 @@
                             <x-nav-link :href="route('leave-types.index')" :active="request()->routeIs('leave-types.*')" icon="document">Leave Types</x-nav-link>
                         @endcan
                         @can('cash_advances.manage')
-                            <x-nav-link :href="route('cash-advances.index')" :active="request()->routeIs('cash-advances.*')" icon="money">Advance Register</x-nav-link>
+                            <x-nav-link :href="route('cash-advances.index')" :active="request()->routeIs('cash-advances.*')" icon="money">Cash Advance</x-nav-link>
+                        @endcan
+                        @can('reimbursements.view_all')
+                            <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.index')" icon="clipboard">Reimbursement</x-nav-link>
                         @endcan
                     @endif
 
@@ -125,7 +129,8 @@
                         request()->routeIs('leave-requests.*') => 'Leave Requests',
                         request()->routeIs('overtime.*') => 'Overtime',
                         request()->routeIs('cash-advance-requests.*') => 'Cash Advance Requests',
-                        request()->routeIs('reimbursements.*') => 'Reimbursements',
+                        request()->routeIs('my-reimbursements') => 'My Reimbursement',
+                        request()->routeIs('reimbursements.*') => 'Reimbursement',
                         request()->routeIs('org.departments') => 'Departments',
                         request()->routeIs('org.positions') => 'Positions',
                         request()->routeIs('employees.*') => 'Employees',
@@ -133,7 +138,7 @@
                         request()->routeIs('schedules.*') => 'Work Schedules',
                         request()->routeIs('attendance.dtr') => 'DTR',
                         request()->routeIs('leave-types.*') => 'Leave Types',
-                        request()->routeIs('cash-advances.*') => 'Advance Register',
+                        request()->routeIs('cash-advances.*') => 'Cash Advance',
                         request()->routeIs('payroll.settings') => 'Payroll Settings',
                         request()->routeIs('payroll.thirteenth-month') => '13th Month Pay',
                         request()->routeIs('payroll.payslip') => 'Payslip',

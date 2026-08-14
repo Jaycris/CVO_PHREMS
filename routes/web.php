@@ -39,7 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::livewire('/overtime/{overtimeRequest}', 'overtime.show')->name('overtime.show');
 
     Route::livewire('/cash-advance-requests', 'cash-advance-requests.index')->name('cash-advance-requests.index');
-    Route::livewire('/reimbursements', 'reimbursements.index')->name('reimbursements.index');
+    Route::livewire('/my-reimbursements', 'my-reimbursements')->name('my-reimbursements');
 
     Route::livewire('/leave-requests', 'leave-requests.index')->name('leave-requests.index');
     Route::livewire('/leave-requests/create', 'leave-requests.create')->name('leave-requests.create');
@@ -82,6 +82,10 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('can:cash_advances.manage')->group(function () {
         Route::livewire('/cash-advances', 'cash-advances.index')->name('cash-advances.index');
+    });
+
+    Route::middleware('can:reimbursements.view_all')->group(function () {
+        Route::livewire('/reimbursements', 'reimbursements.index')->name('reimbursements.index');
     });
 
     Route::middleware('can:payroll.settings.manage')->group(function () {
