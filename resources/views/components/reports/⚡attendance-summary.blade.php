@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
 use Livewire\Attributes\Layout;
@@ -7,6 +8,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public string $fromDate = '';
     public string $toDate = '';
 
@@ -16,14 +19,29 @@ new #[Layout('layouts.app')] class extends Component
         $this->toDate = now()->toDateString();
     }
 
+    /** Both properties here are filters, so a change starts the list again. */
+    public function updated(): void
+    {
+        $this->resetPage();
+    }
+
     public function with(): array
     {
+        /*
+         * The employees are paged first and the attendance is then fetched only
+         * for that page. Reading every day for every employee and paging the
+         * finished report afterwards would do the same work on every click.
+         */
+        $employees = Employee::orderBy('employee_id')->paginate($this->perPage());
+
         $days = AttendanceDay::with('breaks')
-            ->whereBetween('work_date', [$this->fromDate, $this->toDate])
+            ->whereIn('employee_id', $employees->getCollection()->modelKeys())
+            ->whereDate('work_date', '>=', $this->fromDate)
+            ->whereDate('work_date', '<=', $this->toDate)
             ->get()
             ->groupBy('employee_id');
 
-        $summary = Employee::orderBy('employee_id')->get()->map(function (Employee $employee) use ($days) {
+        $summary = $employees->getCollection()->map(function (Employee $employee) use ($days) {
             $employeeDays = $days->get($employee->id, collect());
 
             return (object) [
@@ -35,7 +53,7 @@ new #[Layout('layouts.app')] class extends Component
             ];
         });
 
-        return ['summary' => $summary];
+        return ['summary' => $summary, 'employees' => $employees];
     }
 };
 ?>
@@ -86,5 +104,11 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($employees->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $employees->links('components.pagination', ['noun' => 'employees']) }}
+            </div>
+        @endif
     </x-card>
 </div>

@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\ReimbursementRequest;
 use App\Services\ReimbursementService;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +17,8 @@ use Livewire\Component;
  */
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public bool $showDecision = false;
     public ?string $statusMessage = null;
     public ?string $errorMessage = null;
@@ -77,16 +80,16 @@ new #[Layout('layouts.app')] class extends Component
 
         return [
             'queue' => $user->can('reimbursements.approve')
-                ? ReimbursementRequest::with('employee')->where('status', 'pending')->oldest('expense_date')->get()
-                : collect(),
+                ? ReimbursementRequest::with('employee')->where('status', 'pending')->oldest('expense_date')
+                    ->paginate($this->perPage(), pageName: 'queue')
+                : new \Illuminate\Pagination\LengthAwarePaginator([], 0, $this->perPage(), 1, ['pageName' => 'queue']),
             'claims' => ReimbursementRequest::with('employee')
                 ->when($this->search !== '', fn ($q) => $q->whereHas('employee', fn ($e) => $e
                     ->where('first_name', 'like', "%{$this->search}%")
                     ->orWhere('last_name', 'like', "%{$this->search}%")
                     ->orWhere('employee_id', 'like', "%{$this->search}%")))
                 ->latest()
-                ->limit(100)
-                ->get(),
+                ->paginate($this->perPage(), pageName: 'claims'),
             'deciding' => $this->decidingId ? ReimbursementRequest::with('employee')->find($this->decidingId) : null,
             'awaitingPayment' => ReimbursementRequest::awaitingPayment()->sum('amount_approved'),
             'paidThisYear' => ReimbursementRequest::whereNotNull('payslip_id')
@@ -116,7 +119,7 @@ new #[Layout('layouts.app')] class extends Component
     <div class="grid gap-4 sm:grid-cols-3">
         <x-card>
             <p class="text-xs font-medium text-[#778599]">Waiting for approval</p>
-            <p class="mt-1 text-2xl font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $queue->count() }}</p>
+            <p class="mt-1 text-2xl font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $queue->total() }}</p>
         </x-card>
         <x-card>
             <p class="text-xs font-medium text-[#778599]">Approved, on the next payroll</p>
@@ -128,7 +131,7 @@ new #[Layout('layouts.app')] class extends Component
         </x-card>
     </div>
 
-    @if ($queue->isNotEmpty())
+    @if ($queue->total() > 0)
         <x-card :padding="false">
             <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
                 <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Awaiting Your Approval</h2>
@@ -173,6 +176,12 @@ new #[Layout('layouts.app')] class extends Component
                     </tbody>
                 </table>
             </div>
+
+            @if ($queue->hasPages())
+                <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                    {{ $queue->links('components.pagination', ['noun' => 'claims waiting']) }}
+                </div>
+            @endif
         </x-card>
     @endif
 
@@ -221,6 +230,12 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($claims->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $claims->links('components.pagination', ['noun' => 'claims']) }}
+            </div>
+        @endif
     </x-card>
 
     <x-modal :show="$showDecision" onClose="closeDecision" maxWidth="lg">

@@ -1,11 +1,14 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\WorkSchedule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public bool $showForm = false;
     public string $name = '';
     public string $start_time = '';
@@ -94,7 +97,7 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         return [
-            'schedules' => WorkSchedule::orderBy('name')->get(),
+            'schedules' => WorkSchedule::orderBy('name')->paginate($this->perPage()),
         ];
     }
 };
@@ -151,6 +154,12 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($schedules->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $schedules->links('components.pagination', ['noun' => 'schedules']) }}
+            </div>
+        @endif
     </x-card>
 
     <x-modal :show="$showForm" onClose="closeForm">

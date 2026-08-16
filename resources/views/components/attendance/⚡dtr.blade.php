@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
 use Livewire\Attributes\Layout;
@@ -7,6 +8,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public string $employeeId = '';
     public string $fromDate = '';
     public string $toDate = '';
@@ -17,13 +20,22 @@ new #[Layout('layouts.app')] class extends Component
         $this->toDate = now()->toDateString();
     }
 
+    /** Every property here is a filter, so any change starts the list again. */
+    public function updated(): void
+    {
+        $this->resetPage();
+    }
+
     public function with(): array
     {
+        // whereDate rather than whereBetween: a DATE column compared against a
+        // plain string drops the last day of the range on some drivers.
         $days = AttendanceDay::with(['employee', 'breaks'])
-            ->whereBetween('work_date', [$this->fromDate, $this->toDate])
+            ->whereDate('work_date', '>=', $this->fromDate)
+            ->whereDate('work_date', '<=', $this->toDate)
             ->when($this->employeeId, fn ($q) => $q->where('employee_id', $this->employeeId))
             ->orderByDesc('work_date')
-            ->get();
+            ->paginate($this->perPage());
 
         return [
             'employees' => Employee::orderBy('employee_id')->get(),
@@ -87,5 +99,11 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($days->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $days->links('components.pagination', ['noun' => 'days']) }}
+            </div>
+        @endif
     </x-card>
 </div>

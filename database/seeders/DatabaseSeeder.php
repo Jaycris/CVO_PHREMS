@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(RoleSeeder::class);
+        $this->call(AppSettingSeeder::class);
         $this->call(LeaveTypeSeeder::class);
 
         $admin = User::factory()->create([

@@ -1,20 +1,19 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\Department;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
-use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithTablePagination;
 
     public bool $showForm = false;
     public string $name = '';
     public string $description = '';
     public ?int $editingId = null;
     public string $search = '';
-    public int $perPage = 10;
 
     public function create(): void
     {
@@ -72,7 +71,7 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         return [
-            'departments' => Department::search($this->search)->orderBy('name')->paginate($this->perPage),
+            'departments' => Department::search($this->search)->orderBy('name')->paginate($this->perPage()),
             'totalDepartments' => Department::count(),
         ];
     }
@@ -165,7 +164,7 @@ new #[Layout('layouts.app')] class extends Component
 
         @if ($departments->hasPages())
             <div class="border-t border-ink-200 bg-white px-5 py-4 dark:border-white/10 dark:bg-ink-900/40" @click="selected = []">
-                {{ $departments->links('components.pagination') }}
+                {{ $departments->links('components.pagination', ['noun' => 'departments']) }}
             </div>
         @endif
     </x-card>

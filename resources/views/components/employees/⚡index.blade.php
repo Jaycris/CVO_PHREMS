@@ -1,17 +1,15 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\Employee;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
-use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithTablePagination;
 
     public string $search = '';
-
-    public int $perPage = 10;
 
     public ?string $statusMessage = null;
 
@@ -48,7 +46,7 @@ new #[Layout('layouts.app')] class extends Component
                 ->with(['department', 'position'])
                 ->search($this->search)
                 ->orderBy('employee_id')
-                ->paginate($this->perPage),
+                ->paginate($this->perPage()),
             'totalEmployees' => Employee::count(),
             'regularEmployees' => Employee::where('employment_status', 'Regular')->count(),
             'pendingOnboarding' => Employee::whereNull('onboarding_completed_at')->count(),
@@ -229,7 +227,7 @@ new #[Layout('layouts.app')] class extends Component
 
         @if ($employees->hasPages())
             <div class="border-t border-ink-200 px-6 py-4 dark:border-white/10">
-                {{ $employees->links('components.pagination') }}
+                {{ $employees->links('components.pagination', ['noun' => 'employees']) }}
             </div>
         @endif
     </x-card>

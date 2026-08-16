@@ -1,12 +1,16 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\OvertimeRequest;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public function with(): array
     {
         $user = Auth::user();
@@ -35,14 +39,21 @@ new #[Layout('layouts.app')] class extends Component
             );
         }
 
+        // Each table carries its own page name so paging one leaves the
+        // others where they were.
+        $empty = fn (string $name) => new LengthAwarePaginator([], 0, $this->perPage(), 1, ['pageName' => $name]);
+
         return [
-            'awaitingApproval' => $awaitingApproval->unique('id'),
+            'awaitingApproval' => $this->paginateCollection($awaitingApproval->unique('id')->values(), 'approvals'),
             'myRequests' => $employee
-                ? OvertimeRequest::where('employee_id', $employee->id)->latest('work_date')->get()
-                : collect(),
+                ? OvertimeRequest::where('employee_id', $employee->id)->latest('work_date')
+                    ->paginate($this->perPage(), pageName: 'mine')
+                : $empty('mine'),
+            // Was capped at 50, which quietly hid everything older.
             'allRequests' => $isAdminHr
-                ? OvertimeRequest::with('employee')->latest('work_date')->limit(50)->get()
-                : collect(),
+                ? OvertimeRequest::with('employee')->latest('work_date')
+                    ->paginate($this->perPage(), pageName: 'all')
+                : $empty('all'),
             'isAdminHr' => $isAdminHr,
             'hasEmployee' => $employee !== null,
         ];
@@ -63,7 +74,7 @@ new #[Layout('layouts.app')] class extends Component
         @endif
     </div>
 
-    @if ($awaitingApproval->isNotEmpty())
+    @if ($awaitingApproval->total() > 0)
         <x-card :padding="false">
             <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
                 <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Awaiting Your Approval</h2>
@@ -92,8 +103,16 @@ new #[Layout('layouts.app')] class extends Component
                     </tbody>
                 </table>
             </div>
+
+            @if ($awaitingApproval->hasPages())
+                <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                    {{ $awaitingApproval->links('components.pagination', ['noun' => 'requests awaiting you']) }}
+                </div>
+            @endif
         </x-card>
     @endif
+
+    @php($listed = $isAdminHr ? $allRequests : $myRequests)
 
     <x-card :padding="false">
         <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
@@ -114,7 +133,7 @@ new #[Layout('layouts.app')] class extends Component
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
-                    @forelse (($isAdminHr ? $allRequests : $myRequests) as $request)
+                    @forelse ($listed as $request)
                         <tr wire:key="ot-{{ $request->id }}">
                             @if ($isAdminHr)
                                 <td class="px-4 py-3 font-medium text-[#65758c] dark:text-white">{{ $request->employee->fullName() ?: $request->employee->employee_id }}</td>
@@ -135,5 +154,11 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($listed->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $listed->links('components.pagination', ['noun' => 'overtime filings']) }}
+            </div>
+        @endif
     </x-card>
 </div>

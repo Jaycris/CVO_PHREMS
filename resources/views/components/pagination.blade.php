@@ -1,3 +1,10 @@
+{{--
+    The noun is passed in so the count reads "of 43 employees" rather than a
+    bare number. It used to be hard-coded to "departments", which every other
+    table then claimed to be showing.
+--}}
+@php($noun ??= 'records')
+
 @if ($paginator->hasPages())
     <nav role="navigation" aria-label="Pagination" class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p class="text-sm font-medium text-ink-500 dark:text-ink-400">
@@ -7,7 +14,7 @@
             <span class="font-bold text-ink-800 dark:text-white">{{ $paginator->lastItem() }}</span>
             of
             <span class="font-bold text-ink-800 dark:text-white">{{ $paginator->total() }}</span>
-            departments
+            {{ $noun }}
         </p>
 
         <div class="flex flex-wrap items-center gap-2">

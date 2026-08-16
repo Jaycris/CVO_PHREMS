@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\ReimbursementRequest;
 use App\Services\ReimbursementService;
 use App\Support\StoresReceipt;
@@ -17,6 +18,8 @@ use Livewire\WithFileUploads;
  */
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     use StoresReceipt, WithFileUploads;
 
     public bool $showForm = false;
@@ -77,13 +80,17 @@ new #[Layout('layouts.app')] class extends Component
         $employee = Auth::user()?->employee;
 
         $claims = $employee
-            ? ReimbursementRequest::where('employee_id', $employee->id)->latest()->get()
-            : collect();
+            ? ReimbursementRequest::where('employee_id', $employee->id)->latest()->paginate($this->perPage())
+            : new \Illuminate\Pagination\LengthAwarePaginator([], 0, $this->perPage());
 
         return [
             'claims' => $claims,
             'categories' => ReimbursementRequest::categories(),
-            'awaiting' => $claims->where('status', 'approved')->whereNull('payslip_id')->sum(fn ($c) => $c->effectiveAmount()),
+            'awaiting' => $employee
+                ? ReimbursementRequest::where('employee_id', $employee->id)
+                    ->where('status', 'approved')->whereNull('payslip_id')->get()
+                    ->sum(fn ($c) => $c->effectiveAmount())
+                : 0,
             'hasEmployee' => $employee !== null,
         ];
     }
@@ -170,6 +177,12 @@ new #[Layout('layouts.app')] class extends Component
                     </tbody>
                 </table>
             </div>
+
+            @if ($claims->hasPages())
+                <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                    {{ $claims->links('components.pagination', ['noun' => 'claims']) }}
+                </div>
+            @endif
         </x-card>
     @endunless
 

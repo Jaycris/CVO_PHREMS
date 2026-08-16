@@ -77,6 +77,10 @@ return [
             'reports.view' => 'Reports — attendance summary and exports',
         ],
 
+        'System' => [
+            'app.settings.manage' => 'System Settings — how many rows the tables show, and other app-wide display options',
+        ],
+
     ],
 
 ];

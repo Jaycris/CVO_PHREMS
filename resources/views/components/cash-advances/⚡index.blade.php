@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\CashAdvance;
 use App\Models\Employee;
 use App\Services\CashAdvanceService;
@@ -9,6 +10,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public bool $showForm = false;
     public ?int $editingId = null;
     public ?string $statusMessage = null;
@@ -109,7 +112,7 @@ new #[Layout('layouts.app')] class extends Component
                         ->orWhere('last_name', 'like', "%{$this->search}%")
                         ->orWhere('employee_id', 'like', "%{$this->search}%")))
                 ->latest('start_date')
-                ->get(),
+                ->paginate($this->perPage()),
             'employees' => Employee::orderBy('employee_id')->get(),
         ];
     }
@@ -197,6 +200,12 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($advances->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $advances->links('components.pagination', ['noun' => 'cash advances']) }}
+            </div>
+        @endif
     </x-card>
 
     <x-modal :show="$showForm" onClose="closeForm" maxWidth="lg">

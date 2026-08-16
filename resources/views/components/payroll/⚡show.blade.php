@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\PayrollRun;
 use App\Services\Payroll\PayrollService;
 use Illuminate\Support\Facades\Auth;
@@ -9,6 +10,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     #[Locked]
     public int $runId;
 
@@ -105,9 +108,13 @@ new #[Layout('layouts.app')] class extends Component
             'preflight' => $run->isMutable() && $run->run_type === 'regular'
                 ? $service->preflight($run)
                 : null,
-            'payslips' => $run->payslips()->with('employee')->get()
-                ->sortBy(fn ($p) => $p->employeeName())->values(),
-            'logs' => $run->logs()->limit(15)->get(),
+            // Sorted in SQL rather than after loading, because paging
+            // cannot sort rows it has not fetched.
+            'payslips' => $run->payslips()->with('employee')
+                ->orderBy(\App\Models\Employee::select('first_name')->whereColumn('employees.id', 'payslips.employee_id'))
+                ->orderBy(\App\Models\Employee::select('last_name')->whereColumn('employees.id', 'payslips.employee_id'))
+                ->paginate($this->perPage()),
+            'logs' => $run->logs()->paginate($this->perPage(), pageName: 'log'),
             'canFinalize' => $user->can('payroll.runs.finalize'),
             'canUnlock' => $user->can('payroll.runs.unlock'),
             'unsentPayslips' => in_array($run->status, ['finalized', 'paid'], true)
@@ -286,6 +293,12 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($payslips->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $payslips->links('components.pagination', ['noun' => 'payslips']) }}
+            </div>
+        @endif
     </x-card>
 
     <x-card :padding="false">
@@ -305,6 +318,12 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="px-5 py-6 text-center text-sm font-medium text-[#778599]">Nothing yet.</div>
             @endforelse
         </div>
+
+        @if ($logs->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $logs->links('components.pagination', ['noun' => 'entries']) }}
+            </div>
+        @endif
     </x-card>
 
     <x-modal :show="$showUnlock" onClose="$set('showUnlock', false)" maxWidth="lg">

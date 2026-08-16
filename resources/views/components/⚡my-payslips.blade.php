@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\Payslip;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -8,6 +9,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     #[Locked]
     public ?int $openId = null;
 
@@ -52,18 +55,30 @@ new #[Layout('layouts.app')] class extends Component
     {
         $employee = Auth::user()?->employee;
 
-        $payslips = $employee
-            ? Payslip::with('payrollRun')
-                ->where('employee_id', $employee->id)
-                // Nothing appears until HR releases it. A payslip seen before
-                // then could still be a figure HR was about to correct.
-                ->whereNotNull('notified_at')
-                ->get()
-                ->sortByDesc(fn (Payslip $p) => $p->payrollRun->pay_date)
-                ->values()
-            : collect();
+        /*
+         * Ordering used to happen in PHP after loading every payslip, which
+         * paging cannot do — page 2 would be sorted among itself. The pay date
+         * lives on the run, so it is pulled in as a sub-select instead.
+         */
+        $released = fn () => Payslip::where('employee_id', $employee->id)
+            // Nothing appears until HR releases it. A payslip seen before then
+            // could still be a figure HR was about to correct.
+            ->whereNotNull('notified_at');
 
-        $open = $this->openId ? $payslips->firstWhere('id', $this->openId) : null;
+        $payslips = $employee
+            ? $released()->with('payrollRun')
+                ->orderByDesc(
+                    \App\Models\PayrollRun::select('pay_date')
+                        ->whereColumn('payroll_runs.id', 'payslips.payroll_run_id')
+                )
+                ->paginate($this->perPage())
+            : new \Illuminate\Pagination\LengthAwarePaginator([], 0, $this->perPage());
+
+        // Looked up on its own rather than from the page in view, so opening a
+        // payslip and then paging away does not close it.
+        $open = $employee && $this->openId
+            ? $released()->with('payrollRun')->find($this->openId)
+            : null;
 
         return [
             'payslips' => $payslips,
@@ -118,6 +133,12 @@ new #[Layout('layouts.app')] class extends Component
                     </tbody>
                 </table>
             </div>
+
+            @if ($payslips->hasPages())
+                <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                    {{ $payslips->links('components.pagination', ['noun' => 'payslips']) }}
+                </div>
+            @endif
         </x-card>
     @endunless
 

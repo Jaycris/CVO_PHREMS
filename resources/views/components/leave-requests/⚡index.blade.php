@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\LeaveRequest;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -7,6 +8,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public function with(): array
     {
         $user = Auth::user();
@@ -29,25 +32,36 @@ new #[Layout('layouts.app')] class extends Component
             );
         }
 
+        /*
+         * The three tables page independently, so each carries its own page
+         * name. Sharing one would move all three at once and page a manager
+         * away from the approval they were reading.
+         */
         $myRequests = $employee
-            ? LeaveRequest::with('leaveType')->where('employee_id', $employee->id)->latest()->get()
-            : collect();
+            ? LeaveRequest::with('leaveType')->where('employee_id', $employee->id)->latest()
+                ->paginate($this->perPage(), pageName: 'mine')
+            : new \Illuminate\Pagination\LengthAwarePaginator([], 0, $this->perPage(), 1, ['pageName' => 'mine']);
 
         $allRequests = $user->can('leave.view_all')
-            ? LeaveRequest::with(['employee', 'leaveType'])->latest()->get()
-            : collect();
+            ? LeaveRequest::with(['employee', 'leaveType'])->latest()
+                ->paginate($this->perPage(), pageName: 'all')
+            : new \Illuminate\Pagination\LengthAwarePaginator([], 0, $this->perPage(), 1, ['pageName' => 'all']);
+
+        /*
+         * The counters come from their own aggregate queries now. Reading them
+         * off the list only worked while the list held every row.
+         */
+        $counts = fn () => $user->can('leave.view_all')
+            ? LeaveRequest::query()
+            : ($employee ? LeaveRequest::where('employee_id', $employee->id) : LeaveRequest::whereRaw('1 = 0'));
 
         return [
-            'awaitingApproval' => $awaitingApproval->unique('id'),
+            'awaitingApproval' => $this->paginateCollection($awaitingApproval->unique('id')->values(), 'approvals'),
             'myRequests' => $myRequests,
             'allRequests' => $allRequests,
-            'totalVisibleRequests' => $user->can('leave.view_all') ? $allRequests->count() : $myRequests->count(),
-            'pendingVisibleRequests' => $user->can('leave.view_all')
-                ? $allRequests->whereIn('status', ['pending_manager', 'pending_ceo'])->count()
-                : $myRequests->whereIn('status', ['pending_manager', 'pending_ceo'])->count(),
-            'approvedVisibleRequests' => $user->can('leave.view_all')
-                ? $allRequests->where('status', 'approved')->count()
-                : $myRequests->where('status', 'approved')->count(),
+            'totalVisibleRequests' => $counts()->count(),
+            'pendingVisibleRequests' => $counts()->whereIn('status', ['pending_manager', 'pending_ceo'])->count(),
+            'approvedVisibleRequests' => $counts()->where('status', 'approved')->count(),
         ];
     }
 };
@@ -85,7 +99,7 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </div>
 
-    @if ($awaitingApproval->isNotEmpty())
+    @if ($awaitingApproval->total() > 0)
         <x-card :padding="false" class="overflow-hidden rounded-2xl">
             <div class="border-b border-ink-200 px-6 py-5 dark:border-white/10">
                 <p class="muted-label">Action Needed</p>
@@ -115,6 +129,12 @@ new #[Layout('layouts.app')] class extends Component
                     </tbody>
                 </table>
             </div>
+
+            @if ($awaitingApproval->hasPages())
+                <div class="border-t border-ink-200 px-5 py-4 dark:border-white/10">
+                    {{ $awaitingApproval->links('components.pagination', ['noun' => 'requests awaiting you']) }}
+                </div>
+            @endif
         </x-card>
     @endif
 
@@ -148,6 +168,12 @@ new #[Layout('layouts.app')] class extends Component
                     </tbody>
                 </table>
             </div>
+
+            @if ($myRequests->hasPages())
+                <div class="border-t border-ink-200 px-5 py-4 dark:border-white/10">
+                    {{ $myRequests->links('components.pagination', ['noun' => 'of your requests']) }}
+                </div>
+            @endif
         </x-card>
     @endif
 
@@ -183,6 +209,12 @@ new #[Layout('layouts.app')] class extends Component
                     </tbody>
                 </table>
             </div>
+
+            @if ($allRequests->hasPages())
+                <div class="border-t border-ink-200 px-5 py-4 dark:border-white/10">
+                    {{ $allRequests->links('components.pagination', ['noun' => 'leave requests']) }}
+                </div>
+            @endif
         </x-card>
     @endif
 </div>

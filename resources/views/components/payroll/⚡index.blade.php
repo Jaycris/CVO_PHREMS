@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\PayrollRun;
 use App\Services\Payroll\PayrollPeriodResolver;
 use App\Services\Payroll\PayrollService;
@@ -9,6 +10,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public bool $showOpen = false;
     public ?string $statusMessage = null;
 
@@ -53,7 +56,7 @@ new #[Layout('layouts.app')] class extends Component
         $resolver = new PayrollPeriodResolver();
 
         return [
-            'runs' => PayrollRun::withCount('payslips')->orderByDesc('pay_date')->orderByDesc('id')->get(),
+            'runs' => PayrollRun::withCount('payslips')->orderByDesc('pay_date')->orderByDesc('id')->paginate($this->perPage()),
             'preview' => $resolver->payDateFor($this->year, $this->month, $this->cutoff),
             'months' => collect(range(1, 12))->mapWithKeys(fn ($m) => [$m => Carbon::create(null, $m, 1)->format('F')]),
             'years' => range((int) now()->year - 1, (int) now()->year + 1),
@@ -125,6 +128,12 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($runs->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $runs->links('components.pagination', ['noun' => 'payroll runs']) }}
+            </div>
+        @endif
     </x-card>
 
     <x-modal :show="$showOpen" onClose="$set('showOpen', false)" maxWidth="lg">

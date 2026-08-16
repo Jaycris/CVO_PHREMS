@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Mail\AccountInviteMail;
 use App\Models\Employee;
 use App\Models\User;
@@ -14,6 +15,8 @@ use Spatie\Permission\Models\Role;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public bool $showForm = false;
     public bool $showConfirmation = false;
     public bool $showAccess = false;
@@ -185,7 +188,7 @@ new #[Layout('layouts.app')] class extends Component
                     ->orWhere('email', 'like', "%{$this->search}%")
                     ->orWhere('user_code', 'like', "%{$this->search}%")))
                 ->orderBy('name')
-                ->get(),
+                ->paginate($this->perPage()),
             // Only employees who don't already have credentials can be picked.
             'availableEmployees' => Employee::whereNull('user_id')->orderBy('employee_id')->get(),
             'roles' => Role::orderBy('name')->pluck('name'),
@@ -273,6 +276,12 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($users->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $users->links('components.pagination', ['noun' => 'users']) }}
+            </div>
+        @endif
     </x-card>
 
     <x-modal :show="$showForm" onClose="closeForm">

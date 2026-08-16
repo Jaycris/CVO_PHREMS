@@ -2,6 +2,7 @@
 
 use App\Models\BirWithholdingBracket;
 use App\Models\PagibigRate;
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\PayrollChangeLog;
 use App\Models\PayrollSetting;
 use App\Models\PhilhealthRate;
@@ -14,6 +15,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public ?string $statusMessage = null;
     public bool $showAdvanced = false;
 
@@ -405,7 +408,7 @@ new #[Layout('layouts.app')] class extends Component
                 ->sortBy(fn ($c) => array_search($c->code, ['sss', 'philhealth', 'pagibig', 'bir']))
                 ->values(),
             'policyGroups' => PayrollSetting::orderBy('group')->orderBy('id')->get()->groupBy('group'),
-            'changeLog' => PayrollChangeLog::latest()->limit(30)->get(),
+            'changeLog' => PayrollChangeLog::latest()->paginate($this->perPage(), pageName: 'log'),
         ];
     }
 };
@@ -803,5 +806,11 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($changeLog->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $changeLog->links('components.pagination', ['noun' => 'changes']) }}
+            </div>
+        @endif
     </x-card>
 </div>

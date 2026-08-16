@@ -1,13 +1,13 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\Position;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
-use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithTablePagination;
 
     public bool $showForm = false;
     public string $title = '';
@@ -17,7 +17,6 @@ new #[Layout('layouts.app')] class extends Component
     public array $permissions = [];
     public ?int $editingId = null;
     public string $search = '';
-    public int $perPage = 10;
 
     public function create(): void
     {
@@ -87,7 +86,7 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         return [
-            'positions' => Position::with('permissions')->search($this->search)->orderBy('title')->paginate($this->perPage),
+            'positions' => Position::with('permissions')->search($this->search)->orderBy('title')->paginate($this->perPage()),
             'totalPositions' => Position::count(),
             'permissionGroups' => config('permissions.groups'),
         ];
@@ -193,7 +192,7 @@ new #[Layout('layouts.app')] class extends Component
 
         @if ($positions->hasPages())
             <div class="border-t border-ink-200 bg-white px-5 py-4 dark:border-white/10 dark:bg-ink-900/40" @click="selected = []">
-                {{ $positions->links('components.pagination') }}
+                {{ $positions->links('components.pagination', ['noun' => 'positions']) }}
             </div>
         @endif
     </x-card>

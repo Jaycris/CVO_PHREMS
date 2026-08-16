@@ -104,6 +104,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/payroll/runs/{run}/export', PayrollRegisterExportController::class)->name('payroll.export');
     });
 
+    Route::middleware('can:app.settings.manage')->group(function () {
+        Route::livewire('/settings', 'settings')->name('settings');
+    });
+
     Route::middleware('can:reports.view')->group(function () {
         Route::livewire('/reports/attendance-summary', 'reports.attendance-summary')->name('reports.attendance-summary');
         Route::get('/reports/employees/export', EmployeeExportController::class)->name('reports.employees.export');

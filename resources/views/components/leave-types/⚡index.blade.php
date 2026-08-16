@@ -1,11 +1,14 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\LeaveType;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public bool $showForm = false;
     public string $name = '';
     public string $code = '';
@@ -95,7 +98,7 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         return [
-            'leaveTypes' => LeaveType::orderBy('name')->get(),
+            'leaveTypes' => LeaveType::orderBy('name')->paginate($this->perPage()),
         ];
     }
 };
@@ -151,6 +154,12 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($leaveTypes->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $leaveTypes->links('components.pagination', ['noun' => 'leave types']) }}
+            </div>
+        @endif
     </x-card>
 
     <x-modal :show="$showForm" onClose="closeForm" maxWidth="lg">

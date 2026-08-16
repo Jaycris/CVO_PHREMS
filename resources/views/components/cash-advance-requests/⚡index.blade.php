@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\CashAdvanceRequest;
 use App\Services\CashAdvanceService;
 use Illuminate\Support\Facades\Auth;
@@ -9,6 +10,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public bool $showForm = false;
     public bool $showDecision = false;
     public ?string $statusMessage = null;
@@ -135,17 +138,24 @@ new #[Layout('layouts.app')] class extends Component
         $service = app(CashAdvanceService::class);
         $isBackOffice = $user->can('cash_advances.view_all');
 
+        // Each table pages on its own name, so paging one leaves the rest be.
+        $empty = fn (string $name) => new \Illuminate\Pagination\LengthAwarePaginator([], 0, $this->perPage(), 1, ['pageName' => $name]);
+
         return [
             // Anyone who can approve or amend needs to see what is waiting.
             'queue' => ($service->canApprove($user) || $service->canAmend($user))
-                ? CashAdvanceRequest::with('employee')->where('status', 'pending')->oldest()->get()
-                : collect(),
+                ? CashAdvanceRequest::with('employee')->where('status', 'pending')->oldest()
+                    ->paginate($this->perPage(), pageName: 'queue')
+                : $empty('queue'),
             'myRequests' => $user->employee
-                ? CashAdvanceRequest::where('employee_id', $user->employee->id)->latest()->get()
-                : collect(),
+                ? CashAdvanceRequest::where('employee_id', $user->employee->id)->latest()
+                    ->paginate($this->perPage(), pageName: 'mine')
+                : $empty('mine'),
+            // Was capped at 50, which quietly hid everything older.
             'allRequests' => $isBackOffice
-                ? CashAdvanceRequest::with('employee')->latest()->limit(50)->get()
-                : collect(),
+                ? CashAdvanceRequest::with('employee')->latest()
+                    ->paginate($this->perPage(), pageName: 'all')
+                : $empty('all'),
             'deciding' => $this->decidingId ? CashAdvanceRequest::with('employee')->find($this->decidingId) : null,
             'plans' => CashAdvanceRequest::deductionPlans(),
             'maxAmount' => $service->maxRequestAmount(),
@@ -175,7 +185,7 @@ new #[Layout('layouts.app')] class extends Component
         <div class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{{ $statusMessage }}</div>
     @endif
 
-    @if ($queue->isNotEmpty())
+    @if ($queue->total() > 0)
         <x-card :padding="false">
             <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
                 <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">
@@ -220,8 +230,16 @@ new #[Layout('layouts.app')] class extends Component
                     </tbody>
                 </table>
             </div>
+
+            @if ($queue->hasPages())
+                <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                    {{ $queue->links('components.pagination', ['noun' => 'requests waiting']) }}
+                </div>
+            @endif
         </x-card>
     @endif
+
+    @php($listed = $isBackOffice ? $allRequests : $myRequests)
 
     <x-card :padding="false">
         <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
@@ -243,7 +261,7 @@ new #[Layout('layouts.app')] class extends Component
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
-                    @forelse (($isBackOffice ? $allRequests : $myRequests) as $request)
+                    @forelse ($listed as $request)
                         <tr wire:key="car-{{ $request->id }}">
                             @if ($isBackOffice)
                                 <td class="px-4 py-3 font-medium text-[#65758c] dark:text-white">{{ $request->employee->fullName() ?: $request->employee->employee_id }}</td>
@@ -271,6 +289,12 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($listed->hasPages())
+            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                {{ $listed->links('components.pagination', ['noun' => 'cash advance requests']) }}
+            </div>
+        @endif
     </x-card>
 
     <x-modal :show="$showForm" onClose="$set('showForm', false)" maxWidth="lg">

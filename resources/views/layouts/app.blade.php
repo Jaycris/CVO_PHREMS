@@ -117,6 +117,11 @@
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Reports</p>
                         <x-nav-link :href="route('reports.attendance-summary')" :active="request()->routeIs('reports.attendance-summary')" icon="chart">Attendance Summary</x-nav-link>
                     @endcan
+
+                    @can('app.settings.manage')
+                        <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">System</p>
+                        <x-nav-link :href="route('settings')" :active="request()->routeIs('settings')" icon="tag">Settings</x-nav-link>
+                    @endcan
                 </nav>
             </aside>
 
@@ -149,6 +154,7 @@
                         request()->routeIs('payroll.payslip') => 'Payslip',
                         request()->routeIs('payroll.*') => 'Payroll',
                         request()->routeIs('reports.attendance-summary') => 'Attendance Summary',
+                        request()->routeIs('settings') => 'System Settings',
                         default => $title ?? '',
                     };
                 @endphp
