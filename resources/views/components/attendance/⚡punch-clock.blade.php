@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithTablePagination;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
 use Illuminate\Support\Facades\Auth;
@@ -8,6 +9,8 @@ use Livewire\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithTablePagination;
+
     public Employee $employee;
     public ?string $errorMessage = null;
 
@@ -60,6 +63,9 @@ new #[Layout('layouts.app')] class extends Component
         if (! array_key_exists($this->viewMonth, $this->selectableMonths())) {
             $this->viewMonth = now('Asia/Manila')->format('Y-m');
         }
+
+        // Otherwise picking a short month while on page 2 lands on nothing.
+        $this->resetPage('days');
     }
 
     public function openDay(): ?AttendanceDay
@@ -201,6 +207,14 @@ new #[Layout('layouts.app')] class extends Component
             $monthTotals['unclosed'] += $d->time_out ? 0 : 1;
         }
 
+        /*
+         * The whole month is fetched, totalled, and only then split into pages.
+         * The summary above the table has to describe the month, not the ten
+         * rows on screen — paging the query instead would make "total late"
+         * change every time you pressed Next.
+         */
+        $pagedDays = $this->paginateCollection($monthDays, 'days');
+
         $overtimeHours = (float) \App\Models\OvertimeRequest::where('employee_id', $this->employee->id)
             ->where('status', 'approved')
             ->whereDate('work_date', '>=', $month->toDateString())
@@ -246,7 +260,7 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'day' => $day,
             'onBreak' => $day?->openBreak() !== null,
-            'monthDays' => $monthDays,
+            'monthDays' => $pagedDays,
             'monthTotals' => $monthTotals,
             'monthOvertime' => $overtimeHours,
             'viewingMonth' => $month,
@@ -532,5 +546,11 @@ new #[Layout('layouts.app')] class extends Component
                 </tbody>
             </table>
         </div>
+
+        @if ($monthDays->hasPages())
+            <div class="border-t border-ink-200 px-5 py-4 dark:border-white/10">
+                {{ $monthDays->links('components.pagination', ['noun' => 'days in ' . $viewingMonth->format('F')]) }}
+            </div>
+        @endif
     </x-card>
 </div>
