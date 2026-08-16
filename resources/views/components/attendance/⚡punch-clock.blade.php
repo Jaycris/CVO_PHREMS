@@ -25,24 +25,34 @@ new #[Layout('layouts.app')] class extends Component
     }
 
     /**
-     * Steps a month at a time, held between the month they were hired and the
-     * month in progress. There is nothing to see outside that range, and a
-     * button that leads nowhere is worse than no button.
+     * The months worth offering: the month they were hired through the month in
+     * progress, newest first. There is nothing to see outside that range.
      */
-    public function shiftMonth(int $months): void
+    public function selectableMonths(): array
     {
-        $target = \Illuminate\Support\Carbon::createFromFormat('Y-m', $this->viewMonth)
-            ->startOfMonth()
-            ->addMonthsNoOverflow($months);
+        $cursor = now('Asia/Manila')->startOfMonth();
+        $earliest = ($this->employee->hire_date ?? $cursor)->copy()->startOfMonth();
 
-        $earliest = ($this->employee->hire_date ?? now())->copy()->startOfMonth();
-        $latest = now('Asia/Manila')->startOfMonth();
+        $months = [];
 
-        if ($target->lt($earliest) || $target->gt($latest)) {
-            return;
+        while ($cursor->gte($earliest)) {
+            $months[$cursor->format('Y-m')] = $cursor->format('F Y');
+            $cursor = $cursor->copy()->subMonthNoOverflow();
         }
 
-        $this->viewMonth = $target->format('Y-m');
+        return $months;
+    }
+
+    /**
+     * The month comes off a dropdown, but Livewire will accept whatever the
+     * browser sends it. An unrecognised value falls back to the month in
+     * progress rather than reaching Carbon and throwing.
+     */
+    public function updatedViewMonth(): void
+    {
+        if (! array_key_exists($this->viewMonth, $this->selectableMonths())) {
+            $this->viewMonth = now('Asia/Manila')->format('Y-m');
+        }
     }
 
     public function openDay(): ?AttendanceDay
@@ -234,9 +244,7 @@ new #[Layout('layouts.app')] class extends Component
             'monthOvertime' => $overtimeHours,
             'viewingMonth' => $month,
             'assignmentFor' => $assignmentFor,
-            'canGoBack' => $month->copy()->subMonthNoOverflow()
-                ->gte(($this->employee->hire_date ?? now())->copy()->startOfMonth()),
-            'canGoForward' => $month->lt(now('Asia/Manila')->startOfMonth()),
+            'monthOptions' => $this->selectableMonths(),
             'today' => $today,
             'schedule' => $scheduleAssignment?->workSchedule,
             'currentPeriod' => $current,
@@ -433,20 +441,19 @@ new #[Layout('layouts.app')] class extends Component
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-bold text-ink-950 dark:text-white">My Attendance History</h2>
-                    <p class="mt-1 text-sm font-medium text-[#526783] dark:text-ink-400">
-                        {{ $viewingMonth->format('F Y') }}
+                    <p class="mt-1 text-sm font-medium text-[#778599]">
+                        Pick a month to see the days recorded in it.
                     </p>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <button wire:click="shiftMonth(-1)" @disabled(! $canGoBack)
-                            class="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm font-medium text-[#526783] shadow-sm transition hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-ink-900 dark:text-ink-300 dark:hover:bg-white/5">
-                        &larr; Earlier
-                    </button>
-                    <button wire:click="shiftMonth(1)" @disabled(! $canGoForward)
-                            class="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm font-medium text-[#526783] shadow-sm transition hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-ink-900 dark:text-ink-300 dark:hover:bg-white/5">
-                        Later &rarr;
-                    </button>
+                <div>
+                    <label for="attendance-month" class="sr-only">Month</label>
+                    <select id="attendance-month" wire:model.live="viewMonth"
+                            class="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm font-semibold text-[#526783] shadow-sm transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                        @foreach ($monthOptions as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
                 </div>
             </div>
 
