@@ -25,22 +25,29 @@ new #[Layout('layouts.app')] class extends Component
     }
 
     /**
-     * The months worth offering: the month they were hired through the month in
-     * progress, newest first. There is nothing to see outside that range.
+     * Only the months that actually hold attendance, newest first, plus the
+     * month in progress so there is always something selected.
+     *
+     * Counting back from the hire date instead would list months from before
+     * the company kept attendance here at all — someone hired in January would
+     * be offered January through June and find every one of them empty.
      */
     public function selectableMonths(): array
     {
-        $cursor = now('Asia/Manila')->startOfMonth();
-        $earliest = ($this->employee->hire_date ?? $cursor)->copy()->startOfMonth();
+        $current = now('Asia/Manila')->startOfMonth();
 
-        $months = [];
-
-        while ($cursor->gte($earliest)) {
-            $months[$cursor->format('Y-m')] = $cursor->format('F Y');
-            $cursor = $cursor->copy()->subMonthNoOverflow();
-        }
-
-        return $months;
+        return $this->employee->attendanceDays()
+            ->select('work_date')
+            ->distinct()
+            ->pluck('work_date')
+            ->map(fn ($date) => \Illuminate\Support\Carbon::parse($date)->format('Y-m'))
+            ->prepend($current->format('Y-m'))
+            ->unique()
+            ->sortDesc()
+            ->mapWithKeys(fn ($month) => [
+                $month => \Illuminate\Support\Carbon::createFromFormat('Y-m', $month)->format('F Y'),
+            ])
+            ->all();
     }
 
     /**
