@@ -144,7 +144,11 @@ new #[Layout('layouts.app')] class extends Component
                                 <td class="px-4 py-3 font-medium text-[#778599]">{{ $request->reason ?: '—' }}</td>
                                 <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599]">{{ $request->created_at->format('M j, Y') }}</td>
                                 <td class="px-4 py-3 text-right">
-                                    <button wire:click="review({{ $request->id }})" class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Review</button>
+                                    {{-- Opens the panel immediately; the server
+                                         call behind it only loads the record. --}}
+                                    <button wire:click="review({{ $request->id }})"
+                                            @click="$wire.showDecision = true"
+                                            class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Review</button>
                                 </td>
                             </tr>
                         @endforeach
@@ -214,8 +218,12 @@ new #[Layout('layouts.app')] class extends Component
         @endif
     </x-card>
 
-    <x-modal :show="$showDecision" onClose="closeDecision" maxWidth="lg">
-        @if ($deciding)
+    <x-modal wire="showDecision" onClose="closeDecision" maxWidth="lg">
+        {{-- The panel is on screen before the record arrives, so it says so
+             rather than showing an empty box. --}}
+        @unless ($deciding)
+            <p class="py-6 text-center text-sm font-medium text-[#778599]">Loading…</p>
+        @else
             <h2 class="text-lg font-bold text-[#0f172a] dark:text-white">
                 {{ $deciding->employee->fullName() ?: $deciding->employee->employee_id }}
             </h2>
@@ -261,10 +269,15 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             <div class="mt-5 flex flex-wrap gap-2">
-                <x-button wire:click="decide(true)" wire:confirm="Approve this change? Future salary goes to the new account.">Approve</x-button>
-                <x-button wire:click="decide(false)" variant="secondary">Decline</x-button>
-                <x-button wire:click="closeDecision" variant="secondary">Cancel</x-button>
+                <x-button wire:click="decide(true)"
+                          wire:confirm="Approve this change? Future salary goes to the new account."
+                          wire:loading.attr="disabled" wire:target="decide">
+                    <span wire:loading.remove wire:target="decide">Approve</span>
+                    <span wire:loading wire:target="decide">Saving…</span>
+                </x-button>
+                <x-button wire:click="decide(false)" wire:loading.attr="disabled" wire:target="decide" variant="secondary">Decline</x-button>
+                <x-button wire:click="closeDecision" @click="open = false" variant="secondary">Cancel</x-button>
             </div>
-        @endif
+        @endunless
     </x-modal>
 </div>

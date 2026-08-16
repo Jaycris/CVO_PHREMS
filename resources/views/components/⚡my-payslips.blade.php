@@ -102,40 +102,118 @@ new #[Layout('layouts.app')] class extends Component
             <p class="text-sm font-medium text-[#778599]">Your account is not linked to an employee record yet. Ask HR to sort it out.</p>
         </x-card>
     @else
-        <x-card :padding="false">
+        <x-card :padding="false" class="relative overflow-hidden rounded-2xl" x-data="{ selected: [] }">
+            <div
+                wire:loading.flex
+                wire:target="open"
+                class="absolute inset-x-0 top-0 z-10 h-1 overflow-hidden bg-brand-50 dark:bg-brand-950/40"
+            >
+                <div class="h-full w-1/3 animate-[payslip-loader_0.9s_ease-in-out_infinite] rounded-r-full bg-brand-700 dark:bg-brand-300"></div>
+            </div>
+
+            <div class="flex flex-col gap-4 border-b border-ink-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+                <div>
+                    <h2 class="text-lg font-bold text-ink-950 dark:text-white">My Payslips Directory</h2>
+                </div>
+
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div class="flex items-center gap-2">
+                        <x-icon-button icon="eye" disabled title="Open a payslip row to view details" />
+                    </div>
+
+                    <label class="relative block sm:w-80">
+                        <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                        <input
+                            type="text"
+                            placeholder="Search payslips..."
+                            disabled
+                            class="block h-10 w-full rounded-lg border border-ink-200 bg-white pl-9 pr-3.5 text-sm font-medium text-ink-700 shadow-sm placeholder:text-ink-400 disabled:opacity-100 dark:border-white/10 dark:bg-ink-900 dark:text-white"
+                        >
+                    </label>
+                </div>
+            </div>
+
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-                    <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
+                <table class="min-w-full divide-y divide-ink-200 text-sm dark:divide-white/10">
+                    <thead class="bg-ink-50/80 dark:bg-white/[0.03]">
                         <tr>
-                            <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Period</th>
-                            <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Paid on</th>
-                            <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Gross</th>
-                            <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Deductions</th>
-                            <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Take home</th>
+                            <th class="w-14 px-6 py-4 text-left">
+                                <input
+                                    type="checkbox"
+                                    class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
+                                    @change="selected = $event.target.checked ? @js($payslips->getCollection()->pluck('id')->values()) : []"
+                                    :checked="selected.length === @js($payslips->count()) && @js($payslips->count()) > 0"
+                                >
+                            </th>
+                            <th class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Period</th>
+                            <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Paid On</th>
+                            <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Gross</th>
+                            <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Deductions</th>
+                            <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Take Home</th>
                             <th class="px-4 py-4"></th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                    <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
                         @forelse ($payslips as $payslip)
-                            <tr wire:key="mine-{{ $payslip->id }}">
-                                <td class="px-4 py-3 font-medium text-[#65758c] dark:text-white">{{ $payslip->payrollRun->periodLabel() }}</td>
-                                <td class="px-4 py-3 font-medium text-[#778599]">{{ $payslip->payrollRun->pay_date->format('M j, Y') }}</td>
-                                <td class="px-4 py-3 text-right font-medium text-[#778599] tabular-nums">₱{{ number_format((float) $payslip->gross_pay, 2) }}</td>
-                                <td class="px-4 py-3 text-right font-medium text-[#778599] tabular-nums">₱{{ number_format((float) $payslip->total_deductions, 2) }}</td>
-                                <td class="px-4 py-3 text-right font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $payslip->net_pay, 2) }}</td>
-                                <td class="px-4 py-3 text-right">
-                                    <button wire:click="open({{ $payslip->id }})" class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View</button>
+                            <tr
+                                wire:key="mine-{{ $payslip->id }}"
+                                wire:click="open({{ $payslip->id }})"
+                                wire:loading.class="opacity-70"
+                                wire:target="open({{ $payslip->id }})"
+                                class="cursor-pointer transition duration-200 hover:-translate-y-px hover:bg-brand-50/50 hover:shadow-sm active:scale-[0.998] dark:hover:bg-white/[0.03]"
+                                x-bind:class="selected.includes({{ $payslip->id }}) ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''"
+                            >
+                                <td class="px-6 py-4" @click.stop>
+                                    <input
+                                        type="checkbox"
+                                        value="{{ $payslip->id }}"
+                                        x-model.number="selected"
+                                        class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
+                                    >
+                                </td>
+                                <td class="whitespace-nowrap px-6 py-4 font-bold text-ink-800 dark:text-white">{{ $payslip->payrollRun->periodLabel() }}</td>
+                                <td class="whitespace-nowrap px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $payslip->payrollRun->pay_date->format('M j, Y') }}</td>
+                                <td class="whitespace-nowrap px-4 py-4 text-right font-medium text-ink-600 tabular-nums dark:text-ink-300">₱{{ number_format((float) $payslip->gross_pay, 2) }}</td>
+                                <td class="whitespace-nowrap px-4 py-4 text-right font-medium text-ink-600 tabular-nums dark:text-ink-300">₱{{ number_format((float) $payslip->total_deductions, 2) }}</td>
+                                <td class="whitespace-nowrap px-4 py-4 text-right font-bold text-ink-950 tabular-nums dark:text-white">₱{{ number_format((float) $payslip->net_pay, 2) }}</td>
+                                <td class="whitespace-nowrap px-6 py-4 text-right">
+                                    <button
+                                        type="button"
+                                        wire:click.stop="open({{ $payslip->id }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="open({{ $payslip->id }})"
+                                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-ink-50 hover:text-brand-700 hover:shadow-md active:translate-y-0 disabled:pointer-events-none disabled:opacity-80 dark:border-white/10 dark:bg-ink-900 dark:text-ink-300 dark:hover:bg-white/10"
+                                        title="View payslip"
+                                    >
+                                        <span wire:loading.remove wire:target="open({{ $payslip->id }})">
+                                            <x-icon name="eye" class="h-4 w-4" />
+                                        </span>
+                                        <span
+                                            wire:loading
+                                            wire:target="open({{ $payslip->id }})"
+                                            class="h-4 w-4 animate-spin rounded-full border-2 border-ink-200 border-t-brand-700 dark:border-white/20 dark:border-t-brand-300"
+                                            aria-hidden="true"
+                                        ></span>
+                                    </button>
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="px-4 py-10 text-center font-medium text-[#778599]">No payslips yet.</td></tr>
+                            <tr>
+                                <td colspan="7" class="px-6 py-16 text-center">
+                                    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                                        <x-icon name="document" class="h-7 w-7" />
+                                    </div>
+                                    <p class="mt-4 text-base font-bold text-ink-950 dark:text-white">No payslips yet</p>
+                                    <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Released payslips will appear here after HR sends them.</p>
+                                </td>
+                            </tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
 
             @if ($payslips->hasPages())
-                <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                <div class="border-t border-ink-200 px-6 py-4 dark:border-white/10">
                     {{ $payslips->links('components.pagination', ['noun' => 'payslips']) }}
                 </div>
             @endif
@@ -144,81 +222,90 @@ new #[Layout('layouts.app')] class extends Component
 
     <x-modal :show="(bool) $open" onClose="closePayslip" maxWidth="2xl">
         @if ($open)
-            <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h2 class="text-lg font-bold text-[#0f172a] dark:text-white">{{ $open->payrollRun->periodLabel() }}</h2>
-                    <p class="text-sm font-medium text-[#778599]">Paid {{ $open->payrollRun->pay_date->format('F j, Y') }}</p>
-                </div>
-                <x-badge :color="$open->payrollRun->status === 'paid' ? 'green' : 'brand'">
-                    {{ $open->payrollRun->status === 'paid' ? 'Paid' : 'Ready' }}
-                </x-badge>
-            </div>
-
-            <div class="mb-5 grid grid-cols-2 gap-3 rounded-lg bg-[#f8fafc] p-3 text-sm sm:grid-cols-4 dark:bg-neutral-800/50">
-                @foreach ([
-                    'Days worked' => $open->days_present . ' / ' . $open->days_expected,
-                    'Absent' => $open->days_absent,
-                    'Late' => $open->late_minutes . ' min',
-                    'Overtime' => rtrim(rtrim(number_format((float) $open->overtime_hours, 2), '0'), '.') . ' h',
-                ] as $label => $value)
+            <div
+                x-data="{ ready: false }"
+                x-init="requestAnimationFrame(() => ready = true)"
+                x-show="ready"
+                x-transition:enter="ease-out duration-200"
+                x-transition:enter-start="opacity-0 translate-y-3 scale-[0.98]"
+                x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+            >
+                <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <p class="text-xs font-medium text-[#778599]">{{ $label }}</p>
-                        <p class="mt-0.5 font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $value }}</p>
+                        <h2 class="text-lg font-bold text-[#0f172a] dark:text-white">{{ $open->payrollRun->periodLabel() }}</h2>
+                        <p class="text-sm font-medium text-[#778599]">Paid {{ $open->payrollRun->pay_date->format('F j, Y') }}</p>
                     </div>
-                @endforeach
-            </div>
+                    <x-badge :color="$open->payrollRun->status === 'paid' ? 'green' : 'brand'">
+                        {{ $open->payrollRun->status === 'paid' ? 'Paid' : 'Ready' }}
+                    </x-badge>
+                </div>
 
-            <div class="space-y-4">
-                <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Earnings</p>
-                    <div class="mt-2 divide-y divide-neutral-100 dark:divide-neutral-800">
-                        @foreach ($earnings as $line)
-                            <div class="flex items-baseline justify-between gap-4 py-2">
-                                <div>
-                                    <span class="text-sm font-medium text-[#65758c] dark:text-neutral-300">{{ $line->label }}</span>
-                                    @if ($line->detail)<span class="ml-1 text-xs font-medium text-[#778599]">{{ $line->detail }}</span>@endif
+                <div class="mb-5 grid grid-cols-2 gap-3 rounded-lg bg-[#f8fafc] p-3 text-sm sm:grid-cols-4 dark:bg-neutral-800/50">
+                    @foreach ([
+                        'Days worked' => $open->days_present . ' / ' . $open->days_expected,
+                        'Absent' => $open->days_absent,
+                        'Late' => $open->late_minutes . ' min',
+                        'Overtime' => rtrim(rtrim(number_format((float) $open->overtime_hours, 2), '0'), '.') . ' h',
+                    ] as $label => $value)
+                        <div>
+                            <p class="text-xs font-medium text-[#778599]">{{ $label }}</p>
+                            <p class="mt-0.5 font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $value }}</p>
+                        </div>
+                    @endforeach
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Earnings</p>
+                        <div class="mt-2 divide-y divide-neutral-100 dark:divide-neutral-800">
+                            @foreach ($earnings as $line)
+                                <div class="flex items-baseline justify-between gap-4 py-2">
+                                    <div>
+                                        <span class="text-sm font-medium text-[#65758c] dark:text-neutral-300">{{ $line->label }}</span>
+                                        @if ($line->detail)<span class="ml-1 text-xs font-medium text-[#778599]">{{ $line->detail }}</span>@endif
+                                    </div>
+                                    <span class="text-sm font-medium tabular-nums {{ (float) $line->amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-[#0f172a] dark:text-white' }}">
+                                        ₱{{ number_format((float) $line->amount, 2) }}
+                                    </span>
                                 </div>
-                                <span class="text-sm font-medium tabular-nums {{ (float) $line->amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-[#0f172a] dark:text-white' }}">
-                                    ₱{{ number_format((float) $line->amount, 2) }}
-                                </span>
+                            @endforeach
+                            <div class="flex items-baseline justify-between gap-4 py-2">
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white">Gross pay</span>
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $open->gross_pay, 2) }}</span>
                             </div>
-                        @endforeach
-                        <div class="flex items-baseline justify-between gap-4 py-2">
-                            <span class="text-sm font-bold text-[#0f172a] dark:text-white">Gross pay</span>
-                            <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $open->gross_pay, 2) }}</span>
                         </div>
                     </div>
-                </div>
 
-                <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Deductions</p>
-                    <div class="mt-2 divide-y divide-neutral-100 dark:divide-neutral-800">
-                        @forelse ($deductions as $line)
-                            <div class="flex items-baseline justify-between gap-4 py-2">
-                                <div>
-                                    <span class="text-sm font-medium text-[#65758c] dark:text-neutral-300">{{ $line->label }}</span>
-                                    @if ($line->detail)<span class="ml-1 text-xs font-medium text-[#778599]">{{ $line->detail }}</span>@endif
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Deductions</p>
+                        <div class="mt-2 divide-y divide-neutral-100 dark:divide-neutral-800">
+                            @forelse ($deductions as $line)
+                                <div class="flex items-baseline justify-between gap-4 py-2">
+                                    <div>
+                                        <span class="text-sm font-medium text-[#65758c] dark:text-neutral-300">{{ $line->label }}</span>
+                                        @if ($line->detail)<span class="ml-1 text-xs font-medium text-[#778599]">{{ $line->detail }}</span>@endif
+                                    </div>
+                                    <span class="text-sm font-medium text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $line->amount, 2) }}</span>
                                 </div>
-                                <span class="text-sm font-medium text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $line->amount, 2) }}</span>
+                            @empty
+                                <p class="py-2 text-sm font-medium text-[#778599]">Nothing deducted.</p>
+                            @endforelse
+                            <div class="flex items-baseline justify-between gap-4 py-2">
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white">Total deductions</span>
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $open->total_deductions, 2) }}</span>
                             </div>
-                        @empty
-                            <p class="py-2 text-sm font-medium text-[#778599]">Nothing deducted.</p>
-                        @endforelse
-                        <div class="flex items-baseline justify-between gap-4 py-2">
-                            <span class="text-sm font-bold text-[#0f172a] dark:text-white">Total deductions</span>
-                            <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $open->total_deductions, 2) }}</span>
                         </div>
+                    </div>
+
+                    <div class="flex items-baseline justify-between gap-4 rounded-lg bg-brand-50 px-4 py-3 dark:bg-brand-900/20">
+                        <span class="text-base font-bold text-[#0f172a] dark:text-white">Take home</span>
+                        <span class="text-2xl font-bold text-brand-700 dark:text-brand-300 tabular-nums">₱{{ number_format((float) $open->net_pay, 2) }}</span>
                     </div>
                 </div>
 
-                <div class="flex items-baseline justify-between gap-4 rounded-lg bg-brand-50 px-4 py-3 dark:bg-brand-900/20">
-                    <span class="text-base font-bold text-[#0f172a] dark:text-white">Take home</span>
-                    <span class="text-2xl font-bold text-brand-700 dark:text-brand-300 tabular-nums">₱{{ number_format((float) $open->net_pay, 2) }}</span>
+                <div class="mt-5 flex gap-2">
+                    <x-button variant="secondary" x-on:click="$dispatch('close-modal-visual')" wire:click="closePayslip">Close</x-button>
                 </div>
-            </div>
-
-            <div class="mt-5 flex gap-2">
-                <x-button variant="secondary" wire:click="closePayslip">Close</x-button>
             </div>
         @endif
     </x-modal>

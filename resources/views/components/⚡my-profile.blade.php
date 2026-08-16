@@ -335,7 +335,13 @@ new #[Layout('layouts.app')] class extends Component
                     </div>
 
                     @unless ($pendingBankRequest)
-                        <x-button wire:click="openBankForm" variant="secondary" class="h-10 px-4">
+                        {{-- The click paints the modal straight away; the server
+                             call behind it only fills in the bank and account
+                             name. Waiting for that first made the button look
+                             broken. --}}
+                        <x-button wire:click="openBankForm"
+                                  @click="$wire.showBankForm = true"
+                                  variant="secondary" class="h-10 px-4">
                             <x-icon name="pencil" class="h-4 w-4" />
                             {{ $employee->hasBankDetails() ? 'Request a change' : 'Add bank details' }}
                         </x-button>
@@ -450,7 +456,7 @@ new #[Layout('layouts.app')] class extends Component
         </aside>
     </div>
 
-    <x-modal :show="$showBankForm" onClose="closeBankForm" maxWidth="lg">
+    <x-modal wire="showBankForm" onClose="closeBankForm" maxWidth="lg">
         <h2 class="text-lg font-bold text-ink-950 dark:text-white">
             {{ $employee->hasBankDetails() ? 'Request a bank detail change' : 'Add your bank details' }}
         </h2>
@@ -500,11 +506,16 @@ new #[Layout('layouts.app')] class extends Component
             @endif
         </div>
 
+        {{-- Saving genuinely needs the server, so the button says so while it
+             waits rather than sitting there looking untouched. --}}
         <div class="mt-6 flex flex-wrap gap-2">
-            <x-button wire:click="saveBankDetails">
-                {{ $employee->hasBankDetails() ? 'Send to HR' : 'Save' }}
+            <x-button wire:click="saveBankDetails" wire:loading.attr="disabled" wire:target="saveBankDetails">
+                <span wire:loading.remove wire:target="saveBankDetails">
+                    {{ $employee->hasBankDetails() ? 'Send to HR' : 'Save' }}
+                </span>
+                <span wire:loading wire:target="saveBankDetails">Saving…</span>
             </x-button>
-            <x-button wire:click="closeBankForm" variant="secondary">Cancel</x-button>
+            <x-button wire:click="closeBankForm" @click="open = false" variant="secondary">Cancel</x-button>
         </div>
     </x-modal>
 
