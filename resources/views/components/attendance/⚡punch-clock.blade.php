@@ -11,6 +11,9 @@ new #[Layout('layouts.app')] class extends Component
     public Employee $employee;
     public ?string $errorMessage = null;
 
+    /** The month being looked at, as Y-m. Defaults to the one in progress. */
+    public string $viewMonth = '';
+
     public function mount(): void
     {
         $employee = Auth::user()->employee;
@@ -18,6 +21,28 @@ new #[Layout('layouts.app')] class extends Component
         abort_unless($employee, 403, 'No employee profile is linked to your account.');
 
         $this->employee = $employee;
+        $this->viewMonth = now('Asia/Manila')->format('Y-m');
+    }
+
+    /**
+     * Steps a month at a time, held between the month they were hired and the
+     * month in progress. There is nothing to see outside that range, and a
+     * button that leads nowhere is worse than no button.
+     */
+    public function shiftMonth(int $months): void
+    {
+        $target = \Illuminate\Support\Carbon::createFromFormat('Y-m', $this->viewMonth)
+            ->startOfMonth()
+            ->addMonthsNoOverflow($months);
+
+        $earliest = ($this->employee->hire_date ?? now())->copy()->startOfMonth();
+        $latest = now('Asia/Manila')->startOfMonth();
+
+        if ($target->lt($earliest) || $target->gt($latest)) {
+            return;
+        }
+
+        $this->viewMonth = $target->format('Y-m');
     }
 
     public function openDay(): ?AttendanceDay
@@ -114,7 +139,56 @@ new #[Layout('layouts.app')] class extends Component
         $day = $this->openDay();
         $today = now('Asia/Manila');
         $scheduleAssignment = $this->employee->scheduleAssignmentForDate($today);
-        $recentDays = $this->employee->attendanceDays()->latest('work_date')->limit(10)->get();
+        /*
+         * A whole month rather than the last ten days. Someone checking whether
+         * a shift was recorded is usually looking at a payslip that covers a
+         * fortnight, so ten rows was never enough to answer the question.
+         *
+         * The month's schedule assignments are loaded once and matched in
+         * memory, the same reason the payroll aggregator does it — otherwise
+         * every row asks the database for its own schedule twice over.
+         */
+        $month = \Illuminate\Support\Carbon::createFromFormat('Y-m', $this->viewMonth)->startOfMonth();
+
+        $monthDays = $this->employee->attendanceDays()
+            ->with('breaks')
+            ->whereDate('work_date', '>=', $month->toDateString())
+            ->whereDate('work_date', '<=', $month->copy()->endOfMonth()->toDateString())
+            ->orderByDesc('work_date')
+            ->get();
+
+        $assignments = \App\Models\EmployeeScheduleAssignment::with('workSchedule')
+            ->where('employee_id', $this->employee->id)
+            ->orderByDesc('effective_start_date')
+            ->orderByDesc('id')
+            ->get();
+
+        $assignmentFor = fn ($date) => $assignments->first(function ($a) use ($date) {
+            $on = $date->toDateString();
+
+            return $a->effective_start_date->toDateString() <= $on
+                && ($a->effective_end_date === null || $a->effective_end_date->toDateString() >= $on);
+        });
+
+        $monthTotals = [
+            'days' => $monthDays->count(),
+            'late' => 0,
+            'over_break' => 0,
+            'unclosed' => 0,
+        ];
+
+        foreach ($monthDays as $d) {
+            $assignment = $assignmentFor($d->work_date);
+            $monthTotals['late'] += (int) ($d->lateMinutes($assignment) ?? 0);
+            $monthTotals['over_break'] += $d->overBreakMinutes($assignment);
+            $monthTotals['unclosed'] += $d->time_out ? 0 : 1;
+        }
+
+        $overtimeHours = (float) \App\Models\OvertimeRequest::where('employee_id', $this->employee->id)
+            ->where('status', 'approved')
+            ->whereDate('work_date', '>=', $month->toDateString())
+            ->whereDate('work_date', '<=', $month->copy()->endOfMonth()->toDateString())
+            ->sum('hours_approved');
 
         /*
          * Payroll status is answered once for the period rather than once per
@@ -155,7 +229,14 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'day' => $day,
             'onBreak' => $day?->openBreak() !== null,
-            'recentDays' => $recentDays,
+            'monthDays' => $monthDays,
+            'monthTotals' => $monthTotals,
+            'monthOvertime' => $overtimeHours,
+            'viewingMonth' => $month,
+            'assignmentFor' => $assignmentFor,
+            'canGoBack' => $month->copy()->subMonthNoOverflow()
+                ->gte(($this->employee->hire_date ?? now())->copy()->startOfMonth()),
+            'canGoForward' => $month->lt(now('Asia/Manila')->startOfMonth()),
             'today' => $today,
             'schedule' => $scheduleAssignment?->workSchedule,
             'currentPeriod' => $current,
@@ -349,7 +430,47 @@ new #[Layout('layouts.app')] class extends Component
 
     <x-card :padding="false" class="overflow-hidden rounded-2xl">
         <div class="border-b border-ink-200 px-6 py-5 dark:border-white/10">
-            <h2 class="text-xl font-bold text-ink-950 dark:text-white">Recent Attendance</h2>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-xl font-bold text-ink-950 dark:text-white">My Attendance History</h2>
+                    <p class="mt-1 text-sm font-medium text-[#526783] dark:text-ink-400">
+                        {{ $viewingMonth->format('F Y') }}
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button wire:click="shiftMonth(-1)" @disabled(! $canGoBack)
+                            class="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm font-medium text-[#526783] shadow-sm transition hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-ink-900 dark:text-ink-300 dark:hover:bg-white/5">
+                        &larr; Earlier
+                    </button>
+                    <button wire:click="shiftMonth(1)" @disabled(! $canGoForward)
+                            class="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm font-medium text-[#526783] shadow-sm transition hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-ink-900 dark:text-ink-300 dark:hover:bg-white/5">
+                        Later &rarr;
+                    </button>
+                </div>
+            </div>
+
+            {{-- The month at a glance, so the answer to "how many days did I
+                 work" does not require counting rows. --}}
+            <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                @foreach ([
+                    'Days recorded' => $monthTotals['days'],
+                    'Total late' => $monthTotals['late'] . ' min',
+                    'Over break' => $monthTotals['over_break'] . ' min',
+                    'Approved overtime' => rtrim(rtrim(number_format($monthOvertime, 2), '0'), '.') . ' h',
+                ] as $label => $value)
+                    <div>
+                        <p class="text-xs font-medium text-[#778599]">{{ $label }}</p>
+                        <p class="mt-0.5 text-lg font-bold text-ink-950 dark:text-white tabular-nums">{{ $value }}</p>
+                    </div>
+                @endforeach
+            </div>
+
+            @if ($monthTotals['unclosed'] > 0)
+                <p class="mt-3 text-xs font-medium text-amber-600 dark:text-amber-400">
+                    {{ $monthTotals['unclosed'] }} day(s) have no time out. Tell HR — payroll cannot measure a day that was never closed.
+                </p>
+            @endif
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-ink-200 text-sm dark:divide-white/10">
@@ -363,16 +484,36 @@ new #[Layout('layouts.app')] class extends Component
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
-                    @forelse ($recentDays as $recentDay)
+                    @forelse ($monthDays as $recentDay)
+                        @php($dayAssignment = $assignmentFor($recentDay->work_date))
+                        @php($late = $recentDay->lateMinutes($dayAssignment))
                         <tr wire:key="day-{{ $recentDay->id }}" class="transition hover:bg-ink-50 dark:hover:bg-white/5">
-                            <td class="px-5 py-4 font-medium text-[#526783] dark:text-white">{{ $recentDay->work_date->format('M d, Y') }}</td>
+                            <td class="px-5 py-4 font-medium text-[#526783] dark:text-white">
+                                {{ $recentDay->work_date->format('M d, Y') }}
+                                <span class="block text-xs font-medium text-[#778599]">{{ $recentDay->work_date->format('l') }}</span>
+                            </td>
                             <td class="px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $recentDay->time_in?->format('g:i A') ?? '--' }}</td>
-                            <td class="px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $recentDay->time_out?->format('g:i A') ?? '--' }}</td>
-                            <td class="px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $recentDay->lateMinutes() !== null ? $recentDay->lateMinutes() . ' min' : '--' }}</td>
-                            <td class="px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $recentDay->totalBreakMinutes() }} min @if($recentDay->overBreakMinutes() > 0) <span class="text-red-600 dark:text-red-400">(+{{ $recentDay->overBreakMinutes() }} over)</span> @endif</td>
+                            <td class="px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">
+                                @if ($recentDay->time_out)
+                                    {{ $recentDay->time_out->format('g:i A') }}
+                                @else
+                                    <span class="text-amber-600 dark:text-amber-400">Not clocked out</span>
+                                @endif
+                            </td>
+                            <td class="px-5 py-4 font-medium {{ $late ? 'text-red-600 dark:text-red-400' : 'text-[#64748b] dark:text-ink-400' }}">
+                                {{ $late !== null ? ($late ? $late . ' min' : 'On time') : '--' }}
+                            </td>
+                            <td class="px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">
+                                {{ $recentDay->totalBreakMinutes() }} min
+                                @if ($recentDay->overBreakMinutes($dayAssignment) > 0)
+                                    <span class="text-red-600 dark:text-red-400">(+{{ $recentDay->overBreakMinutes($dayAssignment) }} over)</span>
+                                @endif
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-5 py-10 text-center font-medium text-ink-500">No attendance records yet.</td></tr>
+                        <tr><td colspan="5" class="px-5 py-10 text-center font-medium text-ink-500">
+                            Nothing recorded in {{ $viewingMonth->format('F Y') }}.
+                        </td></tr>
                     @endforelse
                 </tbody>
             </table>
