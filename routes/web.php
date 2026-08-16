@@ -88,6 +88,10 @@ Route::middleware('auth')->group(function () {
         Route::livewire('/cash-advances', 'cash-advances.index')->name('cash-advances.index');
     });
 
+    Route::middleware('can:bank_details.approve')->group(function () {
+        Route::livewire('/bank-details', 'bank-details.index')->name('bank-details.index');
+    });
+
     Route::middleware('can:reimbursements.view_all')->group(function () {
         Route::livewire('/reimbursements', 'reimbursements.index')->name('reimbursements.index');
     });

@@ -45,6 +45,7 @@
                         'attendance.view_all', 'leave.types.manage', 'cash_advances.manage',
                         'recruitment.manage',
                         'reimbursements.view_all',
+                        'bank_details.approve',
                     ]);
                 @endphp
 
@@ -54,7 +55,6 @@
 
                 <nav class="mt-2 flex-1 space-y-1 overflow-y-auto px-2.5 pb-6">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" icon="home">Dashboard</x-nav-link>
-                    <x-nav-link :href="route('my-profile')" :active="request()->routeIs('my-profile')" icon="user-circle">My Profile</x-nav-link>
                     <x-nav-link :href="route('attendance.punch')" :active="request()->routeIs('attendance.punch')" icon="clock">My Attendance</x-nav-link>
                     <x-nav-link :href="route('my-payslips')" :active="request()->routeIs('my-payslips*')" icon="money">My Payslips</x-nav-link>
                     <x-nav-link :href="route('leave-requests.index')" :active="request()->routeIs('leave-requests.*')" icon="clipboard">Leave Requests</x-nav-link>
@@ -98,6 +98,9 @@
                         @can('reimbursements.view_all')
                             <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.index')" icon="clipboard">Reimbursement Record</x-nav-link>
                         @endcan
+                        @can('bank_details.approve')
+                            <x-nav-link :href="route('bank-details.index')" :active="request()->routeIs('bank-details.*')" icon="money">Bank Details</x-nav-link>
+                        @endcan
                     @endif
 
                     @if (auth()->user()->canAny(['payroll.runs.manage', 'payroll.settings.manage']))
@@ -140,6 +143,7 @@
                         request()->routeIs('cash-advance-requests.*') => 'Cash Advance Requests',
                         request()->routeIs('my-reimbursements') => 'My Reimbursement',
                         request()->routeIs('reimbursements.*') => 'Reimbursement Record',
+                        request()->routeIs('bank-details.*') => 'Bank Details',
                         request()->routeIs('org.departments') => 'Departments',
                         request()->routeIs('org.positions') => 'Positions',
                         request()->routeIs('employees.*') => 'Employees',
@@ -205,6 +209,12 @@
                                     </div>
                                 </div>
                                 <div class="my-2 h-px bg-ink-100 dark:bg-white/10"></div>
+                                <a href="{{ route('my-profile') }}"
+                                   wire:navigate
+                                   class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-ink-700 transition hover:bg-ink-50 hover:text-brand-700 dark:text-ink-200 dark:hover:bg-white/10 dark:hover:text-brand-300">
+                                    <x-icon name="user-circle" class="h-4 w-4" />
+                                    My Profile
+                                </a>
                                 <livewire:auth.logout-button />
                             </div>
                         </div>

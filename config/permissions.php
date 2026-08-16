@@ -61,6 +61,10 @@ return [
             'cash_advances.manage' => 'Advance Register — record advances directly, pause and cancel them',
         ],
 
+        'Bank Details' => [
+            'bank_details.approve' => 'Bank Details — approve changes to where an employee\'s salary is paid',
+        ],
+
         'Reimbursements' => [
             'reimbursements.approve' => 'Reimbursements — approve what the company pays back for expenses',
             'reimbursements.view_all' => 'Reimbursements — view every claim across the company',

@@ -60,6 +60,10 @@ class Employee extends Model
         'sss_number',
         'philhealth_number',
         'pagibig_number',
+        'bank_name',
+        'bank_account_name',
+        'bank_account_number',
+        'bank_details_updated_at',
         'onboarding_completed_at',
         'user_id',
         'separation_date',
@@ -81,6 +85,7 @@ class Employee extends Model
             'allowance' => 'decimal:2',
             'quota' => 'decimal:2',
             'onboarding_completed_at' => 'datetime',
+            'bank_details_updated_at' => 'datetime',
             'separation_date' => 'date',
             'include_in_payroll' => 'boolean',
             'sss_enrolled' => 'boolean',
@@ -106,7 +111,7 @@ class Employee extends Model
         // Guards against a row pointing at a file that was removed on disk,
         // which would otherwise render a broken image.
         return Storage::disk('public')->exists($this->photo_path)
-            ? Storage::disk('public')->url($this->photo_path)
+            ? asset('storage/' . ltrim($this->photo_path, '/'))
             : null;
     }
 
@@ -275,6 +280,22 @@ class Employee extends Model
     public function attendanceDays(): HasMany
     {
         return $this->hasMany(AttendanceDay::class);
+    }
+
+    public function bankDetailRequests(): HasMany
+    {
+        return $this->hasMany(BankDetailRequest::class);
+    }
+
+    public function hasBankDetails(): bool
+    {
+        return filled($this->bank_account_number);
+    }
+
+    /** Only the last four digits — see BankDetailRequest::maskAccount(). */
+    public function maskedBankAccount(): string
+    {
+        return BankDetailRequest::maskAccount($this->bank_account_number);
     }
 
     public function leaveCreditTransactions(): HasMany
