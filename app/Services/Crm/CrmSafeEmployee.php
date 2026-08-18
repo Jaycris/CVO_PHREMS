@@ -36,16 +36,17 @@ class CrmSafeEmployee
             'email' => $employee->company_email,
             'department' => $employee->department?->name,
 
-            // On-site or Remote. Sent under both names because the CRM calls
-            // its field Work Type, and a mismatch there would be a silent blank
-            // rather than an error the CRM developer would notice.
-            'work_arrangement' => $employee->work_arrangement,
-            'work_type' => $employee->work_arrangement,
+            // Onsite, Hybrid or Remote. Sent under both names because the CRM
+            // calls its field Work Type, and a mismatch there would be a silent
+            // blank rather than an error the CRM developer would notice.
+            'workplace_type' => $employee->workplace_type,
+            'work_type' => $employee->workplace_type,
 
             // Offered as a Role suggestion only. The CRM decides its own access.
             'position' => $employee->position?->title,
 
             'employment_status' => $employee->employment_status,
+            'employment_type' => $employee->employment_type,
             // A separated employee stays searchable so an existing CRM user can
             // still be traced back, but the CRM should not create new ones.
             'is_active' => ! $employee->isSeparated(),

@@ -336,6 +336,8 @@ new #[Layout('layouts.app')] class extends Component
                     <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Quota</dt><dd class="text-[#65758c] dark:text-white">₱{{ number_format($employee->quota, 2) }}</dd></div>
                 @endif
                 <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Employment Status</dt><dd><x-badge :color="$employee->employment_status === 'Regular' ? 'green' : 'amber'">{{ $employee->employment_status }}</x-badge></dd></div>
+                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Employment Type</dt><dd class="font-medium text-[#65758c] dark:text-white">{{ $employee->employment_type ?: '—' }}</dd></div>
+                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Workplace Type</dt><dd class="font-medium text-[#65758c] dark:text-white">{{ $employee->workplace_type ?: '—' }}</dd></div>
                 <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Reports To</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->reportsTo?->fullName() ?? '—' }}</dd></div>
             </dl>
         </x-card>

@@ -15,7 +15,8 @@ new #[Layout('layouts.app')] class extends Component
     public string $middle_name = '';
     public string $last_name = '';
     public string $phone_name = '';
-    public string $work_arrangement = '';
+    public string $workplace_type = '';
+    public string $employment_type = '';
     public string $company_email = '';
     public string $personal_email = '';
     public ?int $position_id = null;
@@ -48,7 +49,8 @@ new #[Layout('layouts.app')] class extends Component
             'middle_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'phone_name' => ['nullable', 'string', 'max:255'],
-            'work_arrangement' => ['nullable', 'in:On-site,Remote'],
+            'workplace_type' => ['nullable', 'in:Onsite,Hybrid,Remote'],
+            'employment_type' => ['nullable', 'in:Full-time,Part-time'],
             'company_email' => ['required', 'email', 'unique:employees,company_email'],
             'personal_email' => ['required', 'email'],
             'position_id' => ['required', 'exists:positions,id'],
@@ -56,7 +58,7 @@ new #[Layout('layouts.app')] class extends Component
             'hire_date' => ['required', 'date'],
             'basic_salary' => ['required', 'numeric', 'min:0'],
             'allowance' => ['nullable', 'numeric', 'min:0'],
-            'employment_status' => ['required', 'in:Probationary,Training,Regular'],
+            'employment_status' => ['required', 'in:Probationary,Regular,Contract,Training'],
             'reports_to_id' => ['nullable', 'exists:employees,id'],
         ];
 
@@ -135,16 +137,6 @@ new #[Layout('layouts.app')] class extends Component
                         <p class="mt-1 text-xs font-medium text-[#778599]">The CRM splits this into first and last name when creating their user.</p>
                     </div>
                     <div>
-                        <x-label>Work Arrangement <span class="font-medium text-[#778599]">(optional)</span></x-label>
-                        <x-select wire:model="work_arrangement">
-                            <option value="">Not set</option>
-                            <option value="On-site">On-site</option>
-                            <option value="Remote">Remote</option>
-                        </x-select>
-                        <p class="mt-1 text-xs font-medium text-[#778599]">Sent to the CRM when creating their user.</p>
-                        @error('work_arrangement') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
                         <x-label>Company Email</x-label>
                         <x-input wire:model="company_email" type="email" />
                         @error('company_email') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
@@ -174,6 +166,17 @@ new #[Layout('layouts.app')] class extends Component
                             @endforeach
                         </x-select>
                         @error('department_id') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Workplace Type <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-select wire:model="workplace_type">
+                            <option value="">Not set</option>
+                            <option value="Onsite">Onsite</option>
+                            <option value="Hybrid">Hybrid</option>
+                            <option value="Remote">Remote</option>
+                        </x-select>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Where they work. Sent to the CRM when creating their user.</p>
+                        @error('workplace_type') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <x-label>Job Title / Position</x-label>
@@ -215,9 +218,22 @@ new #[Layout('layouts.app')] class extends Component
                         <x-label>Employment Status</x-label>
                         <x-select wire:model="employment_status">
                             <option value="Probationary">Probationary</option>
-                            <option value="Training">Training</option>
                             <option value="Regular">Regular</option>
+                            <option value="Contract">Contract</option>
+                            <option value="Training">Training</option>
                         </x-select>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Their standing in the company.</p>
+                        @error('employment_status') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Employment Type <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-select wire:model="employment_type">
+                            <option value="">Not set</option>
+                            <option value="Full-time">Full-time</option>
+                            <option value="Part-time">Part-time</option>
+                        </x-select>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">How many hours they are engaged for.</p>
+                        @error('employment_type') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <x-label>Basic Salary (monthly)</x-label>

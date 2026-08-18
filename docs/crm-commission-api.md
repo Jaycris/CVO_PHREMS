@@ -83,7 +83,7 @@ single field.
     "id":        "AG-101",
     "name":      "Maria Santos",
     "team":      "Team Alpha",
-    "work_arrangement": "On-site"
+    "work_type": "Onsite"
   },
 
   "month": "2026-08",

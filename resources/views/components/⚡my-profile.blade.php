@@ -168,6 +168,8 @@ new #[Layout('layouts.app')] class extends Component
         'Reports To' => $employee->reportsTo?->fullName() ?: '-',
         'Hire Date' => $employee->hire_date?->format('M d, Y') ?? '-',
         'Employment Status' => $employee->employment_status ?: '-',
+        'Employment Type' => $employee->employment_type ?: '-',
+        'Workplace Type' => $employee->workplace_type ?: '-',
         'Onboarding' => $employee->onboarding_completed_at ? 'Completed' : 'Pending',
     ];
 
