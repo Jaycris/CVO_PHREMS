@@ -71,7 +71,8 @@ Omit `q` to list everyone (still capped by `limit`, default 15, max 50).
       "last_name":          "Bell",        // split from phone_name
       "email":              "maria.santos@creativision.net",
       "department":         "Sales",
-      "work_type":          "Inbound",
+      "work_arrangement":   "On-site",     // On-site | Remote | null
+      "work_type":          "On-site",     // same value, under the CRM's field name
       "position":           "Sales Agent", // Role *suggestion* only
       "employment_status":  "Regular",
       "is_active":          true
@@ -97,7 +98,7 @@ creating a *new* user.
 | Last Name | `last_name` | Split from Phone Name; may be `null` |
 | Email Address | `email` | HRIS company email |
 | Department | `department` | |
-| Work Type | `work_type` | May be `null` — admin picks |
+| Work Type | `work_arrangement` | `On-site` or `Remote`, or `null`. Also sent as `work_type` |
 | Role | `position` | **Suggestion only.** CRM owns its own access model |
 | Phone Number | — | **Stays manual.** This is the VOIP number, which only the CRM knows |
 | Brand / Account | — | **Stays manual.** Exists only in the CRM |

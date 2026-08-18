@@ -51,15 +51,27 @@ renders zeros on failure, because a confident `0.00` reads to an agent as
 
 ## 2. Identifying the agent
 
-The HRIS sends **one** `agent` value, chosen in this order:
+The `agent` value is always the **HRIS Employee ID** — `EMP-9372`. The same
+value is also sent as `hris_employee_id`.
 
-1. `employees.crm_agent_id` — a new nullable column, set per employee in HRIS.
-2. The employee's company email, when no CRM agent ID has been set.
+That is the only key. There is no matching on name, alias, phone name or email,
+because all of those are wrong some of the time and the failure mode is one
+agent's earnings on another agent's screen.
 
-So the CRM can match on whichever it already stores. If the CRM keys agents by
-its own ID, fill `crm_agent_id` in for each agent in HRIS and the email fallback
-never fires. The HR Commission Slips screen prints the exact key it sent, which
-is the first thing to check when a slip comes back empty.
+For this to resolve, the CRM user must carry that ID in its own
+`hris_employee_id` column — populated either by the admin picking the employee
+on the Create User form, or by editing an existing user. See
+`docs/hris-employee-lookup-api.md`.
+
+A CRM user without it should return `404`, which the HRIS shows as "the CRM has
+no commission record for this agent and month". The HR Commission Slips screen
+prints the exact ID it asked for, which is the first thing to check when a slip
+comes back empty.
+
+**Echo it back.** If the response includes `hris_employee_id`, the HRIS checks
+it matches the employee it asked about and refuses to display anything if it
+does not. That turns the one-way link into a two-way one and costs the CRM a
+single field.
 
 ---
 
@@ -71,7 +83,7 @@ is the first thing to check when a slip comes back empty.
     "id":        "AG-101",
     "name":      "Maria Santos",
     "team":      "Team Alpha",
-    "work_type": "Inbound"
+    "work_arrangement": "On-site"
   },
 
   "month": "2026-08",

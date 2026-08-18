@@ -19,9 +19,8 @@ new #[Layout('layouts.app')] class extends Component
     public string $middle_name = '';
     public string $last_name = '';
     public string $phone_name = '';
-    public string $work_type = '';
+    public string $work_arrangement = '';
     public string $company_email = '';
-    public string $crm_agent_id = '';
     public string $personal_email = '';
     public ?int $position_id = null;
     public ?int $department_id = null;
@@ -41,9 +40,8 @@ new #[Layout('layouts.app')] class extends Component
         $this->middle_name = (string) $employee->middle_name;
         $this->last_name = (string) $employee->last_name;
         $this->phone_name = (string) $employee->phone_name;
-        $this->work_type = (string) $employee->work_type;
+        $this->work_arrangement = (string) $employee->work_arrangement;
         $this->company_email = (string) $employee->company_email;
-        $this->crm_agent_id = (string) $employee->crm_agent_id;
         $this->personal_email = (string) $employee->personal_email;
         $this->position_id = $employee->position_id;
         $this->department_id = $employee->department_id;
@@ -70,7 +68,7 @@ new #[Layout('layouts.app')] class extends Component
             'middle_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'phone_name' => ['nullable', 'string', 'max:255'],
-            'work_type' => ['nullable', 'string', 'max:100'],
+            'work_arrangement' => ['nullable', 'in:On-site,Remote'],
             // Unique across everyone except this employee, otherwise saving an
             // unchanged form would collide with the record's own address.
             'company_email' => ['required', 'email', 'unique:employees,company_email,' . $this->employee->id],
@@ -82,9 +80,6 @@ new #[Layout('layouts.app')] class extends Component
             'allowance' => ['nullable', 'numeric', 'min:0'],
             'employment_status' => ['required', 'in:Probationary,Training,Regular'],
             'reports_to_id' => ['nullable', 'exists:employees,id'],
-            // How the CRM knows this person. Blank is normal — see
-            // docs/crm-commission-api.md §2.
-            'crm_agent_id' => ['nullable', 'string', 'max:100'],
         ];
 
         if ($this->isSalesDepartment()) {
@@ -154,12 +149,6 @@ new #[Layout('layouts.app')] class extends Component
                         <p class="mt-1 text-xs font-medium text-[#778599]">Cannot be changed.</p>
                     </div>
                     <div>
-                        <x-label>CRM Agent ID</x-label>
-                        <x-input wire:model="crm_agent_id" type="text" placeholder="Optional" />
-                        <p class="mt-1 text-xs font-medium text-[#778599]">Only if the CRM keys this agent by its own ID. Left blank, commissions are looked up by company email.</p>
-                        @error('crm_agent_id') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
                         <x-label>First Name</x-label>
                         <x-input wire:model="first_name" type="text" />
                         @error('first_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
@@ -179,10 +168,14 @@ new #[Layout('layouts.app')] class extends Component
                         <p class="mt-1 text-xs font-medium text-[#778599]">The CRM splits this into first and last name when creating their user.</p>
                     </div>
                     <div>
-                        <x-label>Work Type <span class="font-medium text-[#778599]">(optional)</span></x-label>
-                        <x-input wire:model="work_type" type="text" placeholder="e.g. Inbound" />
-                        <p class="mt-1 text-xs font-medium text-[#778599]">Pre-fills the CRM Work Type. Blank means the CRM admin picks it.</p>
-                        @error('work_type') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                        <x-label>Work Arrangement <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-select wire:model="work_arrangement">
+                            <option value="">Not set</option>
+                            <option value="On-site">On-site</option>
+                            <option value="Remote">Remote</option>
+                        </x-select>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Sent to the CRM when creating their user.</p>
+                        @error('work_arrangement') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <x-label>Company Email</x-label>

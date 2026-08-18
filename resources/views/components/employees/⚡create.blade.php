@@ -15,7 +15,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $middle_name = '';
     public string $last_name = '';
     public string $phone_name = '';
-    public string $work_type = '';
+    public string $work_arrangement = '';
     public string $company_email = '';
     public string $personal_email = '';
     public ?int $position_id = null;
@@ -48,7 +48,7 @@ new #[Layout('layouts.app')] class extends Component
             'middle_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'phone_name' => ['nullable', 'string', 'max:255'],
-            'work_type' => ['nullable', 'string', 'max:100'],
+            'work_arrangement' => ['nullable', 'in:On-site,Remote'],
             'company_email' => ['required', 'email', 'unique:employees,company_email'],
             'personal_email' => ['required', 'email'],
             'position_id' => ['required', 'exists:positions,id'],
@@ -135,10 +135,14 @@ new #[Layout('layouts.app')] class extends Component
                         <p class="mt-1 text-xs font-medium text-[#778599]">The CRM splits this into first and last name when creating their user.</p>
                     </div>
                     <div>
-                        <x-label>Work Type <span class="font-medium text-[#778599]">(optional)</span></x-label>
-                        <x-input wire:model="work_type" type="text" placeholder="e.g. Inbound" />
-                        <p class="mt-1 text-xs font-medium text-[#778599]">Pre-fills the CRM Work Type. Blank means the CRM admin picks it.</p>
-                        @error('work_type') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                        <x-label>Work Arrangement <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-select wire:model="work_arrangement">
+                            <option value="">Not set</option>
+                            <option value="On-site">On-site</option>
+                            <option value="Remote">Remote</option>
+                        </x-select>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Sent to the CRM when creating their user.</p>
+                        @error('work_arrangement') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <x-label>Company Email</x-label>

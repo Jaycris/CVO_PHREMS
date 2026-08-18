@@ -119,32 +119,16 @@ class CommissionSlipService
     }
 
     /**
-     * How the CRM is asked to identify this person.
+     * How the CRM is asked to identify this person: the HRIS employee id.
      *
-     * The employee id first: once the CRM stores hris_employee_id against its
-     * user, that is the bridge both systems agree on and nothing has to be
-     * matched at all. The CRM's own agent id is the fallback, for accounts
-     * linked by hand before the CRM carried the field.
-     *
-     * Never a name, never an email. Guessing by those works most of the time
-     * and is silently wrong the rest, and the failure mode is one agent seeing
-     * another agent's earnings.
+     * The CRM stores that against its own user, so there is nothing to match on
+     * and nothing to guess. A CRM user that has not been given the id simply
+     * answers 404, and the page says so — which is the right answer, unlike a
+     * name or email match that would be silently wrong some of the time.
      */
     public function agentKey(Employee $employee): ?string
     {
-        return $employee->employee_id ?: ($employee->crm_agent_id ?: null);
-    }
-
-    /**
-     * Whether the CRM can be asked about this person at all.
-     *
-     * True as soon as they have an employee id — which is everyone — because
-     * the CRM matches on that. A CRM that has not yet been told the id simply
-     * answers 404, and the page says so.
-     */
-    public function isLinked(Employee $employee): bool
-    {
-        return filled($employee->employee_id) || filled($employee->crm_agent_id);
+        return $employee->employee_id ?: null;
     }
 
     /** Every cached month for this employee, for when their link changes. */

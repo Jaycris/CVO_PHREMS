@@ -35,7 +35,12 @@ class CrmSafeEmployee
 
             'email' => $employee->company_email,
             'department' => $employee->department?->name,
-            'work_type' => $employee->work_type,
+
+            // On-site or Remote. Sent under both names because the CRM calls
+            // its field Work Type, and a mismatch there would be a silent blank
+            // rather than an error the CRM developer would notice.
+            'work_arrangement' => $employee->work_arrangement,
+            'work_type' => $employee->work_arrangement,
 
             // Offered as a Role suggestion only. The CRM decides its own access.
             'position' => $employee->position?->title,

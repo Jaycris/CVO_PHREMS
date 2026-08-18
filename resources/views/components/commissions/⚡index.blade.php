@@ -33,7 +33,7 @@ new #[Layout('layouts.app')] class extends Component
     protected function employee(): ?Employee
     {
         return $this->employeeId
-            ? Employee::with(['department', 'position', 'crmLinkedBy'])->find($this->employeeId)
+            ? Employee::with(['department', 'position'])->find($this->employeeId)
             : null;
     }
 
@@ -108,19 +108,13 @@ new #[Layout('layouts.app')] class extends Component
         @endif
     </x-card>
 
-    @if ($employee && ! $agentKey)
-        <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
-            <p class="text-sm font-bold text-amber-900 dark:text-amber-200">Not linked to a CRM account.</p>
-            <p class="mt-1 text-sm font-medium text-amber-800 dark:text-amber-200/90">
-                Nothing is guessed from their name or email, because the wrong guess shows one agent another agent's
-                earnings. Confirm the pairing once on
-                <a href="{{ route('commissions.links') }}" wire:navigate class="font-bold underline">Link CRM Accounts</a>.
-            </p>
-        </div>
-    @elseif ($agentKey)
+    @if ($agentKey)
+        {{-- Printed because "the CRM has no record for this agent" nearly always
+             means the CRM user is missing this id, not that they earned nothing. --}}
         <p class="text-xs font-medium text-ink-500 dark:text-ink-400">
-            Asking the CRM for agent <span class="font-mono font-bold text-ink-700 dark:text-ink-300">{{ $agentKey }}</span>,
-            confirmed {{ $employee->crm_linked_at?->format('M j, Y') }}@if ($employee->crmLinkedBy) by {{ $employee->crmLinkedBy->name }}@endif.
+            Asking the CRM for HRIS employee
+            <span class="font-mono font-bold text-ink-700 dark:text-ink-300">{{ $agentKey }}</span>.
+            The CRM user must carry this as its HRIS Employee ID.
         </p>
     @endif
 

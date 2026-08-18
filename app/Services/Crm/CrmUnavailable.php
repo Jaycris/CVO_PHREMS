@@ -25,16 +25,10 @@ class CrmUnavailable extends RuntimeException
         return new self('The CRM connection has not been set up yet. Ask IT to fill in CRM_API_BASE_URL and CRM_HRIS_API_TOKEN.');
     }
 
-    /**
-     * Nobody has confirmed which CRM account this person is.
-     *
-     * Deliberately a dead end rather than a guess: the CRM keys agents by its
-     * own names and aliases, and matching on a hunch risks showing one agent
-     * another agent's earnings.
-     */
+    /** No employee id to ask about — only possible on a half-made record. */
     public static function notLinked(): self
     {
-        return new self('This employee is not linked to a CRM account yet. HR can link them on the Commission Slips screen.');
+        return new self('This employee has no HRIS Employee ID, so the CRM cannot be asked about them.');
     }
 
     /**
