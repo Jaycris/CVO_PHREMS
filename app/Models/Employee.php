@@ -33,6 +33,7 @@ class Employee extends Model
 
     protected $fillable = [
         'employee_id',
+        'crm_agent_id',
         'phone_name',
         'company_email',
         'position_id',

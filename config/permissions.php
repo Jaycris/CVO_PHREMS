@@ -61,6 +61,10 @@ return [
             'cash_advances.manage' => 'Advance Register — record advances directly, pause and cancel them',
         ],
 
+        'Commissions' => [
+            'commissions.view_all' => 'Commission Slips — view any agent\'s slip and statement from the CRM',
+        ],
+
         'Bank Details' => [
             'bank_details.approve' => 'Bank Details — approve changes to where an employee\'s salary is paid',
         ],

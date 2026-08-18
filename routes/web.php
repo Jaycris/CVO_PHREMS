@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\CommissionSlipPdfController;
 use App\Http\Controllers\EmployeeExportController;
+use App\Http\Controllers\MyPayslipPdfController;
 use App\Http\Controllers\PayrollRegisterExportController;
 use Illuminate\Support\Facades\Route;
 
@@ -28,6 +30,12 @@ Route::middleware('auth')->group(function () {
     // "your own payslip".
     Route::livewire('/my-payslips', 'my-payslips')->name('my-payslips');
     Route::livewire('/my-payslips/{payslip}', 'my-payslips')->name('my-payslips.show');
+    Route::get('/my-payslips/{payslip}/download', MyPayslipPdfController::class)->name('my-payslips.download');
+
+    // Commission figures come from the CRM. The page shows the signer's own
+    // slip, so it needs no permission — same reasoning as My Payslips.
+    Route::livewire('/my-commission', 'my-commission')->name('my-commission');
+    Route::get('/my-commission/download', CommissionSlipPdfController::class)->name('my-commission.download');
 
     /*
      * Filing and approving. Everyone may file; the pages themselves decide what
@@ -86,6 +94,10 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('can:cash_advances.manage')->group(function () {
         Route::livewire('/cash-advances', 'cash-advances.index')->name('cash-advances.index');
+    });
+
+    Route::middleware('can:commissions.view_all')->group(function () {
+        Route::livewire('/commissions', 'commissions.index')->name('commissions.index');
     });
 
     Route::middleware('can:bank_details.approve')->group(function () {

@@ -46,6 +46,7 @@
                         'recruitment.manage',
                         'reimbursements.view_all',
                         'bank_details.approve',
+                        'commissions.view_all',
                     ]);
                 @endphp
 
@@ -57,6 +58,7 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" icon="home">Dashboard</x-nav-link>
                     <x-nav-link :href="route('attendance.punch')" :active="request()->routeIs('attendance.punch')" icon="clock">My Attendance</x-nav-link>
                     <x-nav-link :href="route('my-payslips')" :active="request()->routeIs('my-payslips*')" icon="money">My Payslips</x-nav-link>
+                    <x-nav-link :href="route('my-commission')" :active="request()->routeIs('my-commission')" icon="chart">My Commission</x-nav-link>
                     <x-nav-link :href="route('leave-requests.index')" :active="request()->routeIs('leave-requests.*')" icon="clipboard">Leave Requests</x-nav-link>
                     <x-nav-link :href="route('overtime.index')" :active="request()->routeIs('overtime.*')" icon="clock">Overtime</x-nav-link>
                     <x-nav-link :href="route('cash-advance-requests.index')" :active="request()->routeIs('cash-advance-requests.*')" icon="clipboard">Cash Advance Requests</x-nav-link>
@@ -97,6 +99,9 @@
                         @endcan
                         @can('reimbursements.view_all')
                             <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.index')" icon="clipboard">Reimbursement Record</x-nav-link>
+                        @endcan
+                        @can('commissions.view_all')
+                            <x-nav-link :href="route('commissions.index')" :active="request()->routeIs('commissions.*')" icon="chart">Commission Slips</x-nav-link>
                         @endcan
                         @can('bank_details.approve')
                             <x-nav-link :href="route('bank-details.index')" :active="request()->routeIs('bank-details.*')" icon="money">Bank Details</x-nav-link>
@@ -144,6 +149,8 @@
                         request()->routeIs('my-reimbursements') => 'My Reimbursement',
                         request()->routeIs('reimbursements.*') => 'Reimbursement Record',
                         request()->routeIs('bank-details.*') => 'Bank Details',
+                        request()->routeIs('my-commission') => 'My Commission',
+                        request()->routeIs('commissions.*') => 'Commission Slips',
                         request()->routeIs('org.departments') => 'Departments',
                         request()->routeIs('org.positions') => 'Positions',
                         request()->routeIs('employees.*') => 'Employees',
@@ -162,7 +169,7 @@
                         default => $title ?? '',
                     };
                 @endphp
-                <header class="sticky top-0 z-10 flex h-20 min-h-20 items-center justify-between border-b border-ink-200/80 bg-white/90 px-5 shadow-sm shadow-ink-200/50 backdrop-blur-xl sm:px-8 dark:border-white/10 dark:bg-ink-950/85 dark:shadow-black/20">
+                <header class="sticky top-0 z-10 flex h-[78px] min-h-[78px] items-center justify-between border-b border-ink-200/80 bg-white/90 px-5 shadow-sm shadow-ink-200/50 backdrop-blur-xl sm:px-8 dark:border-white/10 dark:bg-ink-950/85 dark:shadow-black/20">
                     <div class="flex items-center gap-3">
                         <button @click="sidebarOpen = true" class="rounded-lg p-2 font-medium text-ink-500 hover:bg-ink-100 lg:hidden dark:hover:bg-white/10">
                             <x-icon name="chevron-down" class="h-5 w-5 rotate-90" />

@@ -35,4 +35,30 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | CRM
+    |--------------------------------------------------------------------------
+    |
+    | The CRM owns commission figures outright. This app reads them and shows
+    | them; it never works one out for itself, because two systems computing the
+    | same peso from different rules is how they end up disagreeing in front of
+    | an agent.
+    |
+    | auth_header picks how the token is sent — 'bearer' for a standard
+    | Authorization header, 'x-hris-token' for the custom one. Whichever the CRM
+    | actually reads.
+    |
+    */
+    'crm' => [
+        'base_url' => env('CRM_API_BASE_URL'),
+        'token' => env('CRM_HRIS_API_TOKEN'),
+        'auth_header' => env('CRM_HRIS_AUTH_HEADER', 'bearer'),
+        'timeout' => (int) env('CRM_API_TIMEOUT', 15),
+        // Commission figures move during the month, so this is short. It only
+        // exists to stop a page refresh hammering the CRM.
+        'cache_ttl' => (int) env('CRM_API_CACHE_TTL', 300),
+        'verify_tls' => filter_var(env('CRM_API_VERIFY_TLS', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+
 ];

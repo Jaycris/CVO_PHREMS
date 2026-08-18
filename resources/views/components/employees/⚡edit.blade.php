@@ -20,6 +20,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $last_name = '';
     public string $phone_name = '';
     public string $company_email = '';
+    public string $crm_agent_id = '';
     public string $personal_email = '';
     public ?int $position_id = null;
     public ?int $department_id = null;
@@ -40,6 +41,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->last_name = (string) $employee->last_name;
         $this->phone_name = (string) $employee->phone_name;
         $this->company_email = (string) $employee->company_email;
+        $this->crm_agent_id = (string) $employee->crm_agent_id;
         $this->personal_email = (string) $employee->personal_email;
         $this->position_id = $employee->position_id;
         $this->department_id = $employee->department_id;
@@ -77,6 +79,9 @@ new #[Layout('layouts.app')] class extends Component
             'allowance' => ['nullable', 'numeric', 'min:0'],
             'employment_status' => ['required', 'in:Probationary,Training,Regular'],
             'reports_to_id' => ['nullable', 'exists:employees,id'],
+            // How the CRM knows this person. Blank is normal — see
+            // docs/crm-commission-api.md §2.
+            'crm_agent_id' => ['nullable', 'string', 'max:100'],
         ];
 
         if ($this->isSalesDepartment()) {
@@ -144,6 +149,12 @@ new #[Layout('layouts.app')] class extends Component
                         <x-label>Employee ID</x-label>
                         <x-input type="text" value="{{ $employee_id }}" disabled readonly class="cursor-not-allowed bg-ink-50 font-semibold opacity-100 dark:bg-white/5" />
                         <p class="mt-1 text-xs font-medium text-[#778599]">Cannot be changed.</p>
+                    </div>
+                    <div>
+                        <x-label>CRM Agent ID</x-label>
+                        <x-input wire:model="crm_agent_id" type="text" placeholder="Optional" />
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Only if the CRM keys this agent by its own ID. Left blank, commissions are looked up by company email.</p>
+                        @error('crm_agent_id') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <x-label>First Name</x-label>
