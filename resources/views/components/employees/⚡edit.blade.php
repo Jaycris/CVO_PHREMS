@@ -18,6 +18,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $first_name = '';
     public string $middle_name = '';
     public string $last_name = '';
+    public string $gender = '';
     public string $phone_name = '';
     public string $workplace_type = '';
     public string $employment_type = '';
@@ -40,6 +41,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->first_name = (string) $employee->first_name;
         $this->middle_name = (string) $employee->middle_name;
         $this->last_name = (string) $employee->last_name;
+        $this->gender = (string) $employee->gender;
         $this->phone_name = (string) $employee->phone_name;
         $this->workplace_type = (string) $employee->workplace_type;
         $this->employment_type = (string) $employee->employment_type;
@@ -69,6 +71,9 @@ new #[Layout('layouts.app')] class extends Component
             'first_name' => ['required', 'string', 'max:255'],
             'middle_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
+            // Nullable here even though onboarding requires it: HR may not know
+            // at the point of creating the record, and the employee fills it in.
+            'gender' => ['nullable', 'in:Male,Female'],
             'phone_name' => ['nullable', 'string', 'max:255'],
             'workplace_type' => ['nullable', 'in:Onsite,Hybrid,Remote'],
             'employment_type' => ['nullable', 'in:Full-time,Part-time'],
@@ -91,6 +96,17 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $data = $this->validate($rules);
+
+        /*
+         * An untouched dropdown submits an empty string, and gender is an ENUM
+         * in MySQL — writing '' to it fails outright with "Data truncated"
+         * rather than storing a blank. Empty means not set, so store null.
+         */
+        foreach (['gender', 'workplace_type', 'employment_type'] as $optional) {
+            if (($data[$optional] ?? null) === '') {
+                $data[$optional] = null;
+            }
+        }
 
         if (! $this->isSalesDepartment()) {
             $data['commission_scheme'] = null;
@@ -164,6 +180,15 @@ new #[Layout('layouts.app')] class extends Component
                         <x-label>Last Name</x-label>
                         <x-input wire:model="last_name" type="text" />
                         @error('last_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <x-label>Gender <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-select wire:model="gender">
+                            <option value="">Not set</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </x-select>
+                        @error('gender') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <x-label>Phone Name <span class="font-medium text-[#778599]">(name used for CRM work)</span></x-label>
