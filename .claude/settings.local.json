@@ -62,7 +62,8 @@
       "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:8010/login\" -UseBasicParsing -TimeoutSec 20; \"HTTP $\\($r.StatusCode\\)\" } catch { \"ERR: $\\($_.Exception.Message\\)\" })",
       "Bash(printf '\\\\n# CRM \\(commission slips\\). The CRM owns every commission figure; this app\\\\n# only reads them. Leave the URL blank to keep the commission pages dormant.\\\\nCRM_API_BASE_URL=\\\\nCRM_HRIS_API_TOKEN=\\\\n# bearer | x-hris-token\\\\nCRM_HRIS_AUTH_HEADER=bearer\\\\nCRM_API_TIMEOUT=15\\\\nCRM_API_CACHE_TTL=300\\\\nCRM_API_VERIFY_TLS=true\\\\n')",
       "Bash(printf '\\\\nCRM_API_BASE_URL=\\\\nCRM_HRIS_API_TOKEN=\\\\nCRM_HRIS_AUTH_HEADER=bearer\\\\nCRM_API_TIMEOUT=15\\\\nCRM_API_CACHE_TTL=300\\\\nCRM_API_VERIFY_TLS=true\\\\n')",
-      "Bash(grep -n 'crm_agent_id\\\\|$this->employee->update\\\\|validate\\($rules' resources/views/components/employees/⚡edit.blade.php)"
+      "Bash(grep -n 'crm_agent_id\\\\|$this->employee->update\\\\|validate\\($rules' resources/views/components/employees/⚡edit.blade.php)",
+      "Bash(xargs -I{} sh -c 'echo \"=== {}\"; head -30 {}')"
     ]
   }
 }

@@ -161,27 +161,31 @@ new #[Layout('layouts.app')] class extends Component
                     <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Basic Information</h2>
                 </div>
 
-                <div class="grid grid-cols-1 gap-5 p-6 sm:grid-cols-3">
-                    <div>
+                <div class="space-y-5 p-6">
+                    <div class="grid grid-cols-1 items-start gap-5 sm:grid-cols-3">
+                    <div class="min-w-0">
                         <x-label>Employee ID</x-label>
                         <x-input type="text" value="{{ $employee_id }}" disabled readonly class="cursor-not-allowed bg-ink-50 font-semibold opacity-100 dark:bg-white/5" />
                         <p class="mt-1 text-xs font-medium text-[#778599]">Cannot be changed.</p>
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <x-label>First Name</x-label>
                         <x-input wire:model="first_name" type="text" />
                         @error('first_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <x-label>Middle Name <span class="font-medium text-[#778599]">(optional)</span></x-label>
                         <x-input wire:model="middle_name" type="text" />
                     </div>
-                    <div>
+                    </div>
+
+                    <div class="grid grid-cols-1 items-start gap-5 sm:grid-cols-3">
+                    <div class="min-w-0">
                         <x-label>Last Name</x-label>
                         <x-input wire:model="last_name" type="text" />
                         @error('last_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <x-label>Gender <span class="font-medium text-[#778599]">(optional)</span></x-label>
                         <x-select wire:model="gender">
                             <option value="">Not set</option>
@@ -190,20 +194,24 @@ new #[Layout('layouts.app')] class extends Component
                         </x-select>
                         @error('gender') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <x-label>Phone Name <span class="font-medium text-[#778599]">(name used for CRM work)</span></x-label>
                         <x-input wire:model="phone_name" type="text" />
                         <p class="mt-1 text-xs font-medium text-[#778599]">The CRM splits this into first and last name when creating their user.</p>
                     </div>
-                    <div>
+                    </div>
+
+                    <div class="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+                    <div class="min-w-0">
                         <x-label>Company Email</x-label>
                         <x-input wire:model="company_email" type="email" />
                         @error('company_email') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div class="sm:col-span-2">
+                    <div class="min-w-0">
                         <x-label>Personal Email</x-label>
                         <x-input wire:model="personal_email" type="email" />
                         @error('personal_email') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
                     </div>
                 </div>
             </section>
@@ -214,8 +222,9 @@ new #[Layout('layouts.app')] class extends Component
                     <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Assignment And Compensation</h2>
                 </div>
 
-                <div class="grid grid-cols-1 gap-5 p-6 sm:grid-cols-3">
-                    <div>
+                <div class="space-y-5 p-6">
+                    <div class="grid grid-cols-1 items-start gap-5 sm:grid-cols-3">
+                    <div class="min-w-0">
                         <x-label>Department</x-label>
                         <x-select wire:model.live="department_id">
                             <option value="">Select department</option>
@@ -225,7 +234,7 @@ new #[Layout('layouts.app')] class extends Component
                         </x-select>
                         @error('department_id') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <x-label>Workplace Type <span class="font-medium text-[#778599]">(optional)</span></x-label>
                         <x-select wire:model="workplace_type">
                             <option value="">Not set</option>
@@ -236,7 +245,7 @@ new #[Layout('layouts.app')] class extends Component
                         <p class="mt-1 text-xs font-medium text-[#778599]">Where they work. Sent to the CRM when creating their user.</p>
                         @error('workplace_type') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <x-label>Job Title / Position</x-label>
                         <x-select wire:model="position_id">
                             <option value="">Select position</option>
@@ -246,12 +255,15 @@ new #[Layout('layouts.app')] class extends Component
                         </x-select>
                         @error('position_id') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    </div>
+
+                    <div class="grid grid-cols-1 items-start gap-5 sm:grid-cols-3">
+                    <div class="min-w-0">
                         <x-label>Hire Date</x-label>
                         <x-input wire:model="hire_date" type="date" />
                         @error('hire_date') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <x-label>Employment Status</x-label>
                         <x-select wire:model="employment_status">
                             <option value="Probationary">Probationary</option>
@@ -262,7 +274,7 @@ new #[Layout('layouts.app')] class extends Component
                         <p class="mt-1 text-xs font-medium text-[#778599]">Their standing in the company.</p>
                         @error('employment_status') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <x-label>Employment Type <span class="font-medium text-[#778599]">(optional)</span></x-label>
                         <x-select wire:model="employment_type">
                             <option value="">Not set</option>
@@ -272,16 +284,19 @@ new #[Layout('layouts.app')] class extends Component
                         <p class="mt-1 text-xs font-medium text-[#778599]">How many hours they are engaged for.</p>
                         @error('employment_type') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    </div>
+
+                    <div class="grid grid-cols-1 items-start gap-5 sm:grid-cols-3">
+                    <div class="min-w-0">
                         <x-label>Basic Salary (monthly)</x-label>
                         <x-input wire:model="basic_salary" type="number" step="0.01" />
                         @error('basic_salary') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <x-label>Allowance</x-label>
                         <x-input wire:model="allowance" type="number" step="0.01" />
                     </div>
-                    <div class="sm:col-span-2">
+                    <div class="min-w-0">
                         <x-label>Reports To</x-label>
                         <x-select wire:model="reports_to_id">
                             <option value="">None</option>
@@ -297,6 +312,7 @@ new #[Layout('layouts.app')] class extends Component
                             @endif
                         </p>
                         @error('reports_to_id') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
                     </div>
                 </div>
             </section>
