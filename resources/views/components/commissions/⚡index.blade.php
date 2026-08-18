@@ -32,7 +32,9 @@ new #[Layout('layouts.app')] class extends Component
 
     protected function employee(): ?Employee
     {
-        return $this->employeeId ? Employee::with(['department', 'position'])->find($this->employeeId) : null;
+        return $this->employeeId
+            ? Employee::with(['department', 'position', 'crmLinkedBy'])->find($this->employeeId)
+            : null;
     }
 
     public function with(CommissionSlipService $service): array
@@ -58,7 +60,7 @@ new #[Layout('layouts.app')] class extends Component
             'error' => $error,
             'employee' => $employee,
             'agentKey' => $employee ? $service->agentKey($employee) : null,
-            'employees' => Employee::orderBy('employee_id')->get(['id', 'employee_id', 'first_name', 'last_name', 'crm_agent_id']),
+            'employees' => Employee::orderBy('employee_id')->get(),
             'monthOptions' => $employee ? $service->selectableMonths($employee, 24) : [],
         ];
     }
@@ -106,14 +108,19 @@ new #[Layout('layouts.app')] class extends Component
         @endif
     </x-card>
 
-    @if ($agentKey)
-        {{-- Shown because "the CRM has no record for this agent" is nearly
-             always this key not matching what the CRM expects. --}}
+    @if ($employee && ! $agentKey)
+        <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
+            <p class="text-sm font-bold text-amber-900 dark:text-amber-200">Not linked to a CRM account.</p>
+            <p class="mt-1 text-sm font-medium text-amber-800 dark:text-amber-200/90">
+                Nothing is guessed from their name or email, because the wrong guess shows one agent another agent's
+                earnings. Confirm the pairing once on
+                <a href="{{ route('commissions.links') }}" wire:navigate class="font-bold underline">Link CRM Accounts</a>.
+            </p>
+        </div>
+    @elseif ($agentKey)
         <p class="text-xs font-medium text-ink-500 dark:text-ink-400">
-            Asking the CRM for agent <span class="font-mono font-bold text-ink-700 dark:text-ink-300">{{ $agentKey }}</span>.
-            @if (! $employee?->crm_agent_id)
-                That is their company email, because no CRM agent ID is set on their record.
-            @endif
+            Asking the CRM for agent <span class="font-mono font-bold text-ink-700 dark:text-ink-300">{{ $agentKey }}</span>,
+            confirmed {{ $employee->crm_linked_at?->format('M j, Y') }}@if ($employee->crmLinkedBy) by {{ $employee->crmLinkedBy->name }}@endif.
         </p>
     @endif
 

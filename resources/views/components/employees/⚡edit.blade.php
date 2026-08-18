@@ -19,6 +19,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $middle_name = '';
     public string $last_name = '';
     public string $phone_name = '';
+    public string $work_type = '';
     public string $company_email = '';
     public string $crm_agent_id = '';
     public string $personal_email = '';
@@ -40,6 +41,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->middle_name = (string) $employee->middle_name;
         $this->last_name = (string) $employee->last_name;
         $this->phone_name = (string) $employee->phone_name;
+        $this->work_type = (string) $employee->work_type;
         $this->company_email = (string) $employee->company_email;
         $this->crm_agent_id = (string) $employee->crm_agent_id;
         $this->personal_email = (string) $employee->personal_email;
@@ -68,6 +70,7 @@ new #[Layout('layouts.app')] class extends Component
             'middle_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'phone_name' => ['nullable', 'string', 'max:255'],
+            'work_type' => ['nullable', 'string', 'max:100'],
             // Unique across everyone except this employee, otherwise saving an
             // unchanged form would collide with the record's own address.
             'company_email' => ['required', 'email', 'unique:employees,company_email,' . $this->employee->id],
@@ -171,8 +174,15 @@ new #[Layout('layouts.app')] class extends Component
                         @error('last_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <x-label>Phone Name <span class="font-medium text-[#778599]">(alias for calls)</span></x-label>
+                        <x-label>Phone Name <span class="font-medium text-[#778599]">(name used for CRM work)</span></x-label>
                         <x-input wire:model="phone_name" type="text" />
+                        <p class="mt-1 text-xs font-medium text-[#778599]">The CRM splits this into first and last name when creating their user.</p>
+                    </div>
+                    <div>
+                        <x-label>Work Type <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-input wire:model="work_type" type="text" placeholder="e.g. Inbound" />
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Pre-fills the CRM Work Type. Blank means the CRM admin picks it.</p>
+                        @error('work_type') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <x-label>Company Email</x-label>

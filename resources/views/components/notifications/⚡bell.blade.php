@@ -50,7 +50,7 @@ new class extends Component
         " class="relative flex h-12 w-12 items-center justify-center rounded-xl border border-neutral-200 bg-white font-medium text-[#778599] shadow-sm hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800">
         <x-icon name="bell" stroke-width="2.25" class="h-5 w-5" />
         @if ($unreadCount > 0)
-            <span class="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white">{{ $unreadCount }}</span>
+            <span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white dark:ring-neutral-900">{{ $unreadCount }}</span>
         @endif
     </button>
 

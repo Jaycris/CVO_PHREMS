@@ -14,6 +14,8 @@ new #[Layout('layouts.app')] class extends Component
     #[Locked]
     public ?int $openId = null;
 
+    public string $year = '';
+
     public function mount(?Payslip $payslip = null): void
     {
         if ($payslip?->exists) {
@@ -51,6 +53,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->openId = null;
     }
 
+
     public function with(): array
     {
         $employee = Auth::user()?->employee;
@@ -80,11 +83,31 @@ new #[Layout('layouts.app')] class extends Component
             ? $released()->with('payrollRun')->find($this->openId)
             : null;
 
+        $lines = $open?->lines()->orderBy('sort_order')->get() ?? collect();
+        $earnings = $lines
+            ->where('section', 'earning')
+            ->filter(fn ($line) => (float) $line->amount >= 0)
+            ->values();
+        $legacyDeductions = $lines
+            ->where('section', 'earning')
+            ->filter(fn ($line) => (float) $line->amount < 0)
+            ->map(function ($line) {
+                $line = clone $line;
+                $line->amount = abs((float) $line->amount);
+
+                return $line;
+            });
+        $deductions = $legacyDeductions
+            ->concat($lines->where('section', 'deduction'))
+            ->values();
+
         return [
             'payslips' => $payslips,
             'open' => $open,
-            'earnings' => $open?->lines()->where('section', 'earning')->get() ?? collect(),
-            'deductions' => $open?->lines()->where('section', 'deduction')->get() ?? collect(),
+            'earnings' => $earnings,
+            'deductions' => $deductions,
+            'displayGrossPay' => round((float) $earnings->sum('amount'), 2),
+            'displayTotalDeductions' => round((float) $deductions->sum('amount'), 2),
             'hasEmployee' => $employee !== null,
         ];
     }
@@ -102,7 +125,11 @@ new #[Layout('layouts.app')] class extends Component
             <p class="text-sm font-medium text-[#778599]">Your account is not linked to an employee record yet. Ask HR to sort it out.</p>
         </x-card>
     @else
-        <x-card :padding="false" class="relative overflow-hidden rounded-2xl" x-data="{ selected: [] }">
+        <x-card
+            :padding="false"
+            class="relative overflow-hidden rounded-2xl"
+            x-data="{ selected: [] }"
+        >
             <div
                 wire:loading.flex
                 wire:target="open"
@@ -118,8 +145,27 @@ new #[Layout('layouts.app')] class extends Component
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <div class="flex items-center gap-2">
-                        <x-icon-button icon="eye" disabled title="Open a payslip row to view details" />
+                        <button
+                            type="button"
+                            x-on:click="if (selected.length === 1) $wire.open(selected[0])"
+                            x-bind:disabled="selected.length !== 1"
+                            x-bind:title="selected.length === 1 ? 'View selected payslip' : 'Select one payslip to view'"
+                            x-bind:class="selected.length === 1 ? 'text-ink-500 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-400 dark:hover:bg-white/10 dark:hover:text-white' : 'pointer-events-none text-ink-400 opacity-40 dark:text-ink-500'"
+                            class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white shadow-sm transition dark:border-white/10 dark:bg-ink-900"
+                        >
+                            <x-icon name="eye" class="h-4 w-4" />
+                        </button>
+                        <a
+                            x-bind:href="selected.length === 1 ? @js(url('/my-payslips')) + '/' + selected[0] + '/download' : '#'"
+                            x-bind:title="selected.length === 1 ? 'Download selected payslip PDF' : 'Select one payslip to download'"
+                            x-bind:class="selected.length === 1 ? 'text-ink-500 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-400 dark:hover:bg-white/10 dark:hover:text-white' : 'pointer-events-none text-ink-400 opacity-40 dark:text-ink-500'"
+                            class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white shadow-sm transition dark:border-white/10 dark:bg-ink-900"
+                        >
+                            <x-icon name="download" class="h-4 w-4" />
+                        </a>
+
                     </div>
+
 
                     <label class="relative block sm:w-80">
                         <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
@@ -141,16 +187,15 @@ new #[Layout('layouts.app')] class extends Component
                                 <input
                                     type="checkbox"
                                     class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
-                                    @change="selected = $event.target.checked ? @js($payslips->getCollection()->pluck('id')->values()) : []"
-                                    :checked="selected.length === @js($payslips->count()) && @js($payslips->count()) > 0"
+                                    x-bind:checked="selected.length === {{ $payslips->count() }} && {{ $payslips->count() }} > 0"
+                                    @click="selected = (selected.length === {{ $payslips->count() }}) ? [] : [{{ $payslips->getCollection()->pluck('id')->implode(',') }}].map(String)"
                                 >
                             </th>
                             <th class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Period</th>
                             <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Paid On</th>
                             <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Gross</th>
                             <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Deductions</th>
-                            <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Take Home</th>
-                            <th class="px-4 py-4"></th>
+                            <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Net Pay</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
@@ -160,14 +205,14 @@ new #[Layout('layouts.app')] class extends Component
                                 wire:click="open({{ $payslip->id }})"
                                 wire:loading.class="opacity-70"
                                 wire:target="open({{ $payslip->id }})"
-                                class="cursor-pointer transition duration-200 hover:-translate-y-px hover:bg-brand-50/50 hover:shadow-sm active:scale-[0.998] dark:hover:bg-white/[0.03]"
-                                x-bind:class="selected.includes({{ $payslip->id }}) ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''"
+                                class="cursor-pointer transition duration-200 hover:bg-brand-50/50 dark:hover:bg-white/[0.03]"
+                                x-bind:class="selected.includes('{{ $payslip->id }}') ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''"
                             >
-                                <td class="px-6 py-4" @click.stop>
+                                <td class="px-6 py-4" onclick="event.stopPropagation()">
                                     <input
                                         type="checkbox"
                                         value="{{ $payslip->id }}"
-                                        x-model.number="selected"
+                                        x-model="selected"
                                         class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
                                     >
                                 </td>
@@ -176,30 +221,10 @@ new #[Layout('layouts.app')] class extends Component
                                 <td class="whitespace-nowrap px-4 py-4 text-right font-medium text-ink-600 tabular-nums dark:text-ink-300">₱{{ number_format((float) $payslip->gross_pay, 2) }}</td>
                                 <td class="whitespace-nowrap px-4 py-4 text-right font-medium text-ink-600 tabular-nums dark:text-ink-300">₱{{ number_format((float) $payslip->total_deductions, 2) }}</td>
                                 <td class="whitespace-nowrap px-4 py-4 text-right font-bold text-ink-950 tabular-nums dark:text-white">₱{{ number_format((float) $payslip->net_pay, 2) }}</td>
-                                <td class="whitespace-nowrap px-6 py-4 text-right">
-                                    <button
-                                        type="button"
-                                        wire:click.stop="open({{ $payslip->id }})"
-                                        wire:loading.attr="disabled"
-                                        wire:target="open({{ $payslip->id }})"
-                                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-ink-50 hover:text-brand-700 hover:shadow-md active:translate-y-0 disabled:pointer-events-none disabled:opacity-80 dark:border-white/10 dark:bg-ink-900 dark:text-ink-300 dark:hover:bg-white/10"
-                                        title="View payslip"
-                                    >
-                                        <span wire:loading.remove wire:target="open({{ $payslip->id }})">
-                                            <x-icon name="eye" class="h-4 w-4" />
-                                        </span>
-                                        <span
-                                            wire:loading
-                                            wire:target="open({{ $payslip->id }})"
-                                            class="h-4 w-4 animate-spin rounded-full border-2 border-ink-200 border-t-brand-700 dark:border-white/20 dark:border-t-brand-300"
-                                            aria-hidden="true"
-                                        ></span>
-                                    </button>
-                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="px-6 py-16 text-center">
+                                <td colspan="6" class="px-6 py-16 text-center">
                                     <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
                                         <x-icon name="document" class="h-7 w-7" />
                                     </div>
@@ -264,14 +289,14 @@ new #[Layout('layouts.app')] class extends Component
                                         <span class="text-sm font-medium text-[#65758c] dark:text-neutral-300">{{ $line->label }}</span>
                                         @if ($line->detail)<span class="ml-1 text-xs font-medium text-[#778599]">{{ $line->detail }}</span>@endif
                                     </div>
-                                    <span class="text-sm font-medium tabular-nums {{ (float) $line->amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-[#0f172a] dark:text-white' }}">
+                                    <span class="text-sm font-medium text-[#0f172a] tabular-nums dark:text-white">
                                         ₱{{ number_format((float) $line->amount, 2) }}
                                     </span>
                                 </div>
                             @endforeach
                             <div class="flex items-baseline justify-between gap-4 py-2">
                                 <span class="text-sm font-bold text-[#0f172a] dark:text-white">Gross pay</span>
-                                <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $open->gross_pay, 2) }}</span>
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $displayGrossPay, 2) }}</span>
                             </div>
                         </div>
                     </div>
@@ -292,19 +317,19 @@ new #[Layout('layouts.app')] class extends Component
                             @endforelse
                             <div class="flex items-baseline justify-between gap-4 py-2">
                                 <span class="text-sm font-bold text-[#0f172a] dark:text-white">Total deductions</span>
-                                <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $open->total_deductions, 2) }}</span>
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $displayTotalDeductions, 2) }}</span>
                             </div>
                         </div>
                     </div>
 
                     <div class="flex items-baseline justify-between gap-4 rounded-lg bg-brand-50 px-4 py-3 dark:bg-brand-900/20">
-                        <span class="text-base font-bold text-[#0f172a] dark:text-white">Take home</span>
+                        <span class="text-base font-bold text-[#0f172a] dark:text-white">Net Pay</span>
                         <span class="text-2xl font-bold text-brand-700 dark:text-brand-300 tabular-nums">₱{{ number_format((float) $open->net_pay, 2) }}</span>
                     </div>
                 </div>
 
                 <div class="mt-5 flex gap-2">
-                    <x-button variant="secondary" x-on:click="$dispatch('close-modal-visual')" wire:click="closePayslip">Close</x-button>
+                    <x-button variant="secondary" x-on:click="$dispatch('close-modal-visual'); setTimeout(() => $wire.closePayslip(), 120)">Close</x-button>
                 </div>
             </div>
         @endif

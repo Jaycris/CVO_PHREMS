@@ -59,6 +59,15 @@ return [
         // exists to stop a page refresh hammering the CRM.
         'cache_ttl' => (int) env('CRM_API_CACHE_TTL', 300),
         'verify_tls' => filter_var(env('CRM_API_VERIFY_TLS', true), FILTER_VALIDATE_BOOLEAN),
+
+        /*
+         * The other direction: what the CRM presents when it calls this app's
+         * employee lookup. A different secret from the one above on purpose —
+         * they travel opposite ways and one leaking should not surrender both.
+         *
+         * Blank closes the lookup API entirely rather than opening it.
+         */
+        'inbound_token' => env('CRM_INBOUND_API_TOKEN'),
     ],
 
 ];

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CommissionSlipPdfController;
+use App\Http\Controllers\CrmLinkExportController;
 use App\Http\Controllers\EmployeeExportController;
 use App\Http\Controllers\MyPayslipPdfController;
 use App\Http\Controllers\PayrollRegisterExportController;
@@ -98,6 +99,8 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('can:commissions.view_all')->group(function () {
         Route::livewire('/commissions', 'commissions.index')->name('commissions.index');
+        Route::livewire('/commissions/links', 'commissions.links')->name('commissions.links');
+        Route::get('/commissions/links/export', CrmLinkExportController::class)->name('commissions.links.export');
     });
 
     Route::middleware('can:bank_details.approve')->group(function () {

@@ -101,7 +101,8 @@
                             <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.index')" icon="clipboard">Reimbursement Record</x-nav-link>
                         @endcan
                         @can('commissions.view_all')
-                            <x-nav-link :href="route('commissions.index')" :active="request()->routeIs('commissions.*')" icon="chart">Commission Slips</x-nav-link>
+                            <x-nav-link :href="route('commissions.index')" :active="request()->routeIs('commissions.index')" icon="chart">Commission Slips</x-nav-link>
+                            <x-nav-link :href="route('commissions.links')" :active="request()->routeIs('commissions.links')" icon="users">Link CRM Accounts</x-nav-link>
                         @endcan
                         @can('bank_details.approve')
                             <x-nav-link :href="route('bank-details.index')" :active="request()->routeIs('bank-details.*')" icon="money">Bank Details</x-nav-link>
@@ -150,6 +151,7 @@
                         request()->routeIs('reimbursements.*') => 'Reimbursement Record',
                         request()->routeIs('bank-details.*') => 'Bank Details',
                         request()->routeIs('my-commission') => 'My Commission',
+                        request()->routeIs('commissions.links') => 'Link CRM Accounts',
                         request()->routeIs('commissions.*') => 'Commission Slips',
                         request()->routeIs('org.departments') => 'Departments',
                         request()->routeIs('org.positions') => 'Positions',

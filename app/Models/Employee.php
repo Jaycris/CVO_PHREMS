@@ -34,7 +34,11 @@ class Employee extends Model
     protected $fillable = [
         'employee_id',
         'crm_agent_id',
+        'crm_linked_at',
+        'crm_linked_by_user_id',
+        'crm_agent_snapshot',
         'phone_name',
+        'work_type',
         'company_email',
         'position_id',
         'department_id',
@@ -87,6 +91,8 @@ class Employee extends Model
             'quota' => 'decimal:2',
             'onboarding_completed_at' => 'datetime',
             'bank_details_updated_at' => 'datetime',
+            'crm_linked_at' => 'datetime',
+            'crm_agent_snapshot' => 'array',
             'separation_date' => 'date',
             'include_in_payroll' => 'boolean',
             'sss_enrolled' => 'boolean',
@@ -281,6 +287,12 @@ class Employee extends Model
     public function attendanceDays(): HasMany
     {
         return $this->hasMany(AttendanceDay::class);
+    }
+
+    /** Who confirmed this employee is that CRM account. */
+    public function crmLinkedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'crm_linked_by_user_id');
     }
 
     public function bankDetailRequests(): HasMany
