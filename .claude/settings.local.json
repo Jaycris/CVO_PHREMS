@@ -63,7 +63,9 @@
       "Bash(printf '\\\\n# CRM \\(commission slips\\). The CRM owns every commission figure; this app\\\\n# only reads them. Leave the URL blank to keep the commission pages dormant.\\\\nCRM_API_BASE_URL=\\\\nCRM_HRIS_API_TOKEN=\\\\n# bearer | x-hris-token\\\\nCRM_HRIS_AUTH_HEADER=bearer\\\\nCRM_API_TIMEOUT=15\\\\nCRM_API_CACHE_TTL=300\\\\nCRM_API_VERIFY_TLS=true\\\\n')",
       "Bash(printf '\\\\nCRM_API_BASE_URL=\\\\nCRM_HRIS_API_TOKEN=\\\\nCRM_HRIS_AUTH_HEADER=bearer\\\\nCRM_API_TIMEOUT=15\\\\nCRM_API_CACHE_TTL=300\\\\nCRM_API_VERIFY_TLS=true\\\\n')",
       "Bash(grep -n 'crm_agent_id\\\\|$this->employee->update\\\\|validate\\($rules' resources/views/components/employees/⚡edit.blade.php)",
-      "Bash(xargs -I{} sh -c 'echo \"=== {}\"; head -30 {}')"
+      "Bash(xargs -I{} sh -c 'echo \"=== {}\"; head -30 {}')",
+      "Bash(cd \"D:/Project/CreatiVision/Claude\" && echo \"=== payroll_runs ===\" && sed -n '1,60p' database/migrations/*create_payroll_runs_table.php && echo \"\" && echo \"=== PayslipNotifier ===\" && cat app/Services/Payroll/PayslipNotifier.php)",
+      "PowerShell(Start-Process -FilePath \"D:\\\\laragon\\\\bin\\\\mysql\\\\mysql-8.4.3-winx64\\\\bin\\\\mysqld.exe\" -ArgumentList \"--defaults-file=D:\\\\laragon\\\\bin\\\\mysql\\\\mysql-8.4.3-winx64\\\\my.ini\" -WindowStyle Hidden; Start-Sleep -Seconds 10; \\(Test-NetConnection -ComputerName 127.0.0.1 -Port 3306 -WarningAction SilentlyContinue\\).TcpTestSucceeded)"
     ]
   }
 }

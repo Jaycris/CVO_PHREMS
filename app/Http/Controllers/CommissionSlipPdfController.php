@@ -2,10 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Employee;
-use App\Services\Crm\CommissionSlip;
-use App\Services\Crm\CommissionSlipService;
-use App\Services\Crm\CrmUnavailable;
+use App\Models\CommissionSlip;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
@@ -13,33 +10,28 @@ use Illuminate\Support\Facades\Auth;
 /**
  * The commission slip as a PDF, built the same hand-rolled way as the payslip.
  *
- * No PDF library on purpose — MyPayslipPdfController already proves the
- * approach and shared hosting does not want dompdf's memory footprint.
+ * Printed from the stored slip, never from a live CRM call. A PDF downloaded in
+ * October must show what was sent in August, whatever the CRM says today.
  */
 class CommissionSlipPdfController
 {
-    public function __invoke(Request $request, CommissionSlipService $service): Response
+    public function __invoke(Request $request, CommissionSlip $slip): Response
     {
         $viewer = Auth::user();
-        $employee = $viewer?->employee;
 
-        // HR may download anyone's; everyone else may download only their own.
-        if ($request->filled('employee') && $viewer?->can('commissions.view_all')) {
-            $employee = Employee::findOrFail((int) $request->integer('employee'));
+        // HR may print anyone's; an agent may print their own, and only once it
+        // has been sent to them.
+        if (! $viewer?->can('commissions.view_all')) {
+            $employee = $viewer?->employee;
+
+            abort_unless($employee && $slip->employee_id === $employee->id, 403, 'That commission slip is not yours.');
+            abort_unless($slip->notified_at !== null, 403, 'That commission slip has not been sent yet.');
         }
 
-        abort_unless($employee, 403, 'No employee profile is linked to your account.');
+        $slip->load(['lines', 'commissionRun', 'employee']);
 
-        $month = (string) $request->query('month', now('Asia/Manila')->format('Y-m'));
-
-        try {
-            $slip = $service->forEmployee($employee, $month);
-        } catch (CrmUnavailable $e) {
-            abort(503, $e->getMessage());
-        }
-
-        $name = str($slip->agentName ?: 'Agent')->replaceMatches('/[^A-Za-z0-9 ]+/', '')->squish();
-        $filename = $name . ' Commission Slip ' . $slip->month . '.pdf';
+        $name = str($slip->employeeName())->replaceMatches('/[^A-Za-z0-9 ]+/', '')->squish();
+        $filename = $name . ' Commission Slip ' . $slip->commissionRun->month() . '.pdf';
 
         return response($this->render($slip), 200, [
             'Content-Type' => 'application/pdf',
@@ -75,50 +67,56 @@ class CommissionSlipPdfController
 
         $y = 512;
         $text(10, 48, $y, 'Agent', 'F2');
-        $text(10, 140, $y, ': ' . ($slip->agentName ?: '-'));
+        $text(10, 140, $y, ': ' . $slip->employeeName());
         $text(10, 430, $y, 'Month', 'F2');
         $text(10, 520, $y, ': ' . $slip->monthLabel());
 
         $y -= 18;
-        $text(10, 48, $y, 'Team / Work Type', 'F2');
-        $text(10, 140, $y, ': ' . (trim(implode(' / ', array_filter([$slip->team, $slip->workType]))) ?: '-'));
-        $text(10, 430, $y, 'MTD / Target', 'F2');
-        $text(10, 520, $y, ': ' . $this->num($slip->mtd, '$') . ' / ' . $this->num($slip->target, '$')
-            . '  (' . $this->pct($slip->mtdPercent) . ')');
+        $text(10, 48, $y, 'Employee ID', 'F2');
+        $text(10, 140, $y, ': ' . ($slip->employeeCode() ?: '-'));
+        $text(10, 430, $y, 'Team / Work Type', 'F2');
+        $text(10, 545, $y, ': ' . $slip->teamLabel());
+
+        $y -= 18;
+        $text(10, 48, $y, 'MTD / Target', 'F2');
+        $text(10, 140, $y, ': ' . $this->num($slip->mtd, '$') . ' / ' . $this->num($slip->target, '$')
+            . '  (' . $this->pct($slip->mtd_percent) . ')');
+        $text(10, 430, $y, 'Issued', 'F2');
+        $text(10, 545, $y, ': ' . ($slip->notified_at?->format('F j, Y') ?? 'not yet sent'));
 
         $stream[] = '0.82 0.84 0.83 rg 40 ' . ($y - 14) . ' 762 1 re f 0 0 0 rg';
 
-        $y -= 42;
+        $y -= 40;
         $stream[] = '0.00 0.32 0.18 rg';
         $text(14, 48, $y, 'SUMMARY', 'F2');
         $stream[] = '0 0 0 rg';
 
-        $y -= 26;
+        $y -= 24;
         foreach ([
-            ['Service commission', $this->num($slip->serviceCommission, '$')],
-            ['Markup commission', $this->num($slip->markupCommission, '$')],
-            ['USD total', $this->num($slip->usdTotal, '$')],
-            ['Exchange rate', $slip->exchangeRate === null ? '-' : number_format($slip->exchangeRate, 4)],
-            ['PHP total', $this->num($slip->phpTotal, 'PHP ')],
-            ['Card payment hold', $this->pct($slip->cardHoldPercent)],
-            ['Card payment hold amount', $this->num($slip->cardHoldAmount, 'PHP ')],
+            ['Service commission', $this->num($slip->service_commission, '$')],
+            ['Markup commission', $this->num($slip->markup_commission, '$')],
+            ['USD total', $this->num($slip->usd_total, '$')],
+            ['Exchange rate', $slip->exchange_rate === null ? '-' : number_format((float) $slip->exchange_rate, 4)],
+            ['PHP total', $this->num($slip->php_total, 'PHP ')],
+            ['Card payment hold', $this->pct($slip->card_hold_percent)],
+            ['Card payment hold amount', $this->num($slip->card_hold_amount, 'PHP ')],
         ] as $i => [$label, $value]) {
             $row($y, $label, $value, $i % 2 === 0);
-            $y -= 20;
+            $y -= 19;
         }
 
         $y -= 6;
-        $row($y, 'NET COMMISSION', $this->num($slip->netCommission, 'PHP '), true, true);
+        $row($y, 'NET COMMISSION', $this->num($slip->net_commission, 'PHP '), true, true);
 
-        $y -= 44;
+        $y -= 40;
         $stream[] = '0.00 0.32 0.18 rg';
         $text(14, 48, $y, 'TRANSACTION STATEMENT', 'F2');
         $stream[] = '0 0 0 rg';
-        $y -= 22;
+        $y -= 20;
 
-        if (! $slip->statementSupplied) {
+        if (! $slip->statement_supplied) {
             $text(9, 48, $y, 'The CRM did not send per-sale rows for this month.');
-        } elseif ($slip->transactions->isEmpty()) {
+        } elseif ($slip->lines->isEmpty()) {
             $text(9, 48, $y, 'No commission records in ' . $slip->monthLabel() . '.');
         } else {
             $columns = [48, 116, 190, 300, 396, 462, 520, 578, 636, 694, 752];
@@ -128,51 +126,51 @@ class CommissionSlipPdfController
                 $text(8, $columns[$i], $y, $heading, 'F2');
             }
             $stream[] = '0.82 0.84 0.83 rg 40 ' . ($y - 6) . ' 762 1 re f 0 0 0 rg';
-            $y -= 16;
+            $y -= 15;
 
-            foreach ($slip->transactions as $index => $t) {
-                if ($y < 48) {
-                    $text(8, 48, $y, '... ' . ($slip->transactions->count() - $index) . ' more row(s) - see the app for the full statement.');
+            foreach ($slip->lines as $index => $line) {
+                if ($y < 46) {
+                    $text(8, 48, $y, '... ' . ($slip->lines->count() - $index) . ' more row(s) - see the app for the full statement.');
                     break;
                 }
 
                 if ($index % 2 === 0) {
-                    $stream[] = '0.95 0.95 0.95 rg 40 ' . ($y - 4) . ' 762 15 re f 0 0 0 rg';
+                    $stream[] = '0.95 0.95 0.95 rg 40 ' . ($y - 4) . ' 762 14 re f 0 0 0 rg';
                 }
 
                 foreach ([
-                    $this->clip($t->soldDate, 10),
-                    $this->clip($t->brand, 11),
-                    $this->clip($t->client, 17),
-                    $this->clip($t->bookTitle, 15),
-                    $this->clip($t->service, 10),
-                    $this->clip($t->paymentMethod, 9),
-                    $this->num($t->saleAmount, '$'),
-                    $this->num($t->serviceCommission, '$'),
-                    $this->num($t->markupCommission, '$'),
-                    $this->num($t->cardHoldAmount, ''),
-                    $this->num($t->netCommission, ''),
+                    $this->clip($line->sold_date, 10),
+                    $this->clip($line->brand, 11),
+                    $this->clip($line->client, 17),
+                    $this->clip($line->book_title, 15),
+                    $this->clip($line->service, 10),
+                    $this->clip($line->payment_method, 9),
+                    $this->num($line->sale_amount, '$'),
+                    $this->num($line->service_commission, '$'),
+                    $this->num($line->markup_commission, '$'),
+                    $this->num($line->card_hold_amount, ''),
+                    $this->num($line->net_commission, ''),
                 ] as $i => $cell) {
                     $text(8, $columns[$i], $y, $cell);
                 }
 
-                $y -= 15;
+                $y -= 14;
             }
         }
 
-        $text(8, 48, 28, 'Figures supplied by the CRM. Queries about any amount go to your team lead.');
+        $text(8, 48, 28, 'Figures supplied by the CRM and locked when this run was computed. Queries about any amount go to your team lead.');
 
         return $this->buildPdf(implode("\n", $stream));
     }
 
-    protected function num(?float $value, string $prefix): string
+    protected function num($value, string $prefix): string
     {
-        return $value === null ? '-' : $prefix . number_format($value, 2);
+        return $value === null ? '-' : $prefix . number_format((float) $value, 2);
     }
 
-    protected function pct(?float $value): string
+    protected function pct($value): string
     {
-        return $value === null ? '-' : number_format($value, 2) . '%';
+        return $value === null ? '-' : number_format((float) $value, 2) . '%';
     }
 
     protected function clip(?string $value, int $length): string

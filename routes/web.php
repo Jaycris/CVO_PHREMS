@@ -35,7 +35,8 @@ Route::middleware('auth')->group(function () {
     // Commission figures come from the CRM. The page shows the signer's own
     // slip, so it needs no permission — same reasoning as My Payslips.
     Route::livewire('/my-commission', 'my-commission')->name('my-commission');
-    Route::get('/my-commission/download', CommissionSlipPdfController::class)->name('my-commission.download');
+    Route::livewire('/my-commission/{slip}', 'my-commission')->name('my-commission.show');
+    Route::get('/my-commission/{slip}/download', CommissionSlipPdfController::class)->name('my-commission.download');
 
     /*
      * Filing and approving. Everyone may file; the pages themselves decide what
@@ -97,7 +98,14 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('can:commissions.view_all')->group(function () {
-        Route::livewire('/commissions', 'commissions.index')->name('commissions.index');
+        // Live look-up straight at the CRM, for a query mid-month before any
+        // run has been computed.
+        Route::livewire('/commissions/lookup', 'commissions.index')->name('commissions.index');
+    });
+
+    Route::middleware('can:commissions.runs.manage')->group(function () {
+        Route::livewire('/commissions', 'commissions.runs')->name('commissions.runs');
+        Route::livewire('/commissions/runs/{run}', 'commissions.run-show')->name('commissions.run-show');
     });
 
     Route::middleware('can:bank_details.approve')->group(function () {
