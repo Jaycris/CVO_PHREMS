@@ -48,8 +48,9 @@ return [
             'overtime.view_all' => 'Overtime — view all filings across the company',
         ],
 
-        'Work From Home' => [
-            'wfh.view_all' => 'Work From Home — view all requests, and decide those from employees with no manager',
+        'Requests' => [
+            'requests.view_all' => 'Requests — view every request, and decide those from employees with no manager',
+            'requests.types.manage' => 'Request Types — add and edit the kinds of request employees can file',
         ],
 
         'Leave' => [

@@ -43,6 +43,7 @@
                     $showPeople = auth()->user()->canAny([
                         'employees.manage', 'users.manage', 'schedules.manage',
                         'attendance.view_all', 'leave.types.manage', 'cash_advances.manage',
+                        'requests.types.manage',
                         'recruitment.manage',
                         'reimbursements.view_all',
                         'bank_details.approve',
@@ -62,7 +63,7 @@
                     <x-nav-link :href="route('my-commission')" :active="request()->routeIs('my-commission')" icon="chart">My Commission</x-nav-link>
                     <x-nav-link :href="route('leave-requests.index')" :active="request()->routeIs('leave-requests.*')" icon="clipboard">Leave Requests</x-nav-link>
                     <x-nav-link :href="route('overtime.index')" :active="request()->routeIs('overtime.*')" icon="clock">Overtime</x-nav-link>
-                    <x-nav-link :href="route('work-from-home.index')" :active="request()->routeIs('work-from-home.*')" icon="clipboard">Work From Home Requests</x-nav-link>
+                    <x-nav-link :href="route('requests.index')" :active="request()->routeIs('requests.*')" icon="clipboard">Requests</x-nav-link>
                     <x-nav-link :href="route('cash-advance-requests.index')" :active="request()->routeIs('cash-advance-requests.*')" icon="clipboard">Cash Advance Requests</x-nav-link>
                     <x-nav-link :href="route('my-reimbursements')" :active="request()->routeIs('my-reimbursements')" icon="money">My Reimbursement</x-nav-link>
 
@@ -92,6 +93,9 @@
                         @endcan
                         @can('attendance.view_all')
                             <x-nav-link :href="route('attendance.dtr')" :active="request()->routeIs('attendance.dtr')" icon="clock">DTR</x-nav-link>
+                        @endcan
+                        @can('requests.types.manage')
+                            <x-nav-link :href="route('request-types.index')" :active="request()->routeIs('request-types.*')" icon="document">Request Types</x-nav-link>
                         @endcan
                         @can('leave.types.manage')
                             <x-nav-link :href="route('leave-types.index')" :active="request()->routeIs('leave-types.*')" icon="document">Leave Types</x-nav-link>
@@ -150,7 +154,8 @@
                         request()->routeIs('attendance.punch') => 'My Attendance',
                         request()->routeIs('leave-requests.*') => 'Leave Requests',
                         request()->routeIs('overtime.*') => 'Overtime',
-                        request()->routeIs('work-from-home.*') => 'Work From Home Requests',
+                        request()->routeIs('requests.*') => 'Requests',
+                        request()->routeIs('request-types.*') => 'Request Types',
                         request()->routeIs('cash-advance-requests.*') => 'Cash Advance Requests',
                         request()->routeIs('my-reimbursements') => 'My Reimbursement',
                         request()->routeIs('reimbursements.*') => 'Reimbursement Record',

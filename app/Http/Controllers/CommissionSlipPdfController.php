@@ -50,22 +50,30 @@ class CommissionSlipPdfController
         $right = function (int $size, float $edge, float $y, string $value, string $font = 'F1') use ($text) {
             $text($size, $edge - $this->width($value, $size), $y, $value, $font);
         };
-        $row = function (float $y, string $label, string $value, bool $shade = false, bool $bold = false) use (&$stream, $text, $right) {
+
+        $summaryCell = function (float $x, float $rightEdge, float $y, string $label, string $value, bool $shade = false) use (&$stream, $text, $right) {
             if ($shade) {
-                $stream[] = '0.93 0.93 0.93 rg 40 ' . ($y - 7) . ' 762 20 re f 0 0 0 rg';
+                $stream[] = '0.95 0.95 0.95 rg ' . ($x - 8) . ' ' . ($y - 7) . ' ' . ($rightEdge - $x + 8) . ' 19 re f 0 0 0 rg';
             }
-            $text(10, 48, $y, $label, $bold ? 'F2' : 'F1');
-            $right(10, 794, $y, $value, $bold ? 'F2' : 'F1');
+
+            $text(9, $x, $y, $label);
+            $right(9, $rightEdge - 8, $y, $value, 'F2');
         };
+
+        $header = $this->headerImage();
 
         // Landscape: the statement has fifteen columns and will not fit upright.
         $stream[] = '1 1 1 rg 0 0 842 595 re f';
-        $stream[] = '0.00 0.32 0.18 rg 0 540 842 55 re f';
-        $stream[] = '1 1 1 rg';
-        $text(20, 48, 558, 'COMMISSION SLIP', 'F2');
-        $stream[] = '0 0 0 rg';
+        if ($header) {
+            $stream[] = 'q 842 0 0 95 0 500 cm /Im1 Do Q';
+        }
 
-        $y = 512;
+        $stream[] = '0.00 0.32 0.18 rg';
+        $text(24, 310, 467, 'COMMISSION SLIP', 'F2');
+        $stream[] = '0 0 0 rg';
+        $text(8, 350, 451, 'MONTHLY PERFORMANCE STATEMENT', 'F2');
+
+        $y = 424;
         $text(10, 48, $y, 'Agent', 'F2');
         $text(10, 140, $y, ': ' . $slip->employeeName());
         $text(10, 430, $y, 'Month', 'F2');
@@ -86,43 +94,48 @@ class CommissionSlipPdfController
 
         $stream[] = '0.82 0.84 0.83 rg 40 ' . ($y - 14) . ' 762 1 re f 0 0 0 rg';
 
-        $y -= 40;
+        $y -= 38;
         $stream[] = '0.00 0.32 0.18 rg';
         $text(14, 48, $y, 'SUMMARY', 'F2');
         $stream[] = '0 0 0 rg';
 
-        $y -= 24;
-        foreach ([
+        $leftSummary = [
             ['Service commission (USD)', $this->num($slip->service_commission, '$')],
             ['Markup commission (USD)', $this->num($slip->markup_commission, '$')],
             ['USD total', $this->num($slip->usd_total, '$')],
             ['Exchange rate', $slip->exchange_rate === null ? '-' : number_format((float) $slip->exchange_rate, 4)],
+        ];
+        $rightSummary = [
             ['PHP total', $this->num($slip->php_total, 'PHP ')],
             ['Card payment hold', $this->pct($slip->card_hold_percent)],
             ['Card payment hold amount', $this->num($slip->card_hold_amount, 'PHP ')],
-        ] as $i => [$label, $value]) {
-            $row($y, $label, $value, $i % 2 === 0);
+            ['Target attainment', $this->pct($slip->mtd_percent)],
+        ];
+
+        $y -= 23;
+        foreach ($leftSummary as $i => [$label, $value]) {
+            $summaryCell(48, 410, $y, $label, $value, $i % 2 === 0);
+            $summaryCell(438, 802, $y, $rightSummary[$i][0], $rightSummary[$i][1], $i % 2 === 0);
             $y -= 19;
         }
 
-        // The conversion written out, so the printed slip needs no working out
-        // either. It is the line most likely to be queried.
+        $y -= 3;
+        $stream[] = '0.90 0.96 0.93 rg 40 ' . ($y - 9) . ' 762 23 re f 0 0 0 rg';
+        $text(11, 48, $y, 'NET COMMISSION', 'F2');
+        $right(13, 794, $y, $this->num($slip->net_commission, 'PHP '), 'F2');
+        $y -= 25;
+
         if ($slip->usd_total !== null && $slip->exchange_rate !== null) {
-            $y -= 4;
-            $stream[] = '0.93 0.96 0.94 rg 40 ' . ($y - 7) . ' 762 20 re f 0 0 0 rg';
-            $text(10, 48, $y, 'Currency conversion', 'F2');
-            $right(10, 794, $y,
+            $text(8, 48, $y, 'Currency conversion', 'F2');
+            $right(8, 794, $y,
                 $this->num($slip->usd_total, '$') . ' USD  x  '
                 . number_format((float) $slip->exchange_rate, 4) . '  =  '
                 . $this->num($slip->php_total, 'PHP '),
                 'F2');
-            $y -= 19;
+            $y -= 17;
         }
 
-        $y -= 6;
-        $row($y, 'NET COMMISSION', $this->num($slip->net_commission, 'PHP '), true, true);
-
-        $y -= 40;
+        $y -= 10;
         $stream[] = '0.00 0.32 0.18 rg';
         $text(14, 48, $y, 'TRANSACTION STATEMENT', 'F2');
         $stream[] = '0 0 0 rg';
@@ -174,7 +187,7 @@ class CommissionSlipPdfController
 
         $text(8, 48, 28, 'Figures supplied by the CRM and locked when this run was computed. Queries about any amount go to your team lead.');
 
-        return $this->buildPdf(implode("\n", $stream));
+        return $this->buildPdf(implode("\n", $stream), $header);
     }
 
     protected function num($value, string $prefix): string
@@ -211,16 +224,123 @@ class CommissionSlipPdfController
         return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
     }
 
-    protected function buildPdf(string $stream): string
+    protected function headerImage(): ?array
+    {
+        $path = public_path('images/CreativeVision-LOGO-v2-03.png');
+
+        if (! function_exists('imagecreatefrompng') || ! is_file($path)) {
+            return null;
+        }
+
+        $source = imagecreatefrompng($path);
+
+        if (! $source) {
+            return null;
+        }
+
+        $width = 1684;
+        $height = 190;
+        $canvas = imagecreatetruecolor($width, $height);
+
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        imagefilledrectangle($canvas, 0, 0, $width, $height, $white);
+
+        $darkGreen = imagecolorallocate($canvas, 5, 76, 51);
+        $deepGreen = imagecolorallocate($canvas, 3, 57, 41);
+        $accentGreen = imagecolorallocate($canvas, 15, 112, 68);
+
+        $mainCurve = $this->cubicCurve([610, 0], [790, 8], [875, 176], [1175, 148], 30);
+        $mainCurve = array_merge($mainCurve, $this->cubicCurve([1175, 148], [1360, 130], [1535, 104], [1684, 126], 18, true));
+        $mainShape = [610, 0, 1684, 0, 1684, 126];
+        foreach (array_reverse($mainCurve) as [$x, $y]) {
+            $mainShape[] = $x;
+            $mainShape[] = $y;
+        }
+        imagefilledpolygon($canvas, $mainShape, $darkGreen);
+
+        $bandTop = [];
+        $bandBottom = [];
+        $bandCurve = array_values(array_filter($mainCurve, fn (array $point) => $point[0] >= 850));
+        foreach ($bandCurve as $index => [$x, $y]) {
+            $thickness = (int) round(12 * min(1, $index / 10));
+            $bandTop[] = [$x, min($height, $y)];
+            $bandBottom[] = [$x, min($height, $y + $thickness)];
+        }
+        $bandShape = [];
+        foreach ($bandTop as [$x, $y]) {
+            $bandShape[] = $x;
+            $bandShape[] = $y;
+        }
+        foreach (array_reverse($bandBottom) as [$x, $y]) {
+            $bandShape[] = $x;
+            $bandShape[] = $y;
+        }
+        imagefilledpolygon($canvas, $bandShape, $accentGreen);
+
+        $lowerTop = $this->cubicCurve([0, 164], [165, 115], [390, 128], [555, 176], 32);
+        $lowerBottom = [];
+        $last = max(1, count($lowerTop) - 1);
+        foreach ($lowerTop as $index => [$x, $y]) {
+            $lowerBottom[] = [$x, min($height, $y + (int) round(22 * (1 - ($index / $last))) + 2)];
+        }
+        $lowerShape = [];
+        foreach ($lowerTop as [$x, $y]) {
+            $lowerShape[] = $x;
+            $lowerShape[] = $y;
+        }
+        foreach (array_reverse($lowerBottom) as [$x, $y]) {
+            $lowerShape[] = $x;
+            $lowerShape[] = $y;
+        }
+        imagefilledpolygon($canvas, $lowerShape, $deepGreen);
+
+        $sourceWidth = imagesx($source);
+        $sourceHeight = imagesy($source);
+        $logoWidth = 320;
+        $logoHeight = (int) round($logoWidth * ($sourceHeight / $sourceWidth));
+        imagealphablending($canvas, true);
+        imagecopyresampled($canvas, $source, 58, 34, 0, 0, $logoWidth, $logoHeight, $sourceWidth, $sourceHeight);
+
+        ob_start();
+        imagejpeg($canvas, null, 90);
+        $data = ob_get_clean();
+
+        imagedestroy($source);
+        imagedestroy($canvas);
+
+        return $data ? compact('data', 'width', 'height') : null;
+    }
+
+    protected function cubicCurve(array $start, array $controlOne, array $controlTwo, array $end, int $steps, bool $skipFirst = false): array
+    {
+        $points = [];
+
+        for ($step = $skipFirst ? 1 : 0; $step <= $steps; $step++) {
+            $t = $step / $steps;
+            $inverse = 1 - $t;
+            $x = ($inverse ** 3 * $start[0]) + (3 * $inverse ** 2 * $t * $controlOne[0]) + (3 * $inverse * $t ** 2 * $controlTwo[0]) + ($t ** 3 * $end[0]);
+            $y = ($inverse ** 3 * $start[1]) + (3 * $inverse ** 2 * $t * $controlOne[1]) + (3 * $inverse * $t ** 2 * $controlTwo[1]) + ($t ** 3 * $end[1]);
+
+            $points[] = [(int) round($x), (int) round($y)];
+        }
+
+        return $points;
+    }
+
+    protected function buildPdf(string $stream, ?array $header = null): string
     {
         $objects = [
             '<< /Type /Catalog /Pages 2 0 R >>',
             '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-            '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
+            '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 4 0 R /F2 5 0 R >>' . ($header ? ' /XObject << /Im1 7 0 R >>' : '') . ' >> /Contents 6 0 R >>',
             '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
             '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
             '<< /Length ' . strlen($stream) . " >>\nstream\n" . $stream . "\nendstream",
         ];
+
+        if ($header) {
+            $objects[] = '<< /Type /XObject /Subtype /Image /Width ' . $header['width'] . ' /Height ' . $header['height'] . ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' . strlen($header['data']) . " >>\nstream\n" . $header['data'] . "\nendstream";
+        }
 
         $pdf = "%PDF-1.4\n";
         $offsets = [0];

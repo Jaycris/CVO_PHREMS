@@ -5,9 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class WorkFromHomeDay extends Model
+class EmployeeRequestDay extends Model
 {
-    protected $fillable = ['work_from_home_request_id', 'work_date'];
+    protected $fillable = ['employee_request_id', 'work_date'];
 
     protected function casts(): array
     {
@@ -16,6 +16,6 @@ class WorkFromHomeDay extends Model
 
     public function request(): BelongsTo
     {
-        return $this->belongsTo(WorkFromHomeRequest::class, 'work_from_home_request_id');
+        return $this->belongsTo(EmployeeRequest::class, 'employee_request_id');
     }
 }

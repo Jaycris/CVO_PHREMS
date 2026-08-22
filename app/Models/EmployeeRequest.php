@@ -8,10 +8,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
-class WorkFromHomeRequest extends Model
+/**
+ * Anything an employee asks for that somebody has to say yes to.
+ *
+ * The kind of request is a row in request_types rather than a column here, so
+ * a new kind is an entry HR makes rather than a release.
+ */
+class EmployeeRequest extends Model
 {
     protected $fillable = [
-        'employee_id', 'reason', 'status',
+        'employee_id', 'request_type_id', 'details', 'status',
         'manager_id', 'decided_at', 'decision_note',
     ];
 
@@ -25,6 +31,11 @@ class WorkFromHomeRequest extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    public function type(): BelongsTo
+    {
+        return $this->belongsTo(RequestType::class, 'request_type_id');
+    }
+
     public function manager(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'manager_id');
@@ -32,7 +43,7 @@ class WorkFromHomeRequest extends Model
 
     public function days(): HasMany
     {
-        return $this->hasMany(WorkFromHomeDay::class)->orderBy('work_date');
+        return $this->hasMany(EmployeeRequestDay::class)->orderBy('work_date');
     }
 
     public function scopePending(Builder $query): Builder
@@ -49,6 +60,11 @@ class WorkFromHomeRequest extends Model
     public function isPending(): bool
     {
         return $this->status === 'pending_manager';
+    }
+
+    public function typeName(): string
+    {
+        return $this->type?->name ?? 'Request';
     }
 
     public function statusLabel(): string
@@ -78,7 +94,8 @@ class WorkFromHomeRequest extends Model
     }
 
     /**
-     * The dates as a phrase a person can read.
+     * The dates as a phrase a person can read, or a dash for a request that is
+     * not about days at all.
      *
      * A run of consecutive days collapses to a span, because "Aug 4 – Aug 8" is
      * how someone would say it out loud and five separate dates is not.
@@ -108,11 +125,17 @@ class WorkFromHomeRequest extends Model
             : $shown . ' ' . $dates->last()->format('Y');
     }
 
-    /** Whether a given employee is approved to work from home on a date. */
-    public static function approvedOn(int $employeeId, Carbon|string $date): bool
+    /**
+     * Whether an employee is approved for a given type on a date.
+     *
+     * The question attendance and reporting will want: "was she approved to be
+     * at home on Tuesday".
+     */
+    public static function approvedOn(int $employeeId, string $typeCode, Carbon|string $date): bool
     {
         return static::where('employee_id', $employeeId)
             ->where('status', 'approved')
+            ->whereHas('type', fn (Builder $t) => $t->where('code', $typeCode))
             ->whereHas('days', fn (Builder $q) => $q->whereDate('work_date', Carbon::parse($date)->toDateString()))
             ->exists();
     }

@@ -52,7 +52,7 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     // Everyone may ask; the page decides whose queue to show, since an
     // approver is found from who reports to them rather than a permission.
-    Route::livewire('/work-from-home', 'work-from-home.index')->name('work-from-home.index');
+    Route::livewire('/requests', 'requests.index')->name('requests.index');
 
     Route::livewire('/leave-requests', 'leave-requests.index')->name('leave-requests.index');
     Route::livewire('/leave-requests/create', 'leave-requests.create')->name('leave-requests.create');
@@ -91,6 +91,10 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     Route::middleware('can:attendance.view_all')->group(function () {
         Route::livewire('/dtr', 'attendance.dtr')->name('attendance.dtr');
+    });
+
+    Route::middleware('can:requests.types.manage')->group(function () {
+        Route::livewire('/request-types', 'request-types.index')->name('request-types.index');
     });
 
     Route::middleware('can:leave.types.manage')->group(function () {
