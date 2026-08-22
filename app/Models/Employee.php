@@ -43,6 +43,7 @@ class Employee extends Model
         'basic_salary',
         'allowance',
         'commission_scheme',
+        'commission_frequency',
         'quota',
         'employment_status',
         'reports_to_id',

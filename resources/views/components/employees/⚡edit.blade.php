@@ -30,6 +30,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $basic_salary = '';
     public string $allowance = '0';
     public string $commission_scheme = '';
+    public string $commission_frequency = 'none';
     public string $quota = '';
     public string $employment_status = 'Probationary';
     public ?int $reports_to_id = null;
@@ -53,6 +54,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->basic_salary = (string) $employee->basic_salary;
         $this->allowance = (string) $employee->allowance;
         $this->commission_scheme = (string) $employee->commission_scheme;
+        $this->commission_frequency = (string) ($employee->commission_frequency ?: 'none');
         $this->quota = $employee->quota !== null ? (string) $employee->quota : '';
         $this->employment_status = $employee->employment_status;
         $this->reports_to_id = $employee->reports_to_id;
@@ -88,6 +90,9 @@ new #[Layout('layouts.app')] class extends Component
             'allowance' => ['nullable', 'numeric', 'min:0'],
             'employment_status' => ['required', 'in:Probationary,Regular,Contract,Training'],
             'reports_to_id' => ['nullable', 'exists:employees,id'],
+            // How often their commission is worked out. Drives which
+            // commission run pre-selects them.
+            'commission_frequency' => ['required', 'in:none,monthly,biweekly'],
         ];
 
         if ($this->isSalesDepartment()) {
@@ -333,6 +338,16 @@ new #[Layout('layouts.app')] class extends Component
                                 <option value="Tier 3">Tier 3</option>
                             </x-select>
                             @error('commission_scheme') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <x-label>Commission Frequency</x-label>
+                            <x-select wire:model="commission_frequency">
+                                <option value="none">Not on commission</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="biweekly">Bi-weekly</option>
+                            </x-select>
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Pre-selects them on commission runs of that kind. They can still be added to any run by hand.</p>
+                            @error('commission_frequency') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                         </div>
                         <div>
                             <x-label>Quota</x-label>

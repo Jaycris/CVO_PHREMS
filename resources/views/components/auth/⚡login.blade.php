@@ -17,7 +17,7 @@ new #[Layout('layouts.guest')] class extends Component
             'password' => ['required'],
         ]);
 
-        if (! Auth::attempt($credentials, $this->remember)) {
+        if (! Auth::attempt([...$credentials, 'is_active' => true], $this->remember)) {
             $this->addError('email', 'These credentials do not match our records.');
 
             return;

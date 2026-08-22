@@ -39,6 +39,84 @@ new #[Layout('layouts.app')] class extends Component
     public string $userCode = '';
 
     public string $search = '';
+    public ?string $statusMessage = null;
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    /** @param list<int|string> $ids */
+    public function editSelected(array $ids): void
+    {
+        if (count($ids) === 1) {
+            $this->manageAccess((int) $ids[0]);
+        }
+    }
+
+    /** @param list<int|string> $ids */
+    public function setSelectedAccess(array $ids, bool $active): void
+    {
+        $users = User::whereKey(array_map('intval', $ids))->get();
+        $changed = 0;
+        $protected = 0;
+
+        foreach ($users as $user) {
+            $lastActiveAdmin = $user->is_super_admin
+                && User::where('is_super_admin', true)->where('is_active', true)->count() <= 1;
+
+            if (! $active && ($user->is(auth()->user()) || $lastActiveAdmin)) {
+                $protected++;
+                continue;
+            }
+
+            if ((bool) $user->is_active !== $active) {
+                $user->update(['is_active' => $active]);
+                $changed++;
+            }
+        }
+
+        $action = $active ? 'enabled' : 'disabled';
+        $this->statusMessage = $changed > 0
+            ? "{$changed} user " . Str::plural('account', $changed) . " {$action}."
+            : 'No account access was changed.';
+
+        if ($protected > 0) {
+            $this->statusMessage .= ' Your own account and the last active full administrator are protected.';
+        }
+    }
+
+    /** @param list<int|string> $ids */
+    public function removeSelected(array $ids): void
+    {
+        $users = User::whereKey(array_map('intval', $ids))->get();
+        $removed = 0;
+        $protected = 0;
+
+        DB::transaction(function () use ($users, &$removed, &$protected): void {
+            foreach ($users as $user) {
+                $lastAdmin = $user->is_super_admin && User::where('is_super_admin', true)->count() <= 1;
+
+                if ($user->is(auth()->user()) || $lastAdmin) {
+                    $protected++;
+                    continue;
+                }
+
+                $user->delete();
+                $removed++;
+            }
+        });
+
+        $this->statusMessage = $removed > 0
+            ? "{$removed} user " . Str::plural('account', $removed) . ' removed. The employee record was kept.'
+            : 'No user account was removed.';
+
+        if ($protected > 0) {
+            $this->statusMessage .= ' Your own account and the last full administrator are protected.';
+        }
+
+        $this->resetPage();
+    }
 
     public function create(): void
     {
@@ -189,6 +267,10 @@ new #[Layout('layouts.app')] class extends Component
                     ->orWhere('user_code', 'like', "%{$this->search}%")))
                 ->orderBy('name')
                 ->paginate($this->perPage()),
+            'totalUsers' => User::count(),
+            'activeUsers' => User::where('is_active', true)->count(),
+            'disabledUsers' => User::where('is_active', false)->count(),
+            'pendingInvites' => User::whereNull('password_set_at')->count(),
             // Only employees who don't already have credentials can be picked.
             'availableEmployees' => Employee::whereNull('user_id')->orderBy('employee_id')->get(),
             'roles' => Role::orderBy('name')->pluck('name'),
@@ -215,70 +297,156 @@ new #[Layout('layouts.app')] class extends Component
 };
 ?>
 
-<div class="space-y-6">
-    <div class="flex items-center justify-between">
+<div class="space-y-7" x-data="{ selected: [] }">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-            <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Users</h1>
-            <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">Manage HRIS login accounts. Every user is tied to an employee record.</p>
+            <h2 class="text-3xl font-bold tracking-tight text-ink-950 dark:text-white">Users</h2>
+            <p class="mt-1 text-base font-medium text-ink-600 dark:text-ink-300">Manage HRIS login accounts, access tiers, and account availability.</p>
         </div>
-        <x-button wire:click="create" pill>
-            <x-icon name="plus" class="h-4 w-4" /> Add User
+        <x-button wire:click="create" class="h-10 px-4">
+            <x-icon name="plus" class="h-4 w-4" />
+            Add User
         </x-button>
     </div>
 
-    <x-card :padding="false">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-            <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">User Directory</h2>
-            <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search users…"
-                   class="w-56 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm text-[#65758c] shadow-sm placeholder:text-[#778599] focus:border-brand-500 focus:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-white">
+    @if ($statusMessage)
+        <div class="rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 text-sm font-semibold text-brand-800 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300">
+            {{ $statusMessage }}
+        </div>
+    @endif
+
+    <div class="flex flex-wrap gap-4">
+        <div class="professional-panel w-full rounded-lg px-4 py-3 sm:w-56">
+            <p class="text-sm font-medium text-ink-600 dark:text-ink-300">Total Users</p>
+            <p class="mt-2 text-3xl font-bold text-ink-950 dark:text-white">{{ $totalUsers }}</p>
+            <p class="mt-1 text-sm font-semibold text-brand-700 dark:text-brand-300">Registered accounts</p>
+        </div>
+        <div class="professional-panel w-full rounded-lg px-4 py-3 sm:w-56">
+            <p class="text-sm font-medium text-ink-600 dark:text-ink-300">Enabled Access</p>
+            <p class="mt-2 text-3xl font-bold text-ink-950 dark:text-white">{{ $activeUsers }}</p>
+            <p class="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">Can sign in</p>
+        </div>
+        <div class="professional-panel w-full rounded-lg px-4 py-3 sm:w-56">
+            <p class="text-sm font-medium text-ink-600 dark:text-ink-300">Disabled Access</p>
+            <p class="mt-2 text-3xl font-bold text-ink-950 dark:text-white">{{ $disabledUsers }}</p>
+            <p class="mt-1 text-sm font-semibold text-red-600 dark:text-red-300">Sign-in suspended</p>
+        </div>
+        <div class="professional-panel w-full rounded-lg px-4 py-3 sm:w-56">
+            <p class="text-sm font-medium text-ink-600 dark:text-ink-300">Pending Invitations</p>
+            <p class="mt-2 text-3xl font-bold text-ink-950 dark:text-white">{{ $pendingInvites }}</p>
+            <p class="mt-1 text-sm font-semibold text-amber-600 dark:text-amber-300">Password not set</p>
+        </div>
+    </div>
+
+    <x-card :padding="false" class="overflow-hidden rounded-2xl">
+        <div class="flex flex-col gap-4 border-b border-ink-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+            <div>
+                <h3 class="text-xl font-bold text-ink-950 dark:text-white">User Directory</h3>
+                <p class="mt-1 h-4 text-sm font-semibold text-amber-600 dark:text-amber-300" x-text="selected.length ? selected.length + ' selected' : ''"></p>
+            </div>
+            <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+                <div class="flex items-center gap-2">
+                    <button type="button"
+                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-ink-300"
+                        :disabled="selected.length !== 1" @click="if (selected.length === 1) $wire.editSelected(selected)"
+                        title="Edit selected user's access">
+                        <x-icon name="pencil" class="h-4 w-4" />
+                    </button>
+                    <button type="button"
+                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+                        :disabled="selected.length === 0" @click="if (selected.length) { $wire.setSelectedAccess(selected, true); selected = []; }"
+                        title="Enable selected account access">
+                        <x-icon name="shield-check" class="h-4 w-4" />
+                    </button>
+                    <button type="button"
+                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 shadow-sm transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+                        :disabled="selected.length === 0"
+                        @click="if (selected.length && confirm('Disable access for the selected user account(s)?')) { $wire.setSelectedAccess(selected, false); selected = []; }"
+                        title="Disable selected account access">
+                        <x-icon name="user-minus" class="h-4 w-4" />
+                    </button>
+                    <button type="button"
+                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+                        :disabled="selected.length === 0"
+                        @click="if (selected.length && confirm('Remove the selected HRIS user account(s)? Employee records will be kept.')) { $wire.removeSelected(selected); selected = []; }"
+                        title="Remove selected user account">
+                        <x-icon name="trash" class="h-4 w-4" />
+                    </button>
+                </div>
+                <label class="relative block sm:w-80">
+                    <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                    <x-input wire:model.live.debounce.250ms="search" @input="selected = []" placeholder="Search users..." class="h-10 pl-9" />
+                </label>
+            </div>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-neutral-200 dark:divide-neutral-800">
-                <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
+            <table class="min-w-full divide-y divide-ink-200 dark:divide-white/10">
+                <thead class="bg-ink-50/80 dark:bg-white/[0.03]">
                     <tr>
-                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">User ID</th>
-                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Employee</th>
-                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Email</th>
-                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Position</th>
-                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Tier</th>
-                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Access</th>
-                        <th class="px-4 py-5 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Password</th>
-                        <th class="px-4 py-5"></th>
+                        <th class="w-14 px-6 py-4 text-left">
+                            <input type="checkbox"
+                                class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
+                                @change="selected = $event.target.checked ? @js($users->getCollection()->pluck('id')->values()) : []"
+                                :checked="selected.length === @js($users->count()) && @js($users->count()) > 0">
+                        </th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">User ID</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Employee</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Email</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Position</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Tier</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Permissions</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Account</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Password</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
                     @forelse ($users as $user)
-                        <tr wire:key="user-{{ $user->id }}">
-                            <td class="px-4 py-3 text-sm font-medium text-[#65758c] dark:text-white">{{ $user->user_code }}</td>
-                            <td class="px-4 py-3 text-sm font-medium text-[#65758c] dark:text-white">
-                                {{ $user->name }}
-                                <span class="block text-xs font-medium text-[#778599]">{{ $user->employee?->employee_id ?? 'No employee linked' }}</span>
+                        <tr wire:key="user-{{ $user->id }}"
+                            class="cursor-pointer transition hover:bg-brand-50/50 dark:hover:bg-white/[0.03]"
+                            :class="selected.includes({{ $user->id }}) ? 'bg-brand-50/60 dark:bg-brand-500/10' : ''"
+                            @click="selected.includes({{ $user->id }}) ? selected = selected.filter((id) => id !== {{ $user->id }}) : selected.push({{ $user->id }})">
+                            <td class="px-6 py-4" @click.stop>
+                                <input type="checkbox" value="{{ $user->id }}" x-model.number="selected"
+                                    class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900">
                             </td>
-                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $user->email }}</td>
-                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $user->employee?->position?->title ?? '—' }}</td>
-                            <td class="px-4 py-3 text-sm">
-                                <x-badge :color="$user->isAdminTier() ? 'brand' : 'neutral'">{{ $user->getRoleNames()->join(', ') ?: 'No role' }}</x-badge>
+                            <td class="whitespace-nowrap px-4 py-4 text-sm font-bold text-ink-800 dark:text-ink-100">{{ $user->user_code }}</td>
+                            <td class="min-w-52 px-4 py-4">
+                                <div class="flex items-center gap-3">
+                                    <x-avatar :employee="$user->employee" size="md" />
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-bold text-brand-800 dark:text-brand-300">{{ $user->name }}</p>
+                                        <p class="mt-1 text-xs font-medium text-ink-500 dark:text-ink-400">{{ $user->employee?->employee_id ?? 'No employee linked' }}</p>
+                                    </div>
+                                </div>
                             </td>
-                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $this->accessSummary($user) }}</td>
-                            <td class="px-4 py-3 text-sm">
-                                <x-badge :color="$user->password_set_at ? 'green' : 'amber'">
-                                    {{ $user->password_set_at ? 'Set' : 'Invite pending' }}
-                                </x-badge>
+                            <td class="max-w-64 truncate px-4 py-4 text-sm font-medium text-ink-600 dark:text-ink-300">{{ $user->email }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-ink-700 dark:text-ink-200">{{ $user->employee?->position?->title ?? '-' }}</td>
+                            <td class="whitespace-nowrap px-4 py-4"><x-badge :color="$user->isAdminTier() ? 'brand' : 'neutral'">{{ $user->getRoleNames()->join(', ') ?: 'No role' }}</x-badge></td>
+                            <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-ink-600 dark:text-ink-300">{{ $this->accessSummary($user) }}</td>
+                            <td class="whitespace-nowrap px-4 py-4">
+                                <x-badge :color="$user->is_active ? 'green' : 'red'">{{ $user->is_active ? 'Enabled' : 'Disabled' }}</x-badge>
                             </td>
-                            <td class="px-4 py-3 text-right">
-                                <button wire:click="manageAccess({{ $user->id }})" class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Access</button>
+                            <td class="whitespace-nowrap px-4 py-4">
+                                <x-badge :color="$user->password_set_at ? 'green' : 'amber'">{{ $user->password_set_at ? 'Set' : 'Invite pending' }}</x-badge>
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="px-4 py-8 text-center text-sm font-medium text-[#778599]">No users yet.</td></tr>
+                        <tr>
+                            <td colspan="9" class="px-6 py-16 text-center">
+                                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                                    <x-icon name="users" class="h-7 w-7" />
+                                </div>
+                                <p class="mt-4 text-base font-bold text-ink-950 dark:text-white">No users found</p>
+                                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Add a user account or adjust your search.</p>
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
-
         @if ($users->hasPages())
-            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <div class="border-t border-ink-200 px-5 py-4 dark:border-white/10">
                 {{ $users->links('components.pagination', ['noun' => 'users']) }}
             </div>
         @endif

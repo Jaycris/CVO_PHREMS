@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Auth;
 class CommissionRun extends Model
 {
     protected $fillable = [
-        'period_month', 'status',
+        'run_type', 'period_start', 'period_end', 'label', 'status',
         'computed_at', 'computed_by_user_id',
         'finalized_at', 'finalized_by_user_id',
         'sent_at', 'sent_by_user_id',
@@ -24,7 +25,8 @@ class CommissionRun extends Model
     protected function casts(): array
     {
         return [
-            'period_month' => 'date',
+            'period_start' => 'date',
+            'period_end' => 'date',
             'computed_at' => 'datetime',
             'finalized_at' => 'datetime',
             'sent_at' => 'datetime',
@@ -61,15 +63,66 @@ class CommissionRun extends Model
         return $this->belongsTo(User::class, 'sent_by_user_id');
     }
 
-    /** Y-m, the form the CRM is asked in. */
-    public function month(): string
+    /** Who this run covers. Chosen by a person — see the pivot's migration. */
+    public function agents(): BelongsToMany
     {
-        return $this->period_month->format('Y-m');
+        // Qualified: the pivot has an employee_id too, and an unqualified
+        // order-by is ambiguous enough for MySQL to refuse the query outright.
+        return $this->belongsToMany(Employee::class, 'commission_run_agents')
+            ->withTimestamps()
+            ->orderBy('employees.employee_id');
     }
 
+    /**
+     * The period as a phrase.
+     *
+     * A whole calendar month says its own name; anything else spells out both
+     * ends, because "August 2026" and "Aug 1 – Aug 15" are answers to different
+     * questions and an agent paid twice a month needs to see which one they
+     * are holding.
+     */
+    public function periodLabel(): string
+    {
+        if ($this->label) {
+            return $this->label;
+        }
+
+        $wholeMonth = $this->period_start->isSameDay($this->period_start->copy()->startOfMonth())
+            && $this->period_end->isSameDay($this->period_end->copy()->endOfMonth())
+            && $this->period_start->isSameMonth($this->period_end);
+
+        return $wholeMonth
+            ? $this->period_start->format('F Y')
+            : $this->period_start->format('M j') . ' – ' . $this->period_end->format('M j, Y');
+    }
+
+    /**
+     * Kept because slips and the PDF still say "the month this covers", and for
+     * a fortnight the honest answer is the month it falls in.
+     */
     public function monthLabel(): string
     {
-        return $this->period_month->format('F Y');
+        return $this->periodLabel();
+    }
+
+    /** Y-m of the period start, for the CRM's month parameter. */
+    public function month(): string
+    {
+        return $this->period_start->format('Y-m');
+    }
+
+    public function typeLabel(): string
+    {
+        return match ($this->run_type) {
+            'monthly' => 'Monthly',
+            'biweekly' => 'Bi-weekly',
+            default => 'Custom',
+        };
+    }
+
+    public function dayCount(): int
+    {
+        return (int) $this->period_start->diffInDays($this->period_end) + 1;
     }
 
     /**
@@ -111,9 +164,18 @@ class CommissionRun extends Model
         };
     }
 
-    public function scopeForMonth(Builder $query, Carbon|string $month): Builder
+    /** A run covering exactly these dates, whatever its type. */
+    public function scopeForPeriod(Builder $query, Carbon|string $start, Carbon|string $end): Builder
     {
-        return $query->whereDate('period_month', Carbon::parse($month)->startOfMonth()->toDateString());
+        return $query->whereDate('period_start', Carbon::parse($start)->toDateString())
+            ->whereDate('period_end', Carbon::parse($end)->toDateString());
+    }
+
+    /** Runs whose period overlaps these dates — the double-pay guard. */
+    public function scopeOverlapping(Builder $query, Carbon|string $start, Carbon|string $end): Builder
+    {
+        return $query->whereDate('period_start', '<=', Carbon::parse($end)->toDateString())
+            ->whereDate('period_end', '>=', Carbon::parse($start)->toDateString());
     }
 
     public function log(string $action, ?string $note = null): CommissionRunLog

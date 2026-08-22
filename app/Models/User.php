@@ -16,7 +16,7 @@ use Illuminate\Support\Collection;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['user_code', 'name', 'email', 'password', 'password_set_at', 'is_super_admin'])]
+#[Fillable(['user_code', 'name', 'email', 'password', 'password_set_at', 'is_super_admin', 'is_active'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -54,6 +54,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'password_set_at' => 'datetime',
             'is_super_admin' => 'boolean',
+            'is_active' => 'boolean',
         ];
     }
 

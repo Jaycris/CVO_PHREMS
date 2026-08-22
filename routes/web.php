@@ -17,7 +17,7 @@ Route::middleware('signed')->group(function () {
     Route::livewire('/set-password/{user}', 'public.set-password')->name('password.setup');
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'active'])->group(function () {
     /*
      * Self-service. Open to every signed-in user, whatever their access tier —
      * these pages only ever show the signer's own record.

@@ -30,30 +30,106 @@ class CommissionRunService
         protected CommissionSlipService $crm,
     ) {}
 
-    public function openRun(Carbon|string $month, ?User $actor = null): CommissionRun
-    {
-        $start = Carbon::parse($month)->startOfMonth();
+    /**
+     * Opens a run over any period.
+     *
+     * A month, a payroll cutoff, a fortnight — the run does not care which, and
+     * deliberately so. Where the split falls varies between agents, so no rule
+     * about it belongs in here.
+     *
+     * The agents are pre-selected from their commission frequency, but that is
+     * only a starting point: whoever runs it can add and remove people before
+     * computing.
+     */
+    public function openRun(
+        Carbon|string $start,
+        Carbon|string $end,
+        string $type = 'monthly',
+        ?User $actor = null,
+        ?string $label = null,
+    ): CommissionRun {
+        $start = Carbon::parse($start)->startOfDay();
+        $end = Carbon::parse($end)->startOfDay();
+
+        abort_if($end->lt($start), 422, 'The end date is before the start date.');
 
         abort_if(
-            $start->gt(Carbon::now('Asia/Manila')->startOfMonth()),
+            $start->gt(Carbon::now('Asia/Manila')->endOfDay()),
             422,
-            'That month has not started yet.'
+            'That period has not started yet.'
         );
 
-        $existing = CommissionRun::forMonth($start)->first();
+        abort_unless(
+            in_array($type, ['monthly', 'biweekly', 'custom'], true),
+            422,
+            'Unknown run type.'
+        );
+
+        $existing = CommissionRun::where('run_type', $type)->forPeriod($start, $end)->first();
 
         if ($existing) {
             return $existing;
         }
 
         $run = CommissionRun::create([
-            'period_month' => $start->toDateString(),
+            'run_type' => $type,
+            'period_start' => $start->toDateString(),
+            'period_end' => $end->toDateString(),
+            'label' => $label,
             'status' => 'draft',
         ]);
 
-        $run->log('opened', 'Run opened for ' . $start->format('F Y'));
+        $run->agents()->sync($this->suggestedAgentsFor($type)->pluck('id'));
+
+        $run->log('opened', 'Run opened for ' . $run->periodLabel()
+            . ' (' . $run->typeLabel() . '), ' . $run->agents()->count() . ' agent(s) selected');
 
         return $run;
+    }
+
+    /**
+     * Replaces who a run covers.
+     *
+     * Only before it is computed. Afterwards the slips are the record, and
+     * quietly dropping someone whose figures are already written down would
+     * leave a run whose totals no longer match its rows.
+     *
+     * @param  list<int>  $employeeIds
+     */
+    public function setAgents(CommissionRun $run, array $employeeIds): void
+    {
+        abort_unless($run->isMutable(), 403, 'This run is locked and its agents cannot be changed.');
+
+        $ids = Employee::whereIn('id', $employeeIds)->pluck('id');
+
+        abort_if($ids->isEmpty(), 422, 'Pick at least one agent.');
+
+        $run->agents()->sync($ids);
+
+        // Slips belonging to agents no longer in the run would otherwise linger
+        // with figures nobody asked for.
+        $run->slips()->whereNotIn('employee_id', $ids)->delete();
+
+        $run->log('agents_changed', $ids->count() . ' agent(s) selected');
+    }
+
+    /**
+     * Who a run of this type would normally cover.
+     *
+     * From each employee's commission frequency, which is a default rather than
+     * a rule — see the pivot table's migration for why the last word is a
+     * person's.
+     *
+     * @return Collection<int, Employee>
+     */
+    public function suggestedAgentsFor(string $type): Collection
+    {
+        $frequency = $type === 'biweekly' ? 'biweekly' : 'monthly';
+
+        return Employee::whereNull('separation_date')
+            ->where('commission_frequency', $frequency)
+            ->orderBy('employee_id')
+            ->get();
     }
 
     /**
@@ -72,21 +148,26 @@ class CommissionRunService
         abort_unless($run->isMutable(), 403, 'This commission run is locked and cannot be recomputed.');
         abort_unless($this->crm->isConfigured(), 422, 'The CRM connection has not been set up yet.');
 
-        $employees = $this->eligibleAgents();
+        $employees = $run->agents()->with(['department', 'position'])->get();
 
-        abort_if($employees->isEmpty(), 422, 'There are no employees to compute commissions for.');
+        abort_if(
+            $employees->isEmpty(),
+            422,
+            'No agents are selected for this run. Choose who it covers first.'
+        );
 
-        $month = $run->month();
+        $start = $run->period_start;
+        $end = $run->period_end;
         $totals = ['usd' => 0.0, 'php' => 0.0, 'hold' => 0.0, 'net' => 0.0];
         $failed = 0;
 
         foreach ($employees as $employee) {
             // Outside the transaction on purpose — an HTTP call held inside one
             // keeps a database lock open for as long as the CRM takes to answer.
-            $this->crm->forget($employee, $month);
+            $this->crm->forgetPeriod($employee, $start, $end);
 
             try {
-                $slip = $this->crm->forEmployee($employee, $month);
+                $slip = $this->crm->forPeriod($employee, $start, $end);
                 $error = null;
             } catch (CrmUnavailable $e) {
                 $slip = null;
@@ -218,15 +299,15 @@ class CommissionRunService
     }
 
     /**
-     * Who a run covers.
+     * Everyone who could be put in a run.
      *
-     * Everyone still employed. An agent with no commission simply gets a slip
-     * of zeroes from the CRM, which is a truthful answer and cheaper to read
-     * than to maintain a list of who is on commission.
+     * The whole roster, so an agent whose frequency has not been set yet can
+     * still be added by hand rather than being invisible until someone edits
+     * their record.
      *
      * @return Collection<int, Employee>
      */
-    public function eligibleAgents(): Collection
+    public function selectableAgents(): Collection
     {
         return Employee::with(['department', 'position'])
             ->whereNull('separation_date')

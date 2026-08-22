@@ -25,6 +25,61 @@ class CommissionSlipService
     }
 
     /**
+     * A slip for any period, not just a whole month.
+     *
+     * Sends from and to alongside month. Some agents are paid twice a month and
+     * where the split falls varies, so a month parameter alone cannot say what
+     * is being asked for — but it is still sent, so a CRM that only understands
+     * months keeps working.
+     *
+     * @throws CrmUnavailable
+     */
+    public function forPeriod(Employee $employee, Carbon|string $start, Carbon|string $end): CommissionSlip
+    {
+        $start = Carbon::parse($start)->startOfDay();
+        $end = Carbon::parse($end)->startOfDay();
+        $agent = $this->agentKey($employee);
+
+        if ($agent === null) {
+            throw CrmUnavailable::notLinked();
+        }
+
+        $payload = Cache::remember(
+            $this->periodCacheKey($employee, $start, $end),
+            (int) config('services.crm.cache_ttl', 300),
+            fn () => $this->client->get('/api/hris/commission-slip', [
+                'agent' => $agent,
+                'hris_employee_id' => $employee->employee_id,
+                'month' => $start->format('Y-m'),
+                'from' => $start->toDateString(),
+                'to' => $end->toDateString(),
+            ]),
+        );
+
+        $this->assertBelongsTo($payload, $employee);
+
+        return $this->withHrisFallbacks(
+            CommissionSlip::fromCrm($payload, $start->format('Y-m')),
+            $employee,
+        );
+    }
+
+    public function forgetPeriod(Employee $employee, Carbon|string $start, Carbon|string $end): void
+    {
+        Cache::forget($this->periodCacheKey(
+            $employee,
+            Carbon::parse($start)->startOfDay(),
+            Carbon::parse($end)->startOfDay(),
+        ));
+    }
+
+    protected function periodCacheKey(Employee $employee, Carbon $start, Carbon $end): string
+    {
+        return 'crm:commission:' . $this->agentKey($employee)
+            . ':' . $start->toDateString() . ':' . $end->toDateString();
+    }
+
+    /**
      * @throws CrmUnavailable
      */
     public function forEmployee(Employee $employee, string $month): CommissionSlip
@@ -53,29 +108,41 @@ class CommissionSlipService
 
         $slip = CommissionSlip::fromCrm($payload, $month);
 
-        // The CRM knows the agent by its own name for them; the HRIS record is
-        // the one HR maintains. Prefer HR's when the CRM did not send one.
-        return $slip->agentName !== null
-            ? $slip
-            : new CommissionSlip(
-                month: $slip->month,
-                agentName: $employee->fullName() ?: $employee->employee_id,
-                team: $slip->team ?? $employee->department?->name,
-                workType: $slip->workType ?? $employee->position?->title,
-                mtd: $slip->mtd,
-                target: $slip->target,
-                mtdPercent: $slip->mtdPercent,
-                serviceCommission: $slip->serviceCommission,
-                markupCommission: $slip->markupCommission,
-                usdTotal: $slip->usdTotal,
-                exchangeRate: $slip->exchangeRate,
-                phpTotal: $slip->phpTotal,
-                cardHoldPercent: $slip->cardHoldPercent,
-                cardHoldAmount: $slip->cardHoldAmount,
-                netCommission: $slip->netCommission,
-                transactions: $slip->transactions,
-                statementSupplied: $slip->statementSupplied,
-            );
+        return $this->withHrisFallbacks($slip, $employee);
+    }
+
+    /**
+     * Fills the agent's name, team and work type from the HRIS record when the
+     * CRM did not send them.
+     *
+     * Only those three. Every figure stays exactly as the CRM reported it —
+     * this app has no business inventing a peso.
+     */
+    protected function withHrisFallbacks(CommissionSlip $slip, Employee $employee): CommissionSlip
+    {
+        if ($slip->agentName !== null) {
+            return $slip;
+        }
+
+        return new CommissionSlip(
+            month: $slip->month,
+            agentName: $employee->fullName() ?: $employee->employee_id,
+            team: $slip->team ?? $employee->department?->name,
+            workType: $slip->workType ?? $employee->workplace_type,
+            mtd: $slip->mtd,
+            target: $slip->target,
+            mtdPercent: $slip->mtdPercent,
+            serviceCommission: $slip->serviceCommission,
+            markupCommission: $slip->markupCommission,
+            usdTotal: $slip->usdTotal,
+            exchangeRate: $slip->exchangeRate,
+            phpTotal: $slip->phpTotal,
+            cardHoldPercent: $slip->cardHoldPercent,
+            cardHoldAmount: $slip->cardHoldAmount,
+            netCommission: $slip->netCommission,
+            transactions: $slip->transactions,
+            statementSupplied: $slip->statementSupplied,
+        );
     }
 
     /**
