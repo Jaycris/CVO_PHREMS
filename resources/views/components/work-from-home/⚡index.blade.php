@@ -223,7 +223,7 @@ new #[Layout('layouts.app')] class extends Component
 <div class="space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-            <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Work From Home</h1>
+            <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Work From Home Requests</h1>
             <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">
                 Ask in advance for the days you need. A full working day either way — you still clock in as usual.
             </p>
