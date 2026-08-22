@@ -398,7 +398,7 @@ new #[Layout('layouts.app')] class extends Component
         <x-textarea wire:model="unlockReason" rows="2" placeholder="e.g. A sale was posted to the wrong agent in the CRM" />
         <div class="mt-4 flex gap-2">
             <x-button wire:click="unlock">Reopen</x-button>
-            <x-button wire:click="$set('showUnlock', false)" @click="open = false" variant="secondary">Cancel</x-button>
+            <x-button wire:click="$set('showUnlock', false)" @click="modalOpen = false" variant="secondary">Cancel</x-button>
         </div>
     </x-modal>
 </div>

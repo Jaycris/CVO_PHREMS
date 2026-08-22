@@ -36,7 +36,8 @@ new #[Layout('layouts.app')] class extends Component
         $this->showOpen = true;
     }
 
-    public function open(CommissionRunService $service): void
+    /** Named openRun, not open: see the note in components/modal.blade.php. */
+    public function openRun(CommissionRunService $service): void
     {
         $this->validate(
             ['month' => ['required', 'date_format:Y-m']],
@@ -172,11 +173,11 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="mt-6 flex flex-wrap gap-2">
-            <x-button wire:click="open" wire:loading.attr="disabled" wire:target="open">
-                <span wire:loading.remove wire:target="open">Open Run</span>
-                <span wire:loading wire:target="open">Opening…</span>
+            <x-button wire:click="openRun" wire:loading.attr="disabled" wire:target="openRun">
+                <span wire:loading.remove wire:target="openRun">Open Run</span>
+                <span wire:loading wire:target="openRun">Opening…</span>
             </x-button>
-            <x-button wire:click="$set('showOpen', false)" @click="open = false" variant="secondary">Cancel</x-button>
+            <x-button wire:click="$set('showOpen', false)" @click="modalOpen = false" variant="secondary">Cancel</x-button>
         </div>
     </x-modal>
 </div>

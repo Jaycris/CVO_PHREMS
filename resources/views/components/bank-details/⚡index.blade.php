@@ -276,7 +276,7 @@ new #[Layout('layouts.app')] class extends Component
                     <span wire:loading wire:target="decide">Saving…</span>
                 </x-button>
                 <x-button wire:click="decide(false)" wire:loading.attr="disabled" wire:target="decide" variant="secondary">Decline</x-button>
-                <x-button wire:click="closeDecision" @click="open = false" variant="secondary">Cancel</x-button>
+                <x-button wire:click="closeDecision" @click="modalOpen = false" variant="secondary">Cancel</x-button>
             </div>
         @endunless
     </x-modal>

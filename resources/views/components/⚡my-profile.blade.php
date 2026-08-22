@@ -517,7 +517,7 @@ new #[Layout('layouts.app')] class extends Component
                 </span>
                 <span wire:loading wire:target="saveBankDetails">Saving…</span>
             </x-button>
-            <x-button wire:click="closeBankForm" @click="open = false" variant="secondary">Cancel</x-button>
+            <x-button wire:click="closeBankForm" @click="modalOpen = false" variant="secondary">Cancel</x-button>
         </div>
     </x-modal>
 
