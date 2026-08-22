@@ -51,104 +51,187 @@ new #[Layout('layouts.app')] class extends Component
 };
 ?>
 
-<div class="-m-4 min-h-[calc(100vh-4rem)] space-y-6 p-4 sm:-m-6 sm:p-6">
-    <section class="overflow-hidden rounded-2xl border border-white/10 bg-ink-950 shadow-sm shadow-ink-200/50 dark:shadow-black/20">
-        <div class="relative p-6 sm:p-8">
-            <div class="absolute inset-0"
-                 style="background: radial-gradient(circle at 12% 8%, rgba(21,122,82,.48), transparent 25rem), radial-gradient(circle at 94% 8%, rgba(37,99,235,.18), transparent 24rem), linear-gradient(135deg, #020617 0%, #0f172a 52%, #052e23 100%);"></div>
-            <img src="{{ asset('images/logo-mark.png') }}" alt="" class="pointer-events-none absolute -bottom-20 -left-16 h-72 w-72 object-contain opacity-[0.07]">
-            <div class="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-200">CreatiVision HRIS</p>
-                    <h2 class="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">{{ $greeting }}, {{ explode(' ', auth()->user()->name)[0] }}</h2>
-                    <p class="mt-3 max-w-2xl text-sm font-medium leading-6 text-ink-300">Here's what's happening across attendance, leave requests, and employee operations today.</p>
-                </div>
-                <div class="grid grid-cols-2 gap-3 text-sm sm:min-w-80">
-                    <div class="rounded-lg border border-white/10 bg-white/10 p-4 backdrop-blur">
-                        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-ink-400">Current role</p>
-                        <p class="mt-1 font-bold text-white">{{ auth()->user()->getRoleNames()->join(', ') ?: 'No role' }}</p>
-                    </div>
-                    <div class="rounded-lg border border-white/10 bg-white/10 p-4 backdrop-blur">
-                        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-ink-400">Today</p>
-                        <p class="mt-1 font-bold text-white">{{ $today->format('M d, Y') }}</p>
-                    </div>
-                </div>
+<div class="space-y-5">
+    <section class="flex flex-col gap-4 border-b border-ink-200 pb-5 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+        <div>
+            <h1 class="text-2xl font-bold text-ink-950 sm:text-3xl dark:text-white">Your HR Dashboard</h1>
+            <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Welcome back, {{ explode(' ', auth()->user()->name)[0] }}. Here is your overview for {{ $today->format('F j, Y') }}.</p>
+        </div>
+        <div class="flex items-center gap-3 rounded-lg border border-ink-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-ink-900">
+            @if ($employee)
+                <x-avatar :employee="$employee" size="md" class="!h-11 !w-11" />
+            @else
+                <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800 dark:bg-brand-900/40 dark:text-brand-200">{{ strtoupper(substr(auth()->user()->name, 0, 2)) }}</span>
+            @endif
+            <div class="min-w-0">
+                <p class="truncate text-sm font-bold text-ink-950 dark:text-white">{{ $employee?->fullName() ?: auth()->user()->name }}</p>
+                <p class="truncate text-xs font-medium text-ink-500 dark:text-ink-400">{{ $employee?->employee_id ?? (auth()->user()->getRoleNames()->join(', ') ?: 'HRIS user') }}</p>
             </div>
         </div>
     </section>
 
     @if ($isAdminHr)
-        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <x-stat-card label="Total Employees" :value="$stats['totalEmployees']" caption="All active employee records" color="brand" />
-            <x-stat-card label="Present Today" :value="$stats['presentToday']" caption="Clocked in today" color="blue" />
-            <x-stat-card label="Pending Approvals" :value="$stats['pendingApprovals']" caption="Awaiting Manager/CEO sign-off" color="amber" />
-            <x-stat-card label="Departments" :value="$stats['departments']" caption="Across the company" color="brand" />
-        </div>
+        <section class="grid grid-cols-2 overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm lg:grid-cols-4 dark:border-white/10 dark:bg-ink-900">
+            @foreach ([
+                ['label' => 'Total Employees', 'value' => $stats['totalEmployees'], 'caption' => 'Employee records', 'icon' => 'people-group'],
+                ['label' => 'Present Today', 'value' => $stats['presentToday'], 'caption' => 'Timed in today', 'icon' => 'clock'],
+                ['label' => 'Pending Approvals', 'value' => $stats['pendingApprovals'], 'caption' => 'Awaiting review', 'icon' => 'clipboard'],
+                ['label' => 'Departments', 'value' => $stats['departments'], 'caption' => 'Active teams', 'icon' => 'building'],
+            ] as $index => $stat)
+                <div class="flex items-center gap-3 border-ink-200 px-4 py-3.5 dark:border-white/10 {{ $index % 2 === 0 ? 'border-r' : '' }} {{ $index > 1 ? 'border-t lg:border-t-0' : '' }} {{ $index > 0 ? 'lg:border-l' : '' }}">
+                    <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-400/10 dark:text-brand-300">
+                        <x-icon :name="$stat['icon']" class="h-4 w-4" />
+                    </span>
+                    <div class="min-w-0">
+                        <p class="text-xl font-bold leading-none text-ink-950 dark:text-white">{{ $stat['value'] }}</p>
+                        <p class="mt-1 truncate text-xs font-semibold text-ink-700 dark:text-ink-200">{{ $stat['label'] }}</p>
+                        <p class="truncate text-[11px] font-medium text-ink-400">{{ $stat['caption'] }}</p>
+                    </div>
+                </div>
+            @endforeach
+        </section>
     @endif
 
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="lg:col-span-2">
-            <x-card :padding="false" class="overflow-hidden rounded-2xl">
-                <div class="border-b border-ink-200 bg-white px-6 py-4 dark:border-white/10 dark:bg-ink-900">
-                    <p class="muted-label">Approvals</p>
-                    <h3 class="mt-1 font-bold text-ink-950 dark:text-white">{{ $isAdminHr ? 'Recent Leave Requests' : 'My Recent Leave Requests' }}</h3>
+    <div class="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <aside class="space-y-5 xl:col-span-3">
+            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10">
+                    <h2 class="text-sm font-bold text-ink-950 dark:text-white">My Profile</h2>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-ink-100 dark:divide-white/10">
-                        <tbody class="divide-y divide-ink-100 dark:divide-white/10">
-                            @forelse ($recentRequests as $request)
-                                <tr class="text-sm transition hover:bg-ink-50 dark:hover:bg-white/5">
-                                    <td class="whitespace-nowrap px-6 py-4 font-semibold text-ink-800 dark:text-white">
-                                        @if ($isAdminHr)
-                                            {{ $request->employee->fullName() ?: $request->employee->employee_id }}
-                                        @else
-                                            {{ $request->leaveType->name }}
-                                        @endif
-                                    </td>
-                                    <td class="whitespace-nowrap px-6 py-4 font-medium text-ink-500 dark:text-ink-400">
-                                        {{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }}
-                                    </td>
-                                    <td class="whitespace-nowrap px-6 py-4 text-right">
-                                        <x-badge :color="$request->statusColor()">{{ $request->statusLabel() }}</x-badge>
-                                    </td>
-                                    <td class="whitespace-nowrap px-6 py-4 text-right">
-                                        <a href="{{ route('leave-requests.show', $request) }}" wire:navigate class="text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">View</a>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr><td colspan="4" class="px-6 py-8 text-center text-sm font-medium text-ink-500">No leave requests yet.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </x-card>
-        </div>
-
-        <div>
-            @if ($employee)
-                <x-card class="rounded-2xl">
-                    <p class="muted-label">Balances</p>
-                    <h3 class="mb-4 mt-1 font-bold text-ink-950 dark:text-white">My Leave Credits</h3>
-                    <div class="space-y-3">
-                        @forelse ($leaveBalances as $balance)
-                            <div class="flex items-center justify-between rounded-lg border border-ink-100 bg-ink-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
-                                <span class="text-sm font-medium text-ink-600 dark:text-ink-300">{{ $balance['name'] }}</span>
-                                <span class="text-sm font-bold text-ink-900 dark:text-white">{{ $balance['balance'] }} days</span>
+                @if ($employee)
+                    <div class="p-4">
+                        <div class="flex items-center gap-3">
+                            <x-avatar :employee="$employee" size="lg" class="!h-14 !w-14" />
+                            <div class="min-w-0">
+                                <p class="truncate font-bold text-ink-950 dark:text-white">{{ $employee->fullName() ?: auth()->user()->name }}</p>
+                                <p class="truncate text-xs font-medium text-ink-500 dark:text-ink-400">{{ $employee->company_email ?: auth()->user()->email }}</p>
                             </div>
-                        @empty
-                            <p class="text-sm font-medium text-ink-500">No leave types configured.</p>
-                        @endforelse
+                        </div>
+                        <dl class="mt-4 space-y-2.5 text-xs">
+                            <div class="flex items-start justify-between gap-3"><dt class="font-medium text-ink-400">Employee ID</dt><dd class="font-semibold text-ink-700 dark:text-ink-200">{{ $employee->employee_id }}</dd></div>
+                            <div class="flex items-start justify-between gap-3"><dt class="font-medium text-ink-400">Status</dt><dd class="font-semibold text-ink-700 dark:text-ink-200">{{ $employee->employment_status ?: 'Not set' }}</dd></div>
+                            <div class="flex items-start justify-between gap-3"><dt class="font-medium text-ink-400">Hire date</dt><dd class="font-semibold text-ink-700 dark:text-ink-200">{{ $employee->hire_date?->format('M d, Y') ?? 'Not set' }}</dd></div>
+                        </dl>
+                        <a href="{{ route('my-profile') }}" wire:navigate class="mt-4 inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">View full profile <x-icon name="arrow-right" class="h-3.5 w-3.5" /></a>
                     </div>
-                    <a href="{{ route('leave-requests.create') }}" wire:navigate class="mt-4 inline-flex items-center gap-1 text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">
-                        Request leave <x-icon name="arrow-right" class="h-4 w-4" />
-                    </a>
-                </x-card>
-            @else
-                <x-card class="rounded-2xl">
-                    <h3 class="font-bold text-ink-950 dark:text-white">Welcome</h3>
-                    <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Your account isn't linked to an employee profile yet.</p>
-                </x-card>
+                @else
+                    <p class="p-4 text-sm font-medium text-ink-500">Your account is not linked to an employee profile yet.</p>
+                @endif
+            </section>
+
+            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10">
+                    <h2 class="text-sm font-bold text-ink-950 dark:text-white">Quick Actions</h2>
+                </div>
+                <div class="grid grid-cols-2 gap-2 p-3">
+                    @foreach ([
+                        ['route' => 'leave-requests.create', 'label' => 'Request Leave', 'icon' => 'calendar'],
+                        ['route' => 'attendance.punch', 'label' => 'Attendance', 'icon' => 'clock'],
+                        ['route' => 'overtime.create', 'label' => 'Overtime', 'icon' => 'trending-up'],
+                        ['route' => 'requests.index', 'label' => 'New Request', 'icon' => 'clipboard'],
+                    ] as $action)
+                        <a href="{{ route($action['route']) }}" wire:navigate class="flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border border-ink-200 bg-ink-50 px-2 py-3 text-center text-xs font-bold text-ink-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-white/5 dark:text-ink-200 dark:hover:bg-brand-400/10 dark:hover:text-brand-200">
+                            <x-icon :name="$action['icon']" class="h-5 w-5" />
+                            <span>{{ $action['label'] }}</span>
+                        </a>
+                    @endforeach
+                </div>
+            </section>
+        </aside>
+
+        <main class="space-y-5 xl:col-span-6">
+            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                <div class="flex items-center justify-between border-b border-ink-200 px-4 py-3 dark:border-white/10">
+                    <div>
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Balances</p>
+                        <h2 class="mt-0.5 text-sm font-bold text-ink-950 dark:text-white">My Time Off</h2>
+                    </div>
+                    <a href="{{ route('leave-requests.create') }}" wire:navigate class="text-xs font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">Request leave</a>
+                </div>
+                <div class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                    @forelse ($leaveBalances->take(6) as $index => $balance)
+                        @php
+                            $tones = [
+                                ['bg' => 'bg-brand-50 dark:bg-brand-400/10', 'text' => 'text-brand-700 dark:text-brand-300', 'bar' => 'bg-brand-600'],
+                                ['bg' => 'bg-blue-50 dark:bg-blue-400/10', 'text' => 'text-blue-700 dark:text-blue-300', 'bar' => 'bg-blue-500'],
+                                ['bg' => 'bg-amber-50 dark:bg-amber-400/10', 'text' => 'text-amber-700 dark:text-amber-300', 'bar' => 'bg-amber-500'],
+                            ];
+                            $tone = $tones[$index % count($tones)];
+                            $percentage = min(100, max(4, ((float) $balance['balance'] / max(1, (float) $leaveBalances->max('balance'))) * 100));
+                        @endphp
+                        <div class="rounded-lg border border-ink-200 p-3 dark:border-white/10 {{ $tone['bg'] }}">
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="truncate text-xs font-bold text-ink-700 dark:text-ink-200">{{ $balance['name'] }}</p>
+                                <span class="text-[10px] font-bold uppercase {{ $tone['text'] }}">{{ $balance['code'] }}</span>
+                            </div>
+                            <p class="mt-3 text-2xl font-bold leading-none text-ink-950 dark:text-white">{{ rtrim(rtrim(number_format($balance['balance'], 2), '0'), '.') }}</p>
+                            <p class="mt-1 text-[11px] font-medium text-ink-500 dark:text-ink-400">days available</p>
+                            <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-white/80 dark:bg-black/20"><div class="h-full rounded-full {{ $tone['bar'] }}" style="width: {{ $percentage }}%"></div></div>
+                        </div>
+                    @empty
+                        <p class="sm:col-span-2 lg:col-span-3 py-5 text-center text-sm font-medium text-ink-500">No leave balances are available yet.</p>
+                    @endforelse
+                </div>
+            </section>
+
+            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                <div class="flex items-center justify-between border-b border-ink-200 px-4 py-3 dark:border-white/10">
+                    <div>
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Activity</p>
+                        <h2 class="mt-0.5 text-sm font-bold text-ink-950 dark:text-white">{{ $isAdminHr ? 'Recent Leave Requests' : 'My Recent Leave Requests' }}</h2>
+                    </div>
+                    <a href="{{ route('leave-requests.index') }}" wire:navigate class="text-xs font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">View all</a>
+                </div>
+                <div class="divide-y divide-ink-100 dark:divide-white/10">
+                    @forelse ($recentRequests as $request)
+                        <a href="{{ route('leave-requests.show', $request) }}" wire:navigate class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 transition hover:bg-ink-50 dark:hover:bg-white/5">
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-bold text-ink-800 dark:text-white">{{ $isAdminHr ? ($request->employee->fullName() ?: $request->employee->employee_id) : $request->leaveType->name }}</p>
+                                <p class="mt-0.5 text-xs font-medium text-ink-500 dark:text-ink-400">{{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }}</p>
+                            </div>
+                            <x-badge :color="$request->statusColor()">{{ $request->statusLabel() }}</x-badge>
+                        </a>
+                    @empty
+                        <p class="px-4 py-8 text-center text-sm font-medium text-ink-500">No leave requests yet.</p>
+                    @endforelse
+                </div>
+            </section>
+        </main>
+
+        <aside class="space-y-5 xl:col-span-3">
+            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10">
+                    <h2 class="text-sm font-bold text-ink-950 dark:text-white">Employee Self-Service</h2>
+                </div>
+                <div class="divide-y divide-ink-100 dark:divide-white/10">
+                    @foreach ([
+                        ['route' => 'my-payslips', 'title' => 'Recent Payslips', 'caption' => 'View released payroll statements', 'icon' => 'money'],
+                        ['route' => 'my-commission', 'title' => 'My Commission', 'caption' => 'Review commission slips', 'icon' => 'chart'],
+                        ['route' => 'requests.index', 'title' => 'Pending Requests', 'caption' => 'Track submitted requests', 'icon' => 'clipboard'],
+                        ['route' => 'my-reimbursements', 'title' => 'Reimbursements', 'caption' => 'Check awaiting payments', 'icon' => 'document'],
+                    ] as $item)
+                        <a href="{{ route($item['route']) }}" wire:navigate class="flex items-center gap-3 px-4 py-3.5 transition hover:bg-ink-50 dark:hover:bg-white/5">
+                            <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-50 text-brand-700 dark:bg-white/5 dark:text-brand-300"><x-icon :name="$item['icon']" class="h-4.5 w-4.5" /></span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-sm font-bold text-ink-800 dark:text-white">{{ $item['title'] }}</span>
+                                <span class="block truncate text-xs font-medium text-ink-500 dark:text-ink-400">{{ $item['caption'] }}</span>
+                            </span>
+                            <x-icon name="arrow-right" class="h-4 w-4 shrink-0 text-ink-400" />
+                        </a>
+                    @endforeach
+                </div>
+            </section>
+
+            @if ($employee)
+                <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                    <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10"><h2 class="text-sm font-bold text-ink-950 dark:text-white">Employment</h2></div>
+                    <dl class="space-y-3 p-4 text-xs">
+                        <div><dt class="font-medium text-ink-400">Current status</dt><dd class="mt-1 font-bold text-ink-800 dark:text-white">{{ $employee->employment_status ?: 'Not set' }}</dd></div>
+                        <div><dt class="font-medium text-ink-400">Employment type</dt><dd class="mt-1 font-bold text-ink-800 dark:text-white">{{ $employee->employment_type ?: 'Not set' }}</dd></div>
+                        <div><dt class="font-medium text-ink-400">Company email</dt><dd class="mt-1 break-all font-bold text-ink-800 dark:text-white">{{ $employee->company_email ?: auth()->user()->email }}</dd></div>
+                    </dl>
+                </section>
             @endif
-        </div>
+        </aside>
     </div>
 </div>

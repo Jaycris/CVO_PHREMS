@@ -188,6 +188,25 @@ class CommissionRunService
             'No agents are selected for this run. Choose who it covers first.'
         );
 
+        /*
+         * A slip already sent is withdrawn before it is recomputed.
+         *
+         * The notifier only picks up slips with no notified_at, so leaving the
+         * stamp in place would mean the corrected figures are never sent: the
+         * agent keeps the old slip, Send reports nothing to do, and nobody finds
+         * out until they query the amount. Withdrawing costs them sight of it
+         * for as long as it takes to send again, which is the right way round.
+         */
+        $withdrawn = $run->slips()->whereNotNull('notified_at')->count();
+
+        if ($withdrawn > 0) {
+            $run->slips()->newQuery()
+                ->where('commission_run_id', $run->id)
+                ->update(['notified_at' => null]);
+
+            $run->log('slips_withdrawn', $withdrawn . ' sent slip(s) withdrawn for recomputing');
+        }
+
         $start = $run->period_start;
         $end = $run->period_end;
         $totals = ['usd' => 0.0, 'php' => 0.0, 'hold' => 0.0, 'net' => 0.0];
@@ -302,8 +321,11 @@ class CommissionRunService
      *
      * Allowed after sending as well, unlike payroll — a commission slip is a
      * statement rather than a payment, so a genuine correction is better
-     * reissued than left standing. The reason is recorded, and agents who were
-     * already sent the old figures keep seeing them until it is sent again.
+     * reissued than left standing. The reason is recorded.
+     *
+     * Reopening on its own changes nothing an agent can see; it is recomputing
+     * that withdraws the sent slips, because that is the moment the figures
+     * actually move.
      */
     public function unlock(CommissionRun $run, User $actor, string $reason): CommissionRun
     {
