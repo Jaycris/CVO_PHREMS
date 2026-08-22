@@ -69,7 +69,8 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'slips' => $mine()->with('commissionRun')
                 ->join('commission_runs', 'commission_runs.id', '=', 'commission_slips.commission_run_id')
-                ->orderByDesc('commission_runs.period_month')
+                ->orderByDesc('commission_runs.period_start')
+                ->orderByDesc('commission_runs.id')
                 ->select('commission_slips.*')
                 ->paginate($this->perPage()),
             // Looked up on its own rather than from the page in view, so paging

@@ -141,13 +141,42 @@ let actionLoaderTimer;
 let actionLoaderHideTimer;
 let actionLoaderShownAt = 0;
 
+const passiveUiActions = new Set([
+    '$refresh',
+    '$set',
+    '$toggle',
+    'acknowledge',
+    'chooseAgents',
+    'closeAccess',
+    'closeBankForm',
+    'closeDecision',
+    'closeEventGrant',
+    'closeForm',
+    'closeModals',
+    'closePhotoPreview',
+    'create',
+    'createRequest',
+    'edit',
+    'editSelected',
+    'open',
+    'openBankForm',
+    'openEventGrant',
+    'openForm',
+    'openLeaveModal',
+    'openPayrollModal',
+    'openPhotoPreview',
+    'openScheduleModal',
+    'review',
+    'viewSlip',
+]);
+
 function actionCalls(payload) {
     try {
         const body = typeof payload === 'string' ? JSON.parse(payload) : payload;
 
         return (body?.components ?? [])
             .flatMap((component) => component.calls ?? [])
-            .filter((call) => call.method && call.method !== '$refresh');
+            .filter((call) => call.method && !passiveUiActions.has(call.method));
     } catch {
         return [];
     }

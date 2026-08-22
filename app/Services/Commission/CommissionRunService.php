@@ -326,7 +326,7 @@ class CommissionRunService
         abort_unless($run->isMutable(), 403, 'A locked run cannot be cancelled.');
 
         // Hard-deleted so the month is free for a corrected run — the unique
-        // key on period_month would otherwise block it forever.
+        // key on the run type and period would otherwise block it forever.
         $run->delete();
     }
 

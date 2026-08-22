@@ -34,23 +34,14 @@ class CommissionSlipReady extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $month = $this->slip->monthLabel();
+        $url = url('/my-commission');
 
-        $mail = (new MailMessage)
+        return (new MailMessage)
             ->subject("Your commission slip for {$month}")
-            ->greeting('Hi ' . ($this->slip->employee?->first_name ?: 'there') . ',')
-            ->line("Your commission slip for {$month} is ready.");
-
-        if ($this->slip->net_commission !== null) {
-            $mail->line('Net commission: PHP ' . number_format((float) $this->slip->net_commission, 2));
-        }
-
-        if ($this->slip->transaction_count > 0) {
-            $mail->line($this->slip->transaction_count . ' transaction(s) are listed on the statement.');
-        }
-
-        return $mail
-            ->action('View Commission Slip', url('/my-commission'))
-            ->line('Check it and tell your team lead within three working days if something looks wrong.');
+            ->view('emails.commission-slip-ready', [
+                'slip' => $this->slip,
+                'url' => $url,
+            ]);
     }
 
     /** @return array<string, mixed> */
