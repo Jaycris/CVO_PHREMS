@@ -48,6 +48,10 @@ return [
             'overtime.view_all' => 'Overtime — view all filings across the company',
         ],
 
+        'Work From Home' => [
+            'wfh.view_all' => 'Work From Home — view all requests, and decide those from employees with no manager',
+        ],
+
         'Leave' => [
             'leave.types.manage' => 'Leave Types — configure entitlements and accrual',
             'leave.view_all' => 'Leave — view all requests across the company',

@@ -34,14 +34,15 @@ class PayslipReady extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $run = $this->payslip->payrollRun;
+        $url = url('/my-payslips/' . $this->payslip->id);
 
         return (new MailMessage)
             ->subject('Your payslip for ' . $run->periodLabel())
-            ->greeting('Hi ' . ($this->payslip->employee_snapshot['name'] ?? '') . ',')
-            ->line('Your payslip for ' . $run->periodLabel() . ' is ready.')
-            ->line('Pay date: ' . $run->pay_date->format('F j, Y'))
-            ->action('View Payslip', url('/my-payslips/' . $this->payslip->id))
-            ->line('Please check it and let HR know within three working days if anything looks wrong.');
+            ->view('emails.payslip-ready', [
+                'payslip' => $this->payslip,
+                'run' => $run,
+                'url' => $url,
+            ]);
     }
 
     /** @return array<string, mixed> */

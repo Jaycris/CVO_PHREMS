@@ -50,6 +50,10 @@ Route::middleware('auth')->group(function () {
     Route::livewire('/cash-advance-requests', 'cash-advance-requests.index')->name('cash-advance-requests.index');
     Route::livewire('/my-reimbursements', 'my-reimbursements')->name('my-reimbursements');
 
+    // Everyone may ask; the page decides whose queue to show, since an
+    // approver is found from who reports to them rather than a permission.
+    Route::livewire('/work-from-home', 'work-from-home.index')->name('work-from-home.index');
+
     Route::livewire('/leave-requests', 'leave-requests.index')->name('leave-requests.index');
     Route::livewire('/leave-requests/create', 'leave-requests.create')->name('leave-requests.create');
     Route::livewire('/leave-requests/{leaveRequest}', 'leave-requests.show')->name('leave-requests.show');

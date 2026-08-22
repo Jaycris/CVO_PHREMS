@@ -62,6 +62,7 @@
                     <x-nav-link :href="route('my-commission')" :active="request()->routeIs('my-commission')" icon="chart">My Commission</x-nav-link>
                     <x-nav-link :href="route('leave-requests.index')" :active="request()->routeIs('leave-requests.*')" icon="clipboard">Leave Requests</x-nav-link>
                     <x-nav-link :href="route('overtime.index')" :active="request()->routeIs('overtime.*')" icon="clock">Overtime</x-nav-link>
+                    <x-nav-link :href="route('work-from-home.index')" :active="request()->routeIs('work-from-home.*')" icon="home">Work From Home</x-nav-link>
                     <x-nav-link :href="route('cash-advance-requests.index')" :active="request()->routeIs('cash-advance-requests.*')" icon="clipboard">Cash Advance Requests</x-nav-link>
                     <x-nav-link :href="route('my-reimbursements')" :active="request()->routeIs('my-reimbursements')" icon="money">My Reimbursement</x-nav-link>
 
@@ -149,6 +150,7 @@
                         request()->routeIs('attendance.punch') => 'My Attendance',
                         request()->routeIs('leave-requests.*') => 'Leave Requests',
                         request()->routeIs('overtime.*') => 'Overtime',
+                        request()->routeIs('work-from-home.*') => 'Work From Home',
                         request()->routeIs('cash-advance-requests.*') => 'Cash Advance Requests',
                         request()->routeIs('my-reimbursements') => 'My Reimbursement',
                         request()->routeIs('reimbursements.*') => 'Reimbursement Record',
