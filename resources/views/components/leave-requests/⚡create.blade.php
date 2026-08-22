@@ -64,7 +64,7 @@ new #[Layout('layouts.app')] class extends Component
 };
 ?>
 
-<div class="max-w-4xl space-y-7">
+<div class="w-full max-w-6xl space-y-7">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
             <h1 class="text-3xl font-bold tracking-tight text-ink-950 dark:text-white">Request Leave</h1>
@@ -81,7 +81,7 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     @endif
 
-    <div class="grid gap-5 lg:grid-cols-[1fr_280px]">
+    <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
         <x-card class="rounded-2xl">
             <form wire:submit="submit" class="space-y-5">
                 <div>
@@ -99,11 +99,11 @@ new #[Layout('layouts.app')] class extends Component
                     <div>
                         <x-label>Start Date</x-label>
                         <div class="relative" x-data="datePicker($wire.entangle('startDate').live)">
-                            <button type="button" @click="open = ! open" class="flex h-11 w-full items-center justify-between rounded-lg border border-ink-200 bg-white px-3.5 text-left text-sm font-medium text-ink-700 shadow-sm transition hover:bg-ink-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-600/20 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                            <button type="button" @click="open = ! open" class="flex h-11 w-full items-center justify-between rounded-lg border border-ink-200 bg-white px-3.5 text-left text-sm font-medium text-ink-700 shadow-sm transition hover:bg-ink-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-600/20 dark:border-white/10 dark:bg-ink-900 dark:text-white dark:hover:bg-white/5">
                                 <span x-text="display()"></span>
                                 <x-icon name="calendar" class="h-4 w-4 text-ink-500" />
                             </button>
-                            <div x-cloak x-show="open" @click.outside="open = false" x-transition class="absolute left-0 z-30 mt-2 w-80 rounded-2xl border border-ink-200 bg-white p-4 shadow-xl shadow-ink-200/70 dark:border-white/10 dark:bg-ink-900 dark:shadow-black/30">
+                            <div x-cloak x-show="open" @click.outside="open = false" x-transition class="relative z-30 mt-2 w-full rounded-lg border border-ink-200 bg-white p-4 shadow-lg shadow-ink-200/50 dark:border-white/10 dark:bg-ink-900 dark:shadow-black/30">
                                 <div class="mb-4 flex items-center justify-between">
                                     <button type="button" @click="previousMonth()" class="rounded-lg p-2 text-ink-500 hover:bg-ink-100 dark:hover:bg-white/10"><x-icon name="chevron-down" class="h-4 w-4 rotate-90" /></button>
                                     <p class="text-sm font-bold text-ink-950 dark:text-white" x-text="monthNames[month] + ' ' + year"></p>
@@ -125,11 +125,11 @@ new #[Layout('layouts.app')] class extends Component
                     <div>
                         <x-label>End Date</x-label>
                         <div class="relative" x-data="datePicker($wire.entangle('endDate').live)">
-                            <button type="button" @click="open = ! open" class="flex h-11 w-full items-center justify-between rounded-lg border border-ink-200 bg-white px-3.5 text-left text-sm font-medium text-ink-700 shadow-sm transition hover:bg-ink-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-600/20 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                            <button type="button" @click="open = ! open" class="flex h-11 w-full items-center justify-between rounded-lg border border-ink-200 bg-white px-3.5 text-left text-sm font-medium text-ink-700 shadow-sm transition hover:bg-ink-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-600/20 dark:border-white/10 dark:bg-ink-900 dark:text-white dark:hover:bg-white/5">
                                 <span x-text="display()"></span>
                                 <x-icon name="calendar" class="h-4 w-4 text-ink-500" />
                             </button>
-                            <div x-cloak x-show="open" @click.outside="open = false" x-transition class="absolute left-0 z-30 mt-2 w-80 rounded-2xl border border-ink-200 bg-white p-4 shadow-xl shadow-ink-200/70 dark:border-white/10 dark:bg-ink-900 dark:shadow-black/30">
+                            <div x-cloak x-show="open" @click.outside="open = false" x-transition class="relative z-30 mt-2 w-full rounded-lg border border-ink-200 bg-white p-4 shadow-lg shadow-ink-200/50 dark:border-white/10 dark:bg-ink-900 dark:shadow-black/30">
                                 <div class="mb-4 flex items-center justify-between">
                                     <button type="button" @click="previousMonth()" class="rounded-lg p-2 text-ink-500 hover:bg-ink-100 dark:hover:bg-white/10"><x-icon name="chevron-down" class="h-4 w-4 rotate-90" /></button>
                                     <p class="text-sm font-bold text-ink-950 dark:text-white" x-text="monthNames[month] + ' ' + year"></p>

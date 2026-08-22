@@ -383,8 +383,18 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="mt-6 border-t border-neutral-200 pt-4 dark:border-neutral-800">
                 <h2 class="mb-2 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Account</h2>
-                @if ($employee->user_id)
+                @if ($employee->user_id && $employee->user?->is_active)
                     <x-badge color="green">Login active ({{ $employee->user->email }})</x-badge>
+                @elseif ($employee->user_id)
+                    {{-- The account exists but cannot sign in. Said plainly,
+                         with where to change it, because otherwise the only
+                         symptom is the person being unable to log in. --}}
+                    <x-badge color="red">Login disabled ({{ $employee->user->email }})</x-badge>
+                    <p class="mt-2 text-sm font-medium text-[#778599]">
+                        Re-enable it on the
+                        <a href="{{ route('users.index') }}" wire:navigate class="font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-400">Users</a>
+                        page.
+                    </p>
                 @elseif ($employee->onboarding_completed_at)
                     <p class="text-sm font-medium text-[#778599]">
                         Ready for credentials. Create the login from the

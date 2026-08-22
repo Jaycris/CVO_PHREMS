@@ -43,7 +43,9 @@ new #[Layout('layouts.app')] class extends Component
     {
         return [
             'employees' => Employee::query()
-                ->with(['department', 'position'])
+                // user is loaded because the Login column reads is_active from
+                // it; without this the list runs a query per row.
+                ->with(['department', 'position', 'user'])
                 ->search($this->search)
                 ->orderBy('employee_id')
                 ->paginate($this->perPage()),
@@ -204,10 +206,19 @@ new #[Layout('layouts.app')] class extends Component
                                     {{ $employee->onboarding_completed_at ? 'Complete' : 'Pending' }}
                                 </x-badge>
                             </td>
+                            {{-- Three states, not two. Having an account and
+                                 being able to sign in are different facts, and
+                                 showing "Enabled" for a disabled account is the
+                                 sort of thing HR only finds out about when the
+                                 person cannot log in. --}}
                             <td class="whitespace-nowrap px-4 py-4">
-                                <x-badge :color="$employee->user_id ? 'brand' : 'neutral'">
-                                    {{ $employee->user_id ? 'Enabled' : 'No login' }}
-                                </x-badge>
+                                @if (! $employee->user_id)
+                                    <x-badge color="neutral">No login</x-badge>
+                                @elseif ($employee->user?->is_active)
+                                    <x-badge color="brand">Enabled</x-badge>
+                                @else
+                                    <x-badge color="red">Disabled</x-badge>
+                                @endif
                             </td>
                         </tr>
                     @empty

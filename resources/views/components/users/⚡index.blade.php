@@ -297,7 +297,7 @@ new #[Layout('layouts.app')] class extends Component
 };
 ?>
 
-<div class="space-y-7" x-data="{ selected: [] }">
+<div class="space-y-7" x-data="{ selected: [], confirmation: null }">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
             <h2 class="text-3xl font-bold tracking-tight text-ink-950 dark:text-white">Users</h2>
@@ -361,14 +361,14 @@ new #[Layout('layouts.app')] class extends Component
                     <button type="button"
                         class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 shadow-sm transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
                         :disabled="selected.length === 0"
-                        @click="if (selected.length && confirm('Disable access for the selected user account(s)?')) { $wire.setSelectedAccess(selected, false); selected = []; }"
+                        @click="if (selected.length) confirmation = 'disable'"
                         title="Disable selected account access">
                         <x-icon name="user-minus" class="h-4 w-4" />
                     </button>
                     <button type="button"
                         class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
                         :disabled="selected.length === 0"
-                        @click="if (selected.length && confirm('Remove the selected HRIS user account(s)? Employee records will be kept.')) { $wire.removeSelected(selected); selected = []; }"
+                        @click="if (selected.length) confirmation = 'remove'"
                         title="Remove selected user account">
                         <x-icon name="trash" class="h-4 w-4" />
                     </button>
@@ -451,6 +451,54 @@ new #[Layout('layouts.app')] class extends Component
             </div>
         @endif
     </x-card>
+
+    <template x-teleport="body">
+        <div x-show="confirmation" x-cloak @keydown.escape.window="confirmation = null"
+            class="fixed inset-0 z-[120] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div class="absolute inset-0 bg-ink-950/55 backdrop-blur-sm"
+                x-transition.opacity.duration.150ms @click="confirmation = null"></div>
+
+            <div x-show="confirmation"
+                x-transition:enter="ease-out duration-150"
+                x-transition:enter-start="opacity-0 translate-y-2 scale-95"
+                x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                x-transition:leave="ease-in duration-100"
+                x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                x-transition:leave-end="opacity-0 translate-y-2 scale-95"
+                class="professional-panel relative z-10 w-full max-w-md overflow-hidden rounded-lg shadow-2xl">
+                <div class="flex items-start gap-4 border-b border-ink-200 px-6 py-5 dark:border-white/10">
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+                        :class="confirmation === 'remove'
+                            ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300'
+                            : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'">
+                        <x-icon name="trash" class="h-5 w-5" x-show="confirmation === 'remove'" />
+                        <x-icon name="user-minus" class="h-5 w-5" x-show="confirmation === 'disable'" />
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="text-xl font-bold text-ink-950 dark:text-white"
+                            x-text="confirmation === 'remove' ? 'Remove user access?' : 'Disable user access?'"></h3>
+                        <p class="mt-1 text-sm font-medium leading-6 text-ink-600 dark:text-ink-300"
+                            x-text="confirmation === 'remove'
+                                ? 'The selected HRIS credentials will be permanently removed. The linked employee record will remain available.'
+                                : 'The selected user will be signed out and unable to access HRIS until their account is enabled again.'"></p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 px-6 py-4">
+                    <button type="button" @click="confirmation = null"
+                        class="inline-flex h-10 items-center justify-center rounded-lg border border-ink-200 bg-white px-5 text-sm font-bold text-ink-700 shadow-sm transition hover:bg-ink-50 dark:border-white/10 dark:bg-white/5 dark:text-white">
+                        Cancel
+                    </button>
+                    <button type="button"
+                        @click="if (confirmation === 'remove') { $wire.removeSelected(selected) } else { $wire.setSelectedAccess(selected, false) }; selected = []; confirmation = null"
+                        class="inline-flex h-10 items-center justify-center rounded-lg px-5 text-sm font-bold text-white shadow-sm transition"
+                        :class="confirmation === 'remove' ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'">
+                        <span x-text="confirmation === 'remove' ? 'Remove User' : 'Disable Access'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
 
     <x-modal :show="$showForm" onClose="closeForm">
         <h2 class="mb-4 text-lg font-bold text-[#0f172a] dark:text-white">Add User</h2>
