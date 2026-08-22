@@ -69,7 +69,11 @@
       "Bash(D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe -S 127.0.0.1:8011 dev/fake-crm.php)",
       "Bash(curl -s -H \"Authorization: Bearer local-dev-crm-token\" \"http://127.0.0.1:8011/api/hris/commission-slip?hris_employee_id=EMP-9372&month=2026-08\")",
       "Bash(netstat -ano)",
-      "PowerShell(Get-NetTCPConnection -LocalPort 8011 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 2; \"stub stopped\")"
+      "PowerShell(Get-NetTCPConnection -LocalPort 8011 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 2; \"stub stopped\")",
+      "PowerShell(\\(Test-NetConnection -ComputerName 127.0.0.1 -Port 3306 -WarningAction SilentlyContinue\\).TcpTestSucceeded; \\(Test-NetConnection -ComputerName 127.0.0.1 -Port 8001 -WarningAction SilentlyContinue\\).TcpTestSucceeded; \\(Test-NetConnection -ComputerName 127.0.0.1 -Port 8000 -WarningAction SilentlyContinue\\).TcpTestSucceeded)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://127.0.0.1:8001/login\" -UseBasicParsing -TimeoutSec 20; \"HRIS: HTTP $\\($r.StatusCode\\)\" } catch { \"HRIS ERR: $\\($_.Exception.Message\\)\" })",
+      "Bash(sed -i \"s|now\\('Asia/Manila'\\)->startOfMonth\\(\\)->toDateString\\(\\)|'2026-05-01'|\" /c/Users/JAY-AR~1/AppData/Local/Temp/claude/D--Project-CreatiVision-Claude/6f2243b5-e30c-4611-a30c-9e201ed13445/scratchpad/conv.php)",
+      "Read(//c/Users/JAY-AR~1/AppData/Local/Temp/claude/D--Project-CreatiVision-Claude/6f2243b5-e30c-4611-a30c-9e201ed13445/scratchpad/**)"
     ]
   }
 }

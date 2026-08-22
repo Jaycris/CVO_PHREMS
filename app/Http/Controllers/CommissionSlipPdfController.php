@@ -93,8 +93,8 @@ class CommissionSlipPdfController
 
         $y -= 24;
         foreach ([
-            ['Service commission', $this->num($slip->service_commission, '$')],
-            ['Markup commission', $this->num($slip->markup_commission, '$')],
+            ['Service commission (USD)', $this->num($slip->service_commission, '$')],
+            ['Markup commission (USD)', $this->num($slip->markup_commission, '$')],
             ['USD total', $this->num($slip->usd_total, '$')],
             ['Exchange rate', $slip->exchange_rate === null ? '-' : number_format((float) $slip->exchange_rate, 4)],
             ['PHP total', $this->num($slip->php_total, 'PHP ')],
@@ -102,6 +102,20 @@ class CommissionSlipPdfController
             ['Card payment hold amount', $this->num($slip->card_hold_amount, 'PHP ')],
         ] as $i => [$label, $value]) {
             $row($y, $label, $value, $i % 2 === 0);
+            $y -= 19;
+        }
+
+        // The conversion written out, so the printed slip needs no working out
+        // either. It is the line most likely to be queried.
+        if ($slip->usd_total !== null && $slip->exchange_rate !== null) {
+            $y -= 4;
+            $stream[] = '0.93 0.96 0.94 rg 40 ' . ($y - 7) . ' 762 20 re f 0 0 0 rg';
+            $text(10, 48, $y, 'Currency conversion', 'F2');
+            $right(10, 794, $y,
+                $this->num($slip->usd_total, '$') . ' USD  x  '
+                . number_format((float) $slip->exchange_rate, 4) . '  =  '
+                . $this->num($slip->php_total, 'PHP '),
+                'F2');
             $y -= 19;
         }
 

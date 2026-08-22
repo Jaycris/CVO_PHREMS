@@ -29,8 +29,14 @@
         ['Service commission', $money($slip->serviceCommission, '$')],
         ['Markup commission', $money($slip->markupCommission, '$')],
         ['USD total', $money($slip->usdTotal, '$')],
-        ['Exchange rate', $slip->exchangeRate === null ? '—' : number_format($slip->exchangeRate, 4)],
-        ['PHP total', $money($slip->phpTotal, '₱')],
+        // Written as the sum it is rather than three rows to multiply in your
+        // head — the same as the issued slip, so the two read alike.
+        [
+            'Converted to PHP',
+            $slip->usdTotal !== null && $slip->exchangeRate !== null
+                ? $money($slip->usdTotal, '$') . ' × ' . number_format($slip->exchangeRate, 4) . ' = ' . $money($slip->phpTotal, '₱')
+                : $money($slip->phpTotal, '₱'),
+        ],
     ];
 
     $holds = [

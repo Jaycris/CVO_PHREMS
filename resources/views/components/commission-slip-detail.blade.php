@@ -31,9 +31,12 @@
         ['Service commission', $money($slip->service_commission, '$')],
         ['Markup commission', $money($slip->markup_commission, '$')],
         ['USD total', $money($slip->usd_total, '$')],
-        ['Exchange rate', $slip->exchange_rate === null ? '—' : number_format((float) $slip->exchange_rate, 4)],
-        ['PHP total', $money($slip->php_total, '₱')],
     ];
+
+    // The conversion is shown as the sum it is, rather than three rows the
+    // reader has to multiply together in their head. It is the step most likely
+    // to be queried, so it should be the one that needs no working out.
+    $canConvert = $slip->usd_total !== null && $slip->exchange_rate !== null;
 
     $held = [
         ['Card payment hold', $percent($slip->card_hold_percent)],
@@ -62,7 +65,7 @@
 
     <div class="grid gap-0 overflow-hidden rounded-xl border border-ink-200 md:grid-cols-2 md:divide-x md:divide-ink-200 dark:border-white/10 dark:md:divide-white/10">
         <div class="divide-y divide-ink-100 dark:divide-white/10">
-            <p class="bg-ink-50 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-ink-500 dark:bg-white/5 dark:text-ink-400">Earned</p>
+            <p class="bg-ink-50 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-ink-500 dark:bg-white/5 dark:text-ink-400">Earned in USD</p>
             @foreach ($earned as [$label, $value])
                 <div class="flex items-center justify-between gap-4 px-5 py-2.5">
                     <span class="text-sm font-medium text-ink-700 dark:text-ink-300">{{ $label }}</span>
@@ -83,6 +86,50 @@
                 A hold applies only to sales paid by card. The CRM decides which those are.
             </p>
         </div>
+    </div>
+
+    {{-- The conversion, spelled out. Everything above it is dollars, everything
+         below it is pesos, and this is where it changes. --}}
+    <div class="overflow-hidden rounded-xl border border-ink-200 dark:border-white/10">
+        <p class="bg-ink-50 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-ink-500 dark:bg-white/5 dark:text-ink-400">
+            Currency conversion
+        </p>
+
+        @if ($canConvert)
+            <div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-5 py-4 text-center">
+                <span class="text-lg font-bold tabular-nums text-ink-900 dark:text-white">{{ $money($slip->usd_total, '$') }}</span>
+                <span class="text-sm font-medium text-ink-500">USD</span>
+                <span class="text-lg font-medium text-ink-400">×</span>
+                <span class="text-lg font-bold tabular-nums text-ink-900 dark:text-white">{{ number_format((float) $slip->exchange_rate, 4) }}</span>
+                <span class="text-lg font-medium text-ink-400">=</span>
+                <span class="text-lg font-bold tabular-nums text-ink-900 dark:text-white">{{ $money($slip->php_total, '₱') }}</span>
+                <span class="text-sm font-medium text-ink-500">PHP</span>
+            </div>
+            <p class="border-t border-ink-100 px-5 py-2.5 text-xs font-medium text-ink-500 dark:border-white/10 dark:text-ink-400">
+                Rate set by the CRM for {{ $slip->monthLabel() }}. This app does not convert anything — it prints the
+                rate and the result the CRM sent.
+            </p>
+        @else
+            <div class="space-y-1 px-5 py-4">
+                <div class="flex items-center justify-between gap-4">
+                    <span class="text-sm font-medium text-ink-700 dark:text-ink-300">USD total</span>
+                    <span class="text-sm font-semibold tabular-nums text-ink-900 dark:text-white">{{ $money($slip->usd_total, '$') }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                    <span class="text-sm font-medium text-ink-700 dark:text-ink-300">Exchange rate</span>
+                    <span class="text-sm font-semibold tabular-nums text-ink-900 dark:text-white">
+                        {{ $slip->exchange_rate === null ? '—' : number_format((float) $slip->exchange_rate, 4) }}
+                    </span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                    <span class="text-sm font-medium text-ink-700 dark:text-ink-300">PHP total</span>
+                    <span class="text-sm font-semibold tabular-nums text-ink-900 dark:text-white">{{ $money($slip->php_total, '₱') }}</span>
+                </div>
+                <p class="pt-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                    The CRM did not send enough to show the conversion as a sum.
+                </p>
+            </div>
+        @endif
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-brand-50 px-5 py-4 dark:bg-brand-500/10">
