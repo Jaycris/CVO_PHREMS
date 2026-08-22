@@ -29,6 +29,12 @@ new #[Layout('layouts.app')] class extends Component
     public string $periodStart = '';
     public string $periodEnd = '';
 
+    /** 'all' | 'specific' — who the run covers. */
+    public string $agentMode = 'all';
+    /** @var list<int> */
+    public array $selectedAgents = [];
+    public string $agentSearch = '';
+
     public function mount(): void
     {
         $this->month = now('Asia/Manila')->format('Y-m');
@@ -40,9 +46,35 @@ new #[Layout('layouts.app')] class extends Component
         $this->runType = 'monthly';
         $this->month = now('Asia/Manila')->format('Y-m');
         $this->applyPreset();
+        $this->agentMode = 'all';
+        $this->selectedAgents = [];
+        $this->agentSearch = '';
         $this->resetValidation();
         $this->errorMessage = null;
         $this->showOpen = true;
+    }
+
+    /** Ticks everyone by default, so "specific" starts from all and narrows. */
+    public function updatedAgentMode(CommissionRunService $service): void
+    {
+        if ($this->agentMode === 'specific' && $this->selectedAgents === []) {
+            $this->selectedAgents = $service->defaultAgentsFor($this->runType)->pluck('id')->all();
+        }
+    }
+
+    public function selectAllAgents(CommissionRunService $service): void
+    {
+        $this->selectedAgents = $service->selectableAgents()->pluck('id')->all();
+    }
+
+    public function selectMatchingAgents(CommissionRunService $service): void
+    {
+        $this->selectedAgents = $service->suggestedAgentsFor($this->runType)->pluck('id')->all();
+    }
+
+    public function selectNoAgents(): void
+    {
+        $this->selectedAgents = [];
     }
 
     public function updatedRunType(): void
@@ -93,7 +125,13 @@ new #[Layout('layouts.app')] class extends Component
         ]);
 
         try {
-            $run = $service->openRun($this->periodStart, $this->periodEnd, $this->runType, Auth::user());
+            $run = $service->openRun(
+                $this->periodStart,
+                $this->periodEnd,
+                $this->runType,
+                Auth::user(),
+                agentIds: $this->agentMode === 'specific' ? $this->selectedAgents : null,
+            );
         } catch (\Throwable $e) {
             $this->errorMessage = $e->getMessage();
 
@@ -119,7 +157,7 @@ new #[Layout('layouts.app')] class extends Component
         return $months;
     }
 
-    public function with(CommissionSlipService $crm): array
+    public function with(CommissionSlipService $crm, CommissionRunService $runs): array
     {
         return [
             'runs' => CommissionRun::withCount(['slips', 'agents'])
@@ -128,6 +166,14 @@ new #[Layout('layouts.app')] class extends Component
                 ->paginate($this->perPage()),
             'monthOptions' => $this->monthOptions(),
             'crmReady' => $crm->isConfigured(),
+            'defaultAgentCount' => $runs->defaultAgentsFor($this->runType)->count(),
+            'pickableAgents' => $this->showOpen && $this->agentMode === 'specific'
+                ? $runs->selectableAgents()->filter(fn ($e) => $this->agentSearch === ''
+                    || str_contains(
+                        mb_strtolower($e->fullName() . ' ' . $e->employee_id . ' ' . $e->company_email),
+                        mb_strtolower($this->agentSearch)
+                    ))
+                : collect(),
         ];
     }
 };
@@ -264,6 +310,68 @@ new #[Layout('layouts.app')] class extends Component
         <p class="mt-2 text-xs font-medium text-[#778599]">
             These dates are what the CRM is asked for, so they should match the period the commission covers.
         </p>
+
+        {{-- Who the run covers. All by default; narrowing to one agent is the
+             common case when a single slip needs reissuing. --}}
+        <div class="mt-4">
+            <x-label>Agents</x-label>
+            <x-select wire:model.live="agentMode">
+                <option value="all">All agents ({{ $defaultAgentCount }})</option>
+                <option value="specific">Choose specific agents</option>
+            </x-select>
+        </div>
+
+        @if ($agentMode === 'specific')
+            <div class="mt-3 rounded-xl border border-ink-200 p-3 dark:border-white/10">
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="relative min-w-48 flex-1">
+                        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-ink-500">
+                            <x-icon name="search" class="h-4 w-4" />
+                        </span>
+                        <input type="text" wire:model.live.debounce.250ms="agentSearch" placeholder="Search agents"
+                               class="h-9 w-full rounded-lg border border-ink-200 bg-white py-2 pl-9 pr-3 text-sm font-medium text-ink-700 shadow-sm placeholder:text-ink-500 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                    </div>
+                    <x-button wire:click="selectAllAgents" type="button" variant="secondary" class="h-9 px-2.5 text-xs">All</x-button>
+                    <x-button wire:click="selectMatchingAgents" type="button" variant="secondary" class="h-9 px-2.5 text-xs">
+                        {{ $runType === 'biweekly' ? 'Bi-weekly' : 'Monthly' }} only
+                    </x-button>
+                    <x-button wire:click="selectNoAgents" type="button" variant="secondary" class="h-9 px-2.5 text-xs">None</x-button>
+                </div>
+
+                <p class="mt-2 text-xs font-medium text-[#778599]">{{ count($selectedAgents) }} selected.</p>
+
+                <div class="mt-2 max-h-56 divide-y divide-ink-100 overflow-y-auto rounded-lg border border-ink-200 dark:divide-white/10 dark:border-white/10">
+                    @forelse ($pickableAgents as $agent)
+                        <label class="flex cursor-pointer items-center gap-3 px-3 py-2 transition hover:bg-ink-50 dark:hover:bg-white/5"
+                               wire:key="pick-{{ $agent->id }}">
+                            <input type="checkbox" wire:model.live="selectedAgents" value="{{ $agent->id }}"
+                                   class="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500 dark:border-white/20 dark:bg-ink-800">
+                            <span class="flex-1">
+                                <span class="block text-sm font-semibold text-ink-900 dark:text-white">
+                                    {{ $agent->fullName() ?: $agent->employee_id }}
+                                </span>
+                                <span class="block text-xs font-medium text-[#778599]">{{ $agent->employee_id }}</span>
+                            </span>
+                            <x-badge :color="match ($agent->commission_frequency) {
+                                'monthly' => 'blue',
+                                'biweekly' => 'brand',
+                                default => 'neutral',
+                            }">
+                                {{ match ($agent->commission_frequency) {
+                                    'monthly' => 'Monthly',
+                                    'biweekly' => 'Bi-weekly',
+                                    default => 'None',
+                                } }}
+                            </x-badge>
+                        </label>
+                    @empty
+                        <p class="px-3 py-6 text-center text-sm font-medium text-[#778599]">
+                            {{ $agentSearch !== '' ? 'Nobody matches that.' : 'No employees on file.' }}
+                        </p>
+                    @endforelse
+                </div>
+            </div>
+        @endif
 
         <div class="mt-6 flex flex-wrap gap-2">
             <x-button wire:click="openRun" wire:loading.attr="disabled" wire:target="openRun">

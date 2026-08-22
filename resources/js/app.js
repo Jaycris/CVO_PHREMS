@@ -135,3 +135,116 @@ document.addEventListener('livewire:navigated', () => {
         loadingBar?.classList.remove('is-complete');
     }, 320);
 });
+
+let activeActionRequests = 0;
+let actionLoaderTimer;
+let actionLoaderHideTimer;
+let actionLoaderShownAt = 0;
+
+function actionCalls(payload) {
+    try {
+        const body = typeof payload === 'string' ? JSON.parse(payload) : payload;
+
+        return (body?.components ?? [])
+            .flatMap((component) => component.calls ?? [])
+            .filter((call) => call.method && call.method !== '$refresh');
+    } catch {
+        return [];
+    }
+}
+
+function actionLoaderElements() {
+    const loader = document.getElementById('global-action-loader');
+
+    return {
+        loader,
+        panel: loader?.querySelector('[data-action-loader-panel]'),
+    };
+}
+
+function showActionLoader() {
+    const { loader, panel } = actionLoaderElements();
+
+    if (!loader || activeActionRequests === 0) {
+        return;
+    }
+
+    window.clearTimeout(actionLoaderHideTimer);
+    actionLoaderShownAt = Date.now();
+    loader.setAttribute('aria-hidden', 'false');
+    loader.classList.remove('pointer-events-none', 'opacity-0');
+    loader.classList.add('pointer-events-auto', 'opacity-100');
+
+    panel?.classList.remove('translate-y-2', 'scale-95', 'opacity-0');
+    panel?.classList.add('translate-y-0', 'scale-100', 'opacity-100');
+}
+
+function hideActionLoader() {
+    const { loader, panel } = actionLoaderElements();
+
+    if (!loader) {
+        return;
+    }
+
+    loader.setAttribute('aria-hidden', 'true');
+    loader.classList.remove('pointer-events-auto', 'opacity-100');
+    loader.classList.add('pointer-events-none', 'opacity-0');
+
+    panel?.classList.remove('translate-y-0', 'scale-100', 'opacity-100');
+    panel?.classList.add('translate-y-2', 'scale-95', 'opacity-0');
+}
+
+function scheduleActionLoader() {
+    window.clearTimeout(actionLoaderTimer);
+    actionLoaderTimer = window.setTimeout(showActionLoader, 160);
+}
+
+function finishActionRequest() {
+    activeActionRequests = Math.max(0, activeActionRequests - 1);
+
+    if (activeActionRequests > 0) {
+        return;
+    }
+
+    window.clearTimeout(actionLoaderTimer);
+
+    const elapsed = Date.now() - actionLoaderShownAt;
+    const remaining = actionLoaderShownAt ? Math.max(0, 220 - elapsed) : 0;
+
+    window.clearTimeout(actionLoaderHideTimer);
+    actionLoaderHideTimer = window.setTimeout(() => {
+        hideActionLoader();
+        actionLoaderShownAt = 0;
+    }, remaining);
+}
+
+document.addEventListener('livewire:init', () => {
+    Livewire.hook('request', ({ payload, succeed, fail }) => {
+        if (actionCalls(payload).length === 0) {
+            return;
+        }
+
+        activeActionRequests++;
+        scheduleActionLoader();
+
+        let finished = false;
+        const finishOnce = () => {
+            if (finished) {
+                return;
+            }
+
+            finished = true;
+            finishActionRequest();
+        };
+
+        succeed(finishOnce);
+        fail(finishOnce);
+    });
+});
+
+document.addEventListener('livewire:navigate', () => {
+    activeActionRequests = 0;
+    window.clearTimeout(actionLoaderTimer);
+    window.clearTimeout(actionLoaderHideTimer);
+    hideActionLoader();
+});

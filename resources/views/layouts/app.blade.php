@@ -277,6 +277,8 @@
             </div>
         </div>
 
+        <x-global-action-loader />
+
         @livewireScripts
     </body>
 </html>

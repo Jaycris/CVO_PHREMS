@@ -41,12 +41,17 @@ class CommissionRunService
      * only a starting point: whoever runs it can add and remove people before
      * computing.
      */
+    /**
+     * @param  list<int>|null  $agentIds  Explicit selection, or null to take the
+     *                                    default for this run type.
+     */
     public function openRun(
         Carbon|string $start,
         Carbon|string $end,
         string $type = 'monthly',
         ?User $actor = null,
         ?string $label = null,
+        ?array $agentIds = null,
     ): CommissionRun {
         $start = Carbon::parse($start)->startOfDay();
         $end = Carbon::parse($end)->startOfDay();
@@ -71,20 +76,31 @@ class CommissionRunService
             return $existing;
         }
 
-        $run = CommissionRun::create([
-            'run_type' => $type,
-            'period_start' => $start->toDateString(),
-            'period_end' => $end->toDateString(),
-            'label' => $label,
-            'status' => 'draft',
-        ]);
+        // Resolved before the run is created, not after. Aborting once the row
+        // exists leaves an empty run behind that nobody asked for and that then
+        // holds the period against a corrected attempt.
+        $chosen = $agentIds === null
+            ? $this->defaultAgentsFor($type)->pluck('id')
+            : Employee::whereIn('id', $agentIds)->pluck('id');
 
-        $run->agents()->sync($this->suggestedAgentsFor($type)->pluck('id'));
+        abort_if($chosen->isEmpty(), 422, 'Pick at least one agent for this run.');
 
-        $run->log('opened', 'Run opened for ' . $run->periodLabel()
-            . ' (' . $run->typeLabel() . '), ' . $run->agents()->count() . ' agent(s) selected');
+        return DB::transaction(function () use ($type, $start, $end, $label, $chosen) {
+            $run = CommissionRun::create([
+                'run_type' => $type,
+                'period_start' => $start->toDateString(),
+                'period_end' => $end->toDateString(),
+                'label' => $label,
+                'status' => 'draft',
+            ]);
 
-        return $run;
+            $run->agents()->sync($chosen);
+
+            $run->log('opened', 'Run opened for ' . $run->periodLabel()
+                . ' (' . $run->typeLabel() . '), ' . $chosen->count() . ' agent(s) selected');
+
+            return $run;
+        });
     }
 
     /**
@@ -114,11 +130,10 @@ class CommissionRunService
     }
 
     /**
-     * Who a run of this type would normally cover.
+     * Everyone whose commission frequency matches this run type.
      *
-     * From each employee's commission frequency, which is a default rather than
-     * a rule — see the pivot table's migration for why the last word is a
-     * person's.
+     * A convenience, not a rule — see the pivot table's migration for why the
+     * last word is a person's.
      *
      * @return Collection<int, Employee>
      */
@@ -130,6 +145,23 @@ class CommissionRunService
             ->where('commission_frequency', $frequency)
             ->orderBy('employee_id')
             ->get();
+    }
+
+    /**
+     * Who a new run covers when nobody has said otherwise.
+     *
+     * Everyone matching the run type's frequency, falling back to the whole
+     * active roster when nobody has been given a frequency yet. A brand-new
+     * install would otherwise open every run with nobody in it, which reads as
+     * broken rather than as a setting waiting to be filled in.
+     *
+     * @return Collection<int, Employee>
+     */
+    public function defaultAgentsFor(string $type): Collection
+    {
+        $matching = $this->suggestedAgentsFor($type);
+
+        return $matching->isNotEmpty() ? $matching : $this->selectableAgents();
     }
 
     /**

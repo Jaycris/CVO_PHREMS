@@ -25,6 +25,8 @@
     <body class="h-full bg-ink-50 font-sans antialiased dark:bg-ink-950">
         {{ $slot }}
 
+        <x-global-action-loader />
+
         @livewireScripts
     </body>
 </html>
