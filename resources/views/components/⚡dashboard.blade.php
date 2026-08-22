@@ -43,6 +43,12 @@ new #[Layout('layouts.app')] class extends Component
                     'balance' => $employee->leaveBalance($t),
                 ])
                 : collect(),
+            'birthdaysToday' => Employee::whereNotNull('birthdate')
+                ->whereMonth('birthdate', $today->month)
+                ->whereDay('birthdate', $today->day)
+                ->orderBy('first_name')
+                ->orderBy('last_name')
+                ->get(),
             'recentRequests' => $isAdminHr
                 ? LeaveRequest::with(['employee', 'leaveType'])->latest()->limit(5)->get()
                 : ($employee ? LeaveRequest::with('leaveType')->where('employee_id', $employee->id)->latest()->limit(5)->get() : collect()),
@@ -52,24 +58,47 @@ new #[Layout('layouts.app')] class extends Component
 ?>
 
 <div class="space-y-5">
-    <section class="flex flex-col gap-4 border-b border-ink-200 pb-5 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+    <section class="border-b border-ink-200 pb-5 dark:border-white/10">
         <div>
-            <h1 class="text-2xl font-bold text-ink-950 sm:text-3xl dark:text-white">Your HR Dashboard</h1>
-            <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Welcome back, {{ explode(' ', auth()->user()->name)[0] }}. Here is your overview for {{ $today->format('F j, Y') }}.</p>
+            <h1 class="text-3xl font-bold text-ink-950 dark:text-white">Your HR Dashboard</h1>
+            <p class="mt-1 text-base font-medium text-ink-500 dark:text-ink-400">Welcome back, {{ explode(' ', auth()->user()->name)[0] }}. Here is your overview for {{ $today->format('F j, Y') }}.</p>
         </div>
-        <div class="flex items-center gap-3 rounded-lg border border-ink-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-ink-900">
-            @if ($employee)
-                <x-avatar :employee="$employee" size="md" class="!h-11 !w-11" />
-            @else
-                <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800 dark:bg-brand-900/40 dark:text-brand-200">{{ strtoupper(substr(auth()->user()->name, 0, 2)) }}</span>
-            @endif
-            <div class="min-w-0">
-                <p class="truncate text-sm font-bold text-ink-950 dark:text-white">{{ $employee?->fullName() ?: auth()->user()->name }}</p>
-                <p class="truncate text-xs font-medium text-ink-500 dark:text-ink-400">{{ $employee?->employee_id ?? (auth()->user()->getRoleNames()->join(', ') ?: 'HRIS user') }}</p>
+
+        <div class="relative mt-5 overflow-hidden rounded-lg border border-white/10 bg-ink-950 shadow-sm">
+            <img src="{{ asset('images/logo-mark.png') }}" alt="" class="pointer-events-none absolute -bottom-16 -left-14 h-56 w-56 object-contain opacity-[0.06]">
+            <div class="relative flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">
+                <a href="{{ route('my-profile') }}" wire:navigate class="group flex min-w-0 items-center gap-4">
+                    @if ($employee)
+                        <x-avatar :employee="$employee" size="lg" class="!h-16 !w-16 ring-4 ring-white/10 transition group-hover:ring-brand-300/40" />
+                    @else
+                        <span class="inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xl font-bold text-brand-800 ring-4 ring-white/10">{{ strtoupper(substr(auth()->user()->name, 0, 2)) }}</span>
+                    @endif
+                    <span class="min-w-0">
+                        <span class="block text-xs font-semibold uppercase tracking-[0.18em] text-brand-200">My Profile</span>
+                        <span class="mt-1 block truncate text-2xl font-bold text-white">{{ $employee?->fullName() ?: auth()->user()->name }}</span>
+                        <span class="mt-1 block truncate text-sm font-medium text-ink-300">
+                            {{ $employee?->employee_id ?? (auth()->user()->getRoleNames()->join(', ') ?: 'HRIS user') }}
+                            @if ($employee?->employment_status) · {{ $employee->employment_status }} @endif
+                        </span>
+                    </span>
+                </a>
+
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    @foreach ([
+                        ['route' => 'leave-requests.create', 'label' => 'Request Leave', 'icon' => 'calendar'],
+                        ['route' => 'attendance.punch', 'label' => 'Attendance', 'icon' => 'clock'],
+                        ['route' => 'overtime.create', 'label' => 'Overtime', 'icon' => 'trending-up'],
+                        ['route' => 'requests.index', 'label' => 'New Request', 'icon' => 'clipboard'],
+                    ] as $action)
+                        <a href="{{ route($action['route']) }}" wire:navigate class="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white transition hover:border-brand-300/40 hover:bg-white/15">
+                            <x-icon :name="$action['icon']" class="h-4 w-4 shrink-0" />
+                            <span class="whitespace-nowrap">{{ $action['label'] }}</span>
+                        </a>
+                    @endforeach
+                </div>
             </div>
         </div>
     </section>
-
     @if ($isAdminHr)
         <section class="grid grid-cols-2 overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm lg:grid-cols-4 dark:border-white/10 dark:bg-ink-900">
             @foreach ([
@@ -84,8 +113,8 @@ new #[Layout('layouts.app')] class extends Component
                     </span>
                     <div class="min-w-0">
                         <p class="text-xl font-bold leading-none text-ink-950 dark:text-white">{{ $stat['value'] }}</p>
-                        <p class="mt-1 truncate text-xs font-semibold text-ink-700 dark:text-ink-200">{{ $stat['label'] }}</p>
-                        <p class="truncate text-[11px] font-medium text-ink-400">{{ $stat['caption'] }}</p>
+                        <p class="mt-1 truncate text-sm font-semibold text-ink-700 dark:text-ink-200">{{ $stat['label'] }}</p>
+                        <p class="truncate text-xs font-medium text-ink-400">{{ $stat['caption'] }}</p>
                     </div>
                 </div>
             @endforeach
@@ -93,60 +122,14 @@ new #[Layout('layouts.app')] class extends Component
     @endif
 
     <div class="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <aside class="space-y-5 xl:col-span-3">
-            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
-                <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10">
-                    <h2 class="text-sm font-bold text-ink-950 dark:text-white">My Profile</h2>
-                </div>
-                @if ($employee)
-                    <div class="p-4">
-                        <div class="flex items-center gap-3">
-                            <x-avatar :employee="$employee" size="lg" class="!h-14 !w-14" />
-                            <div class="min-w-0">
-                                <p class="truncate font-bold text-ink-950 dark:text-white">{{ $employee->fullName() ?: auth()->user()->name }}</p>
-                                <p class="truncate text-xs font-medium text-ink-500 dark:text-ink-400">{{ $employee->company_email ?: auth()->user()->email }}</p>
-                            </div>
-                        </div>
-                        <dl class="mt-4 space-y-2.5 text-xs">
-                            <div class="flex items-start justify-between gap-3"><dt class="font-medium text-ink-400">Employee ID</dt><dd class="font-semibold text-ink-700 dark:text-ink-200">{{ $employee->employee_id }}</dd></div>
-                            <div class="flex items-start justify-between gap-3"><dt class="font-medium text-ink-400">Status</dt><dd class="font-semibold text-ink-700 dark:text-ink-200">{{ $employee->employment_status ?: 'Not set' }}</dd></div>
-                            <div class="flex items-start justify-between gap-3"><dt class="font-medium text-ink-400">Hire date</dt><dd class="font-semibold text-ink-700 dark:text-ink-200">{{ $employee->hire_date?->format('M d, Y') ?? 'Not set' }}</dd></div>
-                        </dl>
-                        <a href="{{ route('my-profile') }}" wire:navigate class="mt-4 inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">View full profile <x-icon name="arrow-right" class="h-3.5 w-3.5" /></a>
-                    </div>
-                @else
-                    <p class="p-4 text-sm font-medium text-ink-500">Your account is not linked to an employee profile yet.</p>
-                @endif
-            </section>
-
-            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
-                <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10">
-                    <h2 class="text-sm font-bold text-ink-950 dark:text-white">Quick Actions</h2>
-                </div>
-                <div class="grid grid-cols-2 gap-2 p-3">
-                    @foreach ([
-                        ['route' => 'leave-requests.create', 'label' => 'Request Leave', 'icon' => 'calendar'],
-                        ['route' => 'attendance.punch', 'label' => 'Attendance', 'icon' => 'clock'],
-                        ['route' => 'overtime.create', 'label' => 'Overtime', 'icon' => 'trending-up'],
-                        ['route' => 'requests.index', 'label' => 'New Request', 'icon' => 'clipboard'],
-                    ] as $action)
-                        <a href="{{ route($action['route']) }}" wire:navigate class="flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border border-ink-200 bg-ink-50 px-2 py-3 text-center text-xs font-bold text-ink-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-white/5 dark:text-ink-200 dark:hover:bg-brand-400/10 dark:hover:text-brand-200">
-                            <x-icon :name="$action['icon']" class="h-5 w-5" />
-                            <span>{{ $action['label'] }}</span>
-                        </a>
-                    @endforeach
-                </div>
-            </section>
-        </aside>
-
-        <main class="space-y-5 xl:col-span-6">
+        <main class="space-y-5 xl:col-span-8">
             <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
                 <div class="flex items-center justify-between border-b border-ink-200 px-4 py-3 dark:border-white/10">
                     <div>
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Balances</p>
-                        <h2 class="mt-0.5 text-sm font-bold text-ink-950 dark:text-white">My Time Off</h2>
+                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Balances</p>
+                        <h2 class="mt-0.5 text-base font-bold text-ink-950 dark:text-white">My Time Off</h2>
                     </div>
-                    <a href="{{ route('leave-requests.create') }}" wire:navigate class="text-xs font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">Request leave</a>
+                    <a href="{{ route('leave-requests.create') }}" wire:navigate class="text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">Request leave</a>
                 </div>
                 <div class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
                     @forelse ($leaveBalances->take(6) as $index => $balance)
@@ -161,11 +144,11 @@ new #[Layout('layouts.app')] class extends Component
                         @endphp
                         <div class="rounded-lg border border-ink-200 p-3 dark:border-white/10 {{ $tone['bg'] }}">
                             <div class="flex items-center justify-between gap-2">
-                                <p class="truncate text-xs font-bold text-ink-700 dark:text-ink-200">{{ $balance['name'] }}</p>
-                                <span class="text-[10px] font-bold uppercase {{ $tone['text'] }}">{{ $balance['code'] }}</span>
+                                <p class="truncate text-sm font-bold text-ink-700 dark:text-ink-200">{{ $balance['name'] }}</p>
+                                <span class="text-xs font-bold uppercase {{ $tone['text'] }}">{{ $balance['code'] }}</span>
                             </div>
                             <p class="mt-3 text-2xl font-bold leading-none text-ink-950 dark:text-white">{{ rtrim(rtrim(number_format($balance['balance'], 2), '0'), '.') }}</p>
-                            <p class="mt-1 text-[11px] font-medium text-ink-500 dark:text-ink-400">days available</p>
+                            <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">days available</p>
                             <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-white/80 dark:bg-black/20"><div class="h-full rounded-full {{ $tone['bar'] }}" style="width: {{ $percentage }}%"></div></div>
                         </div>
                     @empty
@@ -177,17 +160,17 @@ new #[Layout('layouts.app')] class extends Component
             <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
                 <div class="flex items-center justify-between border-b border-ink-200 px-4 py-3 dark:border-white/10">
                     <div>
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Activity</p>
-                        <h2 class="mt-0.5 text-sm font-bold text-ink-950 dark:text-white">{{ $isAdminHr ? 'Recent Leave Requests' : 'My Recent Leave Requests' }}</h2>
+                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Activity</p>
+                        <h2 class="mt-0.5 text-base font-bold text-ink-950 dark:text-white">{{ $isAdminHr ? 'Recent Leave Requests' : 'My Recent Leave Requests' }}</h2>
                     </div>
-                    <a href="{{ route('leave-requests.index') }}" wire:navigate class="text-xs font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">View all</a>
+                    <a href="{{ route('leave-requests.index') }}" wire:navigate class="text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">View all</a>
                 </div>
                 <div class="divide-y divide-ink-100 dark:divide-white/10">
                     @forelse ($recentRequests as $request)
                         <a href="{{ route('leave-requests.show', $request) }}" wire:navigate class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 transition hover:bg-ink-50 dark:hover:bg-white/5">
                             <div class="min-w-0">
-                                <p class="truncate text-sm font-bold text-ink-800 dark:text-white">{{ $isAdminHr ? ($request->employee->fullName() ?: $request->employee->employee_id) : $request->leaveType->name }}</p>
-                                <p class="mt-0.5 text-xs font-medium text-ink-500 dark:text-ink-400">{{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }}</p>
+                                <p class="truncate text-base font-bold text-ink-800 dark:text-white">{{ $isAdminHr ? ($request->employee->fullName() ?: $request->employee->employee_id) : $request->leaveType->name }}</p>
+                                <p class="mt-0.5 text-sm font-medium text-ink-500 dark:text-ink-400">{{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }}</p>
                             </div>
                             <x-badge :color="$request->statusColor()">{{ $request->statusLabel() }}</x-badge>
                         </a>
@@ -198,10 +181,10 @@ new #[Layout('layouts.app')] class extends Component
             </section>
         </main>
 
-        <aside class="space-y-5 xl:col-span-3">
+        <aside class="space-y-5 xl:col-span-4">
             <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
                 <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10">
-                    <h2 class="text-sm font-bold text-ink-950 dark:text-white">Employee Self-Service</h2>
+                    <h2 class="text-base font-bold text-ink-950 dark:text-white">Employee Self-Service</h2>
                 </div>
                 <div class="divide-y divide-ink-100 dark:divide-white/10">
                     @foreach ([
@@ -213,8 +196,8 @@ new #[Layout('layouts.app')] class extends Component
                         <a href="{{ route($item['route']) }}" wire:navigate class="flex items-center gap-3 px-4 py-3.5 transition hover:bg-ink-50 dark:hover:bg-white/5">
                             <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-50 text-brand-700 dark:bg-white/5 dark:text-brand-300"><x-icon :name="$item['icon']" class="h-4.5 w-4.5" /></span>
                             <span class="min-w-0 flex-1">
-                                <span class="block truncate text-sm font-bold text-ink-800 dark:text-white">{{ $item['title'] }}</span>
-                                <span class="block truncate text-xs font-medium text-ink-500 dark:text-ink-400">{{ $item['caption'] }}</span>
+                                <span class="block truncate text-base font-bold text-ink-800 dark:text-white">{{ $item['title'] }}</span>
+                                <span class="block truncate text-sm font-medium text-ink-500 dark:text-ink-400">{{ $item['caption'] }}</span>
                             </span>
                             <x-icon name="arrow-right" class="h-4 w-4 shrink-0 text-ink-400" />
                         </a>
@@ -222,16 +205,28 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </section>
 
-            @if ($employee)
-                <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
-                    <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10"><h2 class="text-sm font-bold text-ink-950 dark:text-white">Employment</h2></div>
-                    <dl class="space-y-3 p-4 text-xs">
-                        <div><dt class="font-medium text-ink-400">Current status</dt><dd class="mt-1 font-bold text-ink-800 dark:text-white">{{ $employee->employment_status ?: 'Not set' }}</dd></div>
-                        <div><dt class="font-medium text-ink-400">Employment type</dt><dd class="mt-1 font-bold text-ink-800 dark:text-white">{{ $employee->employment_type ?: 'Not set' }}</dd></div>
-                        <div><dt class="font-medium text-ink-400">Company email</dt><dd class="mt-1 break-all font-bold text-ink-800 dark:text-white">{{ $employee->company_email ?: auth()->user()->email }}</dd></div>
-                    </dl>
-                </section>
-            @endif
+            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Celebrations</p>
+                    <h2 class="mt-0.5 text-base font-bold text-ink-950 dark:text-white">Today's Birthdays</h2>
+                </div>
+                <div class="divide-y divide-ink-100 dark:divide-white/10">
+                    @forelse ($birthdaysToday as $birthdayEmployee)
+                        <div class="flex items-center gap-3 px-4 py-4">
+                            <x-avatar :employee="$birthdayEmployee" size="md" class="!h-11 !w-11" />
+                            <div class="min-w-0">
+                                <p class="truncate text-base font-bold text-ink-800 dark:text-white">{{ $birthdayEmployee->fullName() ?: $birthdayEmployee->employee_id }}</p>
+                                <p class="mt-0.5 text-sm font-medium text-brand-700 dark:text-brand-300">Celebrating today</p>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="px-4 py-7 text-center">
+                            <x-icon name="calendar" class="mx-auto h-6 w-6 text-ink-300 dark:text-ink-500" />
+                            <p class="mt-2 text-sm font-medium text-ink-500 dark:text-ink-400">No employee birthdays today.</p>
+                        </div>
+                    @endforelse
+                </div>
+            </section>
         </aside>
     </div>
 </div>

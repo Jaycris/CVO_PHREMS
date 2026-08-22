@@ -234,6 +234,7 @@ that clears that entry and re-asks.
 | Statement row value object | `app/Services/Crm/CommissionTransaction.php` |
 | Failure messages | `app/Services/Crm/CrmUnavailable.php` |
 | Agent's own page | `resources/views/components/⚡my-commission.blade.php` |
-| HR's view of any agent | `resources/views/components/commissions/⚡index.blade.php` |
-| The slip itself (shared) | `resources/views/components/commission-slip.blade.php` |
+| Commission runs | `resources/views/components/commissions/⚡runs.blade.php` |
+| One run, with its slips | `resources/views/components/commissions/⚡run-show.blade.php` |
+| The slip itself (shared) | `resources/views/components/commission-slip-detail.blade.php` |
 | PDF | `app/Http/Controllers/CommissionSlipPdfController.php` |

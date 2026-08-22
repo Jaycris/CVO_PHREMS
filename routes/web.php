@@ -105,12 +105,6 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::livewire('/cash-advances', 'cash-advances.index')->name('cash-advances.index');
     });
 
-    Route::middleware('can:commissions.view_all')->group(function () {
-        // Live look-up straight at the CRM, for a query mid-month before any
-        // run has been computed.
-        Route::livewire('/commissions/lookup', 'commissions.index')->name('commissions.index');
-    });
-
     Route::middleware('can:commissions.runs.manage')->group(function () {
         Route::livewire('/commissions', 'commissions.runs')->name('commissions.runs');
         Route::livewire('/commissions/runs/{run}', 'commissions.run-show')->name('commissions.run-show');

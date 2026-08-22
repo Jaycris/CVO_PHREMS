@@ -67,7 +67,7 @@ return [
         ],
 
         'Commissions' => [
-            'commissions.view_all' => 'Commission Slips — view any agent\'s slip and statement',
+            'commissions.view_all' => 'Commission Slips — open and print any agent\'s slip',
             'commissions.runs.manage' => 'Commission Runs — open a month and compute it from the CRM',
             'commissions.runs.finalize' => 'Commission Runs — lock the figures and send the slips to agents',
         ],

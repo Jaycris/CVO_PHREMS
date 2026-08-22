@@ -109,9 +109,6 @@
                         @can('commissions.runs.manage')
                             <x-nav-link :href="route('commissions.runs')" :active="request()->routeIs('commissions.runs') || request()->routeIs('commissions.run-show')" icon="chart">Commission Runs</x-nav-link>
                         @endcan
-                        @can('commissions.view_all')
-                            <x-nav-link :href="route('commissions.index')" :active="request()->routeIs('commissions.index')" icon="search">CRM Lookup</x-nav-link>
-                        @endcan
                         @can('bank_details.approve')
                             <x-nav-link :href="route('bank-details.index')" :active="request()->routeIs('bank-details.*')" icon="money">Bank Details</x-nav-link>
                         @endcan
@@ -161,7 +158,6 @@
                         request()->routeIs('reimbursements.*') => 'Reimbursement Record',
                         request()->routeIs('bank-details.*') => 'Bank Details',
                         request()->routeIs('my-commission') => 'My Commission',
-                        request()->routeIs('commissions.index') => 'CRM Lookup',
                         request()->routeIs('commissions.run-show') => 'Commission Run',
                         request()->routeIs('commissions.*') => 'Commission Runs',
                         request()->routeIs('org.departments') => 'Departments',
