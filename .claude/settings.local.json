@@ -67,7 +67,9 @@
       "Bash(cd \"D:/Project/CreatiVision/Claude\" && echo \"=== payroll_runs ===\" && sed -n '1,60p' database/migrations/*create_payroll_runs_table.php && echo \"\" && echo \"=== PayslipNotifier ===\" && cat app/Services/Payroll/PayslipNotifier.php)",
       "PowerShell(Start-Process -FilePath \"D:\\\\laragon\\\\bin\\\\mysql\\\\mysql-8.4.3-winx64\\\\bin\\\\mysqld.exe\" -ArgumentList \"--defaults-file=D:\\\\laragon\\\\bin\\\\mysql\\\\mysql-8.4.3-winx64\\\\my.ini\" -WindowStyle Hidden; Start-Sleep -Seconds 10; \\(Test-NetConnection -ComputerName 127.0.0.1 -Port 3306 -WarningAction SilentlyContinue\\).TcpTestSucceeded)",
       "Bash(D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe -S 127.0.0.1:8011 dev/fake-crm.php)",
-      "Bash(curl -s -H \"Authorization: Bearer local-dev-crm-token\" \"http://127.0.0.1:8011/api/hris/commission-slip?hris_employee_id=EMP-9372&month=2026-08\")"
+      "Bash(curl -s -H \"Authorization: Bearer local-dev-crm-token\" \"http://127.0.0.1:8011/api/hris/commission-slip?hris_employee_id=EMP-9372&month=2026-08\")",
+      "Bash(netstat -ano)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8011 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 2; \"stub stopped\")"
     ]
   }
 }

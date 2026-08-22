@@ -1,11 +1,16 @@
 {
-  "version": "0.0.1",
-  "configurations": [
-    {
-      "name": "hris",
-      "runtimeExecutable": "D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe",
-      "runtimeArgs": ["artisan", "serve", "--port=8010"],
-      "port": 8010
-    }
-  ]
+    "version": "0.0.1",
+    "configurations": [
+        {
+            "name": "hris",
+            "runtimeExecutable": "D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe",
+            "runtimeArgs": [
+                "artisan",
+                "serve",
+                "--host=127.0.0.1",
+                "--port=8001"
+            ],
+            "port": 8001
+        }
+    ]
 }
