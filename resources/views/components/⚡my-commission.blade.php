@@ -21,8 +21,19 @@ new #[Layout('layouts.app')] class extends Component
 {
     use WithTablePagination;
 
+    /**
+     * Which slip is open. Locked, because it decides which figures are shown
+     * and the browser must not be able to name a different one.
+     */
     #[Locked]
     public ?int $openId = null;
+
+    /**
+     * Whether the panel is showing. Deliberately a separate, unlocked flag:
+     * the click opens the panel straight away in the browser, and only the
+     * server decides which slip goes in it.
+     */
+    public bool $showSlip = false;
 
     public function mount(?CommissionSlip $slip = null): void
     {
@@ -31,6 +42,7 @@ new #[Layout('layouts.app')] class extends Component
         if ($slip?->exists) {
             $this->authorizeOwn($slip);
             $this->openId = $slip->id;
+            $this->showSlip = true;
         }
     }
 
@@ -53,11 +65,13 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->authorizeOwn(CommissionSlip::findOrFail($id));
         $this->openId = $id;
+        $this->showSlip = true;
     }
 
     public function closeSlip(): void
     {
         $this->openId = null;
+        $this->showSlip = false;
     }
 
     public function with(): array
@@ -116,7 +130,7 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="px-4 py-3 text-right font-medium tabular-nums text-[#778599]">{{ $money($slip->card_hold_amount, '₱') }}</td>
                             <td class="px-4 py-3 text-right font-bold tabular-nums text-[#0f172a] dark:text-white">{{ $money($slip->net_commission, '₱') }}</td>
                             <td class="px-4 py-3 text-right">
-                                <button wire:click="open({{ $slip->id }})" @click="$wire.openId = {{ $slip->id }}"
+                                <button wire:click="open({{ $slip->id }})" @click="$wire.showSlip = true"
                                         class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View</button>
                             </td>
                         </tr>
@@ -136,8 +150,12 @@ new #[Layout('layouts.app')] class extends Component
         @endif
     </x-card>
 
-    <x-modal wire="openId" onClose="closeSlip" maxWidth="4xl">
-        @if ($open)
+    <x-modal wire="showSlip" onClose="closeSlip" maxWidth="4xl">
+        {{-- The panel is on screen before the slip arrives, so it says so
+             rather than showing an empty box for a moment. --}}
+        @unless ($open)
+            <p class="py-8 text-center text-sm font-medium text-[#778599]">Loading…</p>
+        @else
             <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">Commission Slip</p>
@@ -150,6 +168,6 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             <x-commission-slip-detail :slip="$open" />
-        @endif
+        @endunless
     </x-modal>
 </div>

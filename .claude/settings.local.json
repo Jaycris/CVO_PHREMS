@@ -77,7 +77,8 @@
       "Bash(grep -n 'eligibleAgents\\\\|whereNotIn\\('\\\\''employee_id'\\\\'', $employees' -A 6 app/Services/Commission/CommissionRunService.php)",
       "Bash(D:/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe -r *)",
       "Bash(sed -i 's|$run->agents\\(\\)->pluck\\('\\\\''employee_id'\\\\''\\)|$run->agents\\(\\)->pluck\\('\\\\''employees.employee_id'\\\\''\\)|' /c/Users/JAY-AR~1/AppData/Local/Temp/claude/D--Project-CreatiVision-Claude/6f2243b5-e30c-4611-a30c-9e201ed13445/scratchpad/period.php)",
-      "Bash(grep -n \"^use Illuminate\\\\\\\\\\\\\\\\Support\\\\\\\\\\\\\\\\Facades\\\\\\\\\\\\\\\\DB;\" app/Services/Commission/CommissionRunService.php)"
+      "Bash(grep -n \"^use Illuminate\\\\\\\\\\\\\\\\Support\\\\\\\\\\\\\\\\Facades\\\\\\\\\\\\\\\\DB;\" app/Services/Commission/CommissionRunService.php)",
+      "Bash(grep -rn '\\\\$wire\\\\.\\\\\\(openId\\\\|viewingSlipId\\\\|decidingId\\\\\\)' resources/views/)"
     ]
   }
 }
