@@ -83,7 +83,7 @@ class BankDetailRequest extends Model
     public function statusLabel(): string
     {
         return match ($this->status) {
-            'pending' => 'Waiting for HR',
+            'pending' => 'Waiting for approval',
             'approved' => 'Approved',
             'declined' => 'Declined',
             'cancelled' => 'Withdrawn',

@@ -74,7 +74,8 @@ return [
         ],
 
         'Bank Details' => [
-            'bank_details.approve' => 'Bank Details — approve changes to where an employee\'s salary is paid',
+            'bank_details.approve' => 'Bank Details — decide changes to where an employee\'s salary is paid (give this to the CEO or COO)',
+            'bank_details.notify' => 'Bank Details — be told when someone\'s payout account changes, without deciding it (give this to HR and Accounting)',
         ],
 
         'Reimbursements' => [

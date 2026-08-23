@@ -39,7 +39,7 @@ class BankDetailStatusUpdated extends Notification implements ShouldQueue
             ->line($this->message);
 
         if ($this->request->decision_note) {
-            $mail->line('Note from HR: ' . $this->request->decision_note);
+            $mail->line('Note from the approver: ' . $this->request->decision_note);
         }
 
         return $mail
