@@ -11,7 +11,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Activate your PHEMS account</title>
+    <title>Activate your PHREMS account</title>
 </head>
 <body style="margin:0; padding:0; background:#f1f5f9; font-family:Arial, Helvetica, sans-serif; color:#0f172a;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9; padding:32px 16px;">
@@ -31,9 +31,9 @@
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;">
                                 <tr>
                                     <td style="padding:34px 38px; background:linear-gradient(135deg,#020617 0%,#0f172a 52%,#052e23 100%);">
-                                        <p style="margin:0 0 12px; color:#a7f3d0; font-size:12px; font-weight:700; letter-spacing:3px; text-transform:uppercase;">PHEMS</p>
+                                        <p style="margin:0 0 12px; color:#a7f3d0; font-size:12px; font-weight:700; letter-spacing:3px; text-transform:uppercase;">PHREMS</p>
                                         <h1 style="margin:0; color:#ffffff; font-size:28px; line-height:1.25; font-weight:800;">Activate your account</h1>
-                                        <p style="margin:12px 0 0; color:#cbd5e1; font-size:15px; line-height:1.7;">Your HRIS login is ready to set up.</p>
+                                        <p style="margin:12px 0 0; color:#cbd5e1; font-size:15px; line-height:1.7;">Your PHREMS login is ready to set up.</p>
                                     </td>
                                 </tr>
                             </table>
@@ -42,7 +42,7 @@
                     <tr>
                         <td style="padding:38px;">
                             <h2 style="margin:0 0 14px; color:#0f172a; font-size:22px; line-height:1.35; font-weight:800;">Hi {{ $displayName }},</h2>
-                            <p style="margin:0; color:#475569; font-size:16px; line-height:1.7;">HR has created your PHEMS account. Set your password to activate your access to your employee profile, requests, and HR records.</p>
+                            <p style="margin:0; color:#475569; font-size:16px; line-height:1.7;">HR has created your PHREMS account. Set your password to activate your access to your employee profile, requests, and HR records.</p>
 
                             <table role="presentation" cellspacing="0" cellpadding="0" style="margin:30px 0;">
                                 <tr>

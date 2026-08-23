@@ -14,7 +14,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Your PHEMS commission slip is ready</title>
+    <title>Your PHREMS commission slip is ready</title>
 </head>
 <body style="margin:0; padding:0; background:#f1f5f9; font-family:Arial, Helvetica, sans-serif; color:#0f172a;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9; padding:32px 16px;">
@@ -34,7 +34,7 @@
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;">
                                 <tr>
                                     <td style="padding:34px 38px; background:linear-gradient(135deg,#020617 0%,#0f172a 52%,#052e23 100%);">
-                                        <p style="margin:0 0 12px; color:#a7f3d0; font-size:12px; font-weight:700; letter-spacing:3px; text-transform:uppercase;">PHEMS</p>
+                                        <p style="margin:0 0 12px; color:#a7f3d0; font-size:12px; font-weight:700; letter-spacing:3px; text-transform:uppercase;">PHREMS</p>
                                         <h1 style="margin:0; color:#ffffff; font-size:28px; line-height:1.25; font-weight:800;">Your commission slip is ready</h1>
                                         <p style="margin:12px 0 0; color:#cbd5e1; font-size:15px; line-height:1.7;">Your monthly commission statement is available for review.</p>
                                     </td>
@@ -45,7 +45,7 @@
                     <tr>
                         <td style="padding:38px;">
                             <h2 style="margin:0 0 14px; color:#0f172a; font-size:22px; line-height:1.35; font-weight:800;">Hi {{ $displayName }},</h2>
-                            <p style="margin:0; color:#475569; font-size:16px; line-height:1.7;">Your commission slip for {{ $month }} has been prepared and is ready to view securely in your HRIS account.</p>
+                            <p style="margin:0; color:#475569; font-size:16px; line-height:1.7;">Your commission slip for {{ $month }} has been prepared and is ready to view securely in your PHREMS account.</p>
 
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0; border-radius:14px; background:#f8fafc; border:1px solid #e2e8f0;">
                                 <tr>

@@ -301,7 +301,7 @@ new #[Layout('layouts.app')] class extends Component
     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
             <h2 class="text-3xl font-bold tracking-tight text-ink-950 dark:text-white">Users</h2>
-            <p class="mt-1 text-base font-medium text-ink-600 dark:text-ink-300">Manage HRIS login accounts, access tiers, and account availability.</p>
+            <p class="mt-1 text-base font-medium text-ink-600 dark:text-ink-300">Manage PHREMS login accounts, access tiers, and account availability.</p>
         </div>
         <x-button wire:click="create" class="h-10 px-4">
             <x-icon name="plus" class="h-4 w-4" />
@@ -479,8 +479,8 @@ new #[Layout('layouts.app')] class extends Component
                             x-text="confirmation === 'remove' ? 'Remove user access?' : 'Disable user access?'"></h3>
                         <p class="mt-1 text-sm font-medium leading-6 text-ink-600 dark:text-ink-300"
                             x-text="confirmation === 'remove'
-                                ? 'The selected HRIS credentials will be permanently removed. The linked employee record will remain available.'
-                                : 'The selected user will be signed out and unable to access HRIS until their account is enabled again.'"></p>
+                                ? 'The selected PHREMS credentials will be permanently removed. The linked employee record will remain available.'
+                                : 'The selected user will be signed out and unable to access PHREMS until their account is enabled again.'"></p>
                     </div>
                 </div>
 

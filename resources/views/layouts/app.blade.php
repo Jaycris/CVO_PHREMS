@@ -184,7 +184,7 @@
                             <x-icon name="chevron-down" class="h-5 w-5 rotate-90" />
                         </button>
                         <div>
-                            <p class="hidden text-sm font-semibold uppercase tracking-[0.22em] text-brand-700 dark:text-brand-300 sm:block">PHEMS</p>
+                            <p class="hidden text-sm font-semibold uppercase tracking-[0.22em] text-brand-700 dark:text-brand-300 sm:block">PHREMS</p>
                             @unless (request()->routeIs('org.departments') || request()->routeIs('org.positions') || request()->routeIs('employees.*'))
                                 <h1 class="text-2xl font-bold leading-tight text-ink-950 dark:text-white">{{ $pageTitle }}</h1>
                             @endunless

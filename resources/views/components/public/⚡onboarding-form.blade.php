@@ -148,12 +148,12 @@ new #[Layout('layouts.guest')] class extends Component
                     <x-icon name="check" class="h-7 w-7" />
                 </div>
                 <h1 class="mt-5 text-2xl font-bold text-ink-950 dark:text-white">Profile submitted</h1>
-                <p class="mt-2 text-sm font-medium text-ink-600 dark:text-ink-300">Thank you. HR will review your details and follow up with your HRIS account access.</p>
+                <p class="mt-2 text-sm font-medium text-ink-600 dark:text-ink-300">Thank you. HR will review your details and follow up with your PHREMS account access.</p>
             </div>
         @else
             <div class="grid flex-1 gap-6 lg:grid-cols-[0.8fr_1.2fr]">
                 <aside class="rounded-3xl bg-gradient-to-br from-ink-950 via-ink-900 to-brand-950 p-8 text-white shadow-xl shadow-ink-300/50 dark:shadow-black/30">
-                    <p class="text-xs font-bold uppercase tracking-[0.28em] text-brand-200">PHEMS</p>
+                    <p class="text-xs font-bold uppercase tracking-[0.28em] text-brand-200">PHREMS</p>
                     <h1 class="mt-5 text-4xl font-black leading-tight">
                         {{ $step === 'review' ? 'Review your profile.' : 'Complete your employee profile.' }}
                     </h1>

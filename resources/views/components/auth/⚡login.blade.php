@@ -50,7 +50,7 @@ new #[Layout('layouts.guest')] class extends Component
                     {{-- The one place with room to say what the initials stand
                          for. Everywhere else it is just the mark. --}}
                     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-200">
-                        PHEMS <span class="font-normal normal-case tracking-normal text-brand-200/70">· Philippine Employment System</span>
+                        PHREMS <span class="font-normal normal-case tracking-normal text-brand-200/70">· Payroll, HR, and Employee Management System</span>
                     </p>
                     <h1 class="mt-4 text-3xl font-bold leading-tight text-white">Professional HR operations for your BPO team.</h1>
                     <p class="mt-4 text-sm leading-6 text-ink-300">
@@ -70,7 +70,7 @@ new #[Layout('layouts.guest')] class extends Component
                     </div>
 
                     <h2 class="mb-1 text-center text-2xl font-bold text-ink-950 dark:text-white md:text-left">Welcome back</h2>
-                    <p class="mb-8 text-center text-sm font-medium text-ink-500 dark:text-ink-400 md:text-left">Sign in to continue to the HRIS workspace.</p>
+                    <p class="mb-8 text-center text-sm font-medium text-ink-500 dark:text-ink-400 md:text-left">Sign in to continue to your PHREMS workspace.</p>
 
                     @if (session('status'))
                         <div class="mb-6 flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">

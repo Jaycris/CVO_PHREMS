@@ -77,7 +77,7 @@ new #[Layout('layouts.app')] class extends Component
                         <span class="block text-xs font-semibold uppercase tracking-[0.18em] text-brand-200">My Profile</span>
                         <span class="mt-1 block truncate text-2xl font-bold text-white">{{ $employee?->fullName() ?: auth()->user()->name }}</span>
                         <span class="mt-1 block truncate text-sm font-medium text-ink-300">
-                            {{ $employee?->employee_id ?? (auth()->user()->getRoleNames()->join(', ') ?: 'HRIS user') }}
+                            {{ $employee?->employee_id ?? (auth()->user()->getRoleNames()->join(', ') ?: 'PHREMS user') }}
                             @if ($employee?->employment_status) · {{ $employee->employment_status }} @endif
                         </span>
                     </span>

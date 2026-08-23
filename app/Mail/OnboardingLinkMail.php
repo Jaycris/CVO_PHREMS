@@ -21,7 +21,7 @@ class OnboardingLinkMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Complete your PHEMS profile',
+            subject: 'Complete your PHREMS profile',
         );
     }
 

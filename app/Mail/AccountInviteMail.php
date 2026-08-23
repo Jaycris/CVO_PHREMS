@@ -21,7 +21,7 @@ class AccountInviteMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Activate your PHEMS account',
+            subject: 'Activate your PHREMS account',
         );
     }
 
