@@ -53,8 +53,15 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetPage();
     }
 
-    public function updatedFilter(): void
+    /**
+     * A named method rather than $set, so the buttons can point wire:loading at
+     * it. Livewire cannot target a bare property assignment, which is why
+     * clicking one used to sit there looking dead for the whole round trip.
+     */
+    public function showOnly(string $filter): void
     {
+        $this->filter = in_array($filter, ['all', 'in', 'out'], true) ? $filter : 'all';
+
         $this->resetPage();
     }
 
@@ -191,7 +198,7 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-            <x-select wire:model.live="month" class="w-40">
+            <x-select wire:model.live="month" wire:loading.attr="disabled" wire:target="month" class="w-40">
                 @foreach ($months as $m)
                     <option value="{{ $m }}">{{ \Illuminate\Support\Carbon::createFromFormat('Y-m', $m)->format('F Y') }}</option>
                 @endforeach
@@ -265,12 +272,28 @@ new #[Layout('layouts.app')] class extends Component
 
     <x-card :padding="false">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-            <div class="flex flex-wrap gap-2">
+            {{-- x-cloak on the group so the pressed state never flashes wrong
+                 before Alpine takes over on first paint. --}}
+            <div class="flex flex-wrap gap-2" x-data="{ pending: null }">
                 @foreach (['all' => 'Everything', 'in' => 'Money in only', 'out' => 'Money out only'] as $key => $label)
-                    <x-button wire:click="$set('filter', '{{ $key }}')"
-                              :variant="$filter === $key ? 'primary' : 'secondary'"
+                    {{-- Alpine paints the pressed state on mousedown, so the
+                         button answers immediately instead of waiting out the
+                         round trip. Livewire then confirms it on the way back. --}}
+                    <x-button wire:click="showOnly('{{ $key }}')"
+                              wire:loading.attr="disabled"
+                              wire:target="showOnly"
+                              @click="pending = '{{ $key }}'"
+                              x-bind:class="pending === '{{ $key }}' || (pending === null && {{ $filter === $key ? 'true' : 'false' }})
+                                  ? 'bg-brand-700 text-white shadow-sm shadow-brand-900/15 hover:bg-brand-800'
+                                  : ''"
+                              variant="secondary"
                               class="h-9 px-3 text-xs">{{ $label }}</x-button>
                 @endforeach
+
+                <span wire:loading wire:target="showOnly" class="flex items-center text-xs font-medium text-[#778599]">
+                    <span class="mr-1.5 h-3 w-3 animate-spin rounded-full border-2 border-brand-200 border-t-brand-700"></span>
+                    Filtering…
+                </span>
             </div>
 
             @if ($totals['count'] > 0)
@@ -281,7 +304,12 @@ new #[Layout('layouts.app')] class extends Component
             @endif
         </div>
 
-        <div class="overflow-x-auto">
+        {{-- Fades while the new rows are on their way, so the table visibly
+             belongs to the button that was just pressed rather than sitting
+             there showing the previous answer. --}}
+        <div class="overflow-x-auto transition-opacity duration-150"
+             wire:loading.class="opacity-40"
+             wire:target="showOnly, month, gotoPage, nextPage, previousPage">
             <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
                 <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
                     <tr>
