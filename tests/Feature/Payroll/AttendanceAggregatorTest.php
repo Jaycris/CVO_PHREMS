@@ -303,7 +303,7 @@ class AttendanceAggregatorTest extends PayrollTestCase
     }
 
     #[Test]
-    public function the_whole_period_costs_six_queries_however_many_employees(): void
+    public function the_whole_period_costs_a_fixed_number_of_queries_however_many_employees(): void
     {
         $period = $this->period();
 
@@ -319,8 +319,9 @@ class AttendanceAggregatorTest extends PayrollTestCase
         $queries = count(DB::getQueryLog());
         DB::disableQueryLog();
 
-        // Attendance, breaks, schedule assignments, leave, overtime. Asking
-        // each attendance row for its own schedule instead would be thousands.
+        // Attendance, breaks, schedule assignments, leave, overtime, holidays.
+        // Asking each attendance row for its own schedule instead would be
+        // thousands.
         $this->assertLessThanOrEqual(8, $queries, "the aggregator issued {$queries} queries");
     }
 }

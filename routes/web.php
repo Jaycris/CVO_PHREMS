@@ -93,6 +93,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::livewire('/dtr', 'attendance.dtr')->name('attendance.dtr');
     });
 
+    Route::middleware('can:holidays.manage')->group(function () {
+        Route::livewire('/holidays', 'holidays.index')->name('holidays.index');
+    });
+
     Route::middleware('can:requests.types.manage')->group(function () {
         Route::livewire('/request-types', 'request-types.index')->name('request-types.index');
     });

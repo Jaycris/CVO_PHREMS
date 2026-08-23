@@ -30,6 +30,13 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+
+            // The column defaults to true in the database, but a factory-made
+            // model is never read back, so the attribute would be null in
+            // memory. EnsureUserIsActive reads it and treats null as disabled,
+            // which quietly redirected every test that opened a page to the
+            // login screen.
+            'is_active' => true,
         ];
     }
 

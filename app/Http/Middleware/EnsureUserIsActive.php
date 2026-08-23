@@ -17,7 +17,7 @@ class EnsureUserIsActive
             $request->session()->regenerateToken();
 
             return redirect()->route('login')->withErrors([
-                'email' => 'Your HRIS access is currently disabled. Please contact Human Resources.',
+                'email' => 'Your PHREMS access is currently disabled. Please contact Human Resources.',
             ]);
         }
 

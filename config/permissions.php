@@ -44,6 +44,7 @@ return [
 
         'Time & Attendance' => [
             'schedules.manage' => 'Work Schedules — create and assign shifts',
+            'holidays.manage' => 'Holidays — keep the yearly list of holidays that payroll reads',
             'attendance.view_all' => 'DTR — view everyone\'s daily time records',
             'overtime.view_all' => 'Overtime — view all filings across the company',
         ],

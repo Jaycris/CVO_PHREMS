@@ -5,6 +5,7 @@ namespace App\Services\Payroll;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
 use App\Models\EmployeeScheduleAssignment;
+use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\OvertimeRequest;
 use Illuminate\Support\Carbon;
@@ -14,7 +15,7 @@ use Illuminate\Support\Collection;
  * Turns a cutoff's worth of attendance into the handful of counters a payslip
  * needs, for every employee at once.
  *
- * The whole thing is six queries regardless of headcount. Everything after that
+ * The whole thing is seven queries regardless of headcount. Everything after that
  * is a loop in memory over employees × dates. The naive version — asking each
  * attendance row for its own schedule — is a query per row per method, which on
  * a hundred people across a cutoff is thousands of round trips on shared
@@ -41,6 +42,9 @@ class AttendanceAggregator
         $leave = $this->loadLeaveDays($employeeIds, $start, $end);
         $overtime = $this->loadOvertimeHours($employeeIds, $start, $end);
 
+        // The same for everyone, so it is loaded once rather than per employee.
+        $holidays = Holiday::payProtectedBetween($start, $end);
+
         $results = [];
 
         foreach ($employees as $employee) {
@@ -51,6 +55,7 @@ class AttendanceAggregator
                 $assignments[$employee->id] ?? collect(),
                 $leave[$employee->id] ?? [],
                 (float) ($overtime[$employee->id] ?? 0),
+                $holidays,
                 $start,
                 $end,
             );
@@ -64,6 +69,7 @@ class AttendanceAggregator
      * @param  array<string, AttendanceDay>  $attendance
      * @param  Collection<int, EmployeeScheduleAssignment>  $assignments
      * @param  array<string, string>  $leave  date => paid|lwop
+     * @param  array<string, Holiday>  $holidays  date => holiday
      * @return array<string, mixed>
      */
     protected function aggregateOne(
@@ -73,6 +79,7 @@ class AttendanceAggregator
         Collection $assignments,
         array $leave,
         float $approvedOvertimeHours,
+        array $holidays,
         Carbon $start,
         Carbon $end,
     ): array {
@@ -82,6 +89,8 @@ class AttendanceAggregator
             'days_on_paid_leave' => 0,
             'days_lwop' => 0,
             'days_rest' => 0,
+            'days_holiday' => 0,
+            'days_holiday_worked' => 0,
             'days_expected' => 0,
             'late_minutes' => 0,
             'undertime_minutes' => 0,
@@ -148,7 +157,29 @@ class AttendanceAggregator
                 continue;
             }
 
+            // Leave is settled before this on purpose. A regular holiday and a
+            // paid leave day pay exactly the same, so the payslip is identical
+            // either way — the only difference is that a leave credit was spent
+            // on a day nobody had to work. Refunding that credit belongs to the
+            // leave module, not to a read-only aggregator.
+            $holiday = $holidays[$date] ?? null;
+
+            if ($holiday) {
+                $counters['days_holiday']++;
+
+                if ($row) {
+                    $counters['days_holiday_worked']++;
+                }
+            }
+
             if (! $row) {
+                // A holiday nobody was expected to work is not an absence. This
+                // is the whole point of the holiday list: without it, Christmas
+                // Day quietly took a day's pay off everyone who stayed home.
+                if ($holiday) {
+                    continue;
+                }
+
                 $counters['days_absent']++;
 
                 continue;

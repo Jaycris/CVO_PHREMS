@@ -369,6 +369,8 @@ class PayrollService
             'days_paid_leave' => $counters['days_on_paid_leave'] ?? 0,
             'days_lwop' => $counters['days_lwop'] ?? 0,
             'days_rest' => $counters['days_rest'] ?? 0,
+            'days_holiday' => $counters['days_holiday'] ?? 0,
+            'days_holiday_worked' => $counters['days_holiday_worked'] ?? 0,
             'night_diff_days' => $counters['night_diff_days'] ?? 0,
             'late_minutes' => $counters['late_minutes'] ?? 0,
             'undertime_minutes' => $counters['undertime_minutes'] ?? 0,
