@@ -60,7 +60,7 @@ class PunchLocationPolicy
             return false;
         }
 
-        return OfficeNetwork::active()->exists();
+        return OfficeNetwork::anyConfigured();
     }
 
     /** Whether this employee may clock in or out from this address. */

@@ -43,14 +43,56 @@ class OfficeNetwork extends Model
     }
 
     /**
-     * Whether an address is inside any office network on file.
+     * Whether an address is inside any office network.
+     *
+     * Two sources, and the config one exists for a reason worth stating: a
+     * database row can be edited, deactivated or deleted by anyone with the
+     * page open, and getting it wrong stops a shift starting. An address set
+     * in .env cannot be changed from inside the app at all, so it is the way
+     * back in when the list has been broken.
      *
      * An empty list means nobody is inside the office, which is why the caller
-     * has to decide what that means rather than this deciding for it.
+     * decides what that means rather than this deciding for it.
      */
     public static function contains(?string $ip): bool
     {
+        if (blank($ip)) {
+            return false;
+        }
+
+        foreach (static::fromConfig() as $range) {
+            if (IpUtils::checkIp($ip, $range)) {
+                return true;
+            }
+        }
+
         return static::active()->get()->contains(fn (self $network) => $network->matches($ip));
+    }
+
+    /**
+     * Addresses set in .env rather than on the page.
+     *
+     * Comma separated, single addresses or ranges:
+     *   OFFICE_IP_ADDRESSES="203.0.113.5,203.0.113.0/24"
+     *
+     * Anything malformed is dropped rather than thrown, because a typo here
+     * must not take the attendance page down for everybody.
+     *
+     * @return list<string>
+     */
+    public static function fromConfig(): array
+    {
+        return collect(explode(',', (string) config('attendance.office_ips')))
+            ->map(fn (string $value) => trim($value))
+            ->filter(fn (string $value) => $value !== '' && static::isValidAddress($value))
+            ->values()
+            ->all();
+    }
+
+    /** Whether anything at all counts as the office, from either source. */
+    public static function anyConfigured(): bool
+    {
+        return static::fromConfig() !== [] || static::active()->exists();
     }
 
     /**

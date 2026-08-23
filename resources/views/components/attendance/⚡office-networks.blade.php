@@ -47,7 +47,7 @@ new #[Layout('layouts.app')] class extends Component
         // policy treats an empty list as "not set up yet". Saying so is kinder
         // than letting somebody believe the office is locked down when it is
         // not.
-        if (! $this->enforced && ! OfficeNetwork::active()->exists()) {
+        if (! $this->enforced && ! OfficeNetwork::anyConfigured()) {
             $this->errorMessage = 'Add at least one office address first, or this would apply to nobody.';
 
             return;
@@ -150,6 +150,7 @@ new #[Layout('layouts.app')] class extends Component
             'yourIp' => $ip,
             'yourIpAllowed' => OfficeNetwork::contains($ip),
             'networks' => OfficeNetwork::orderBy('label')->paginate($this->perPage()),
+            'configIps' => OfficeNetwork::fromConfig(),
             'onsiteCount' => Employee::whereRaw("REPLACE(REPLACE(LOWER(COALESCE(workplace_type, '')), '-', ''), ' ', '') = 'onsite'")->count(),
             'unsetCount' => Employee::whereNull('workplace_type')->orWhere('workplace_type', '')->count(),
         ];
@@ -208,6 +209,28 @@ new #[Layout('layouts.app')] class extends Component
             </div>
         </div>
     </x-card>
+
+    {{-- Addresses set on the server are invisible from in here unless the page
+         says so, and an admin who cannot see them cannot understand why
+         somebody is getting through. --}}
+    @if ($configIps !== [])
+        <x-card>
+            <h2 class="text-sm font-bold text-[#0f172a] dark:text-white">Also allowed, set on the server</h2>
+            <p class="mt-2 text-sm font-medium text-[#778599]">
+                These come from <span class="font-mono">OFFICE_IP_ADDRESSES</span> in the server's
+                <span class="font-mono">.env</span> file. They work exactly like the list below but cannot be
+                changed or deleted from this page &mdash; which is the point: if the list below is ever broken,
+                these still let the office clock in.
+            </p>
+            <div class="mt-3 flex flex-wrap gap-2">
+                @foreach ($configIps as $ip)
+                    <span class="rounded-lg bg-[#f8fafc] px-3 py-1.5 font-mono text-sm font-semibold text-[#0f172a] dark:bg-neutral-800/50 dark:text-white">
+                        {{ $ip }}
+                    </span>
+                @endforeach
+            </div>
+        </x-card>
+    @endif
 
     <x-card>
         <h2 class="text-sm font-bold text-[#0f172a] dark:text-white">Who this affects</h2>

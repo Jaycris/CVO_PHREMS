@@ -43,7 +43,7 @@
                     $showPeople = auth()->user()->canAny([
                         'employees.manage', 'users.manage', 'schedules.manage',
                         'attendance.view_all', 'leave.types.manage', 'cash_advances.manage',
-                        'requests.types.manage', 'holidays.manage', 'attendance.networks.manage',
+                        'requests.types.manage', 'holidays.manage',
                         'recruitment.manage',
                         'reimbursements.view_all',
                         'bank_details.approve',
@@ -94,9 +94,6 @@
                         @can('attendance.view_all')
                             <x-nav-link :href="route('attendance.dtr')" :active="request()->routeIs('attendance.dtr')" icon="clock">DTR</x-nav-link>
                         @endcan
-                        @can('attendance.networks.manage')
-                            <x-nav-link :href="route('attendance.networks')" :active="request()->routeIs('attendance.networks')" icon="building">Office Networks</x-nav-link>
-                        @endcan
                         @can('holidays.manage')
                             <x-nav-link :href="route('holidays.index')" :active="request()->routeIs('holidays.*')" icon="calendar">Holidays</x-nav-link>
                         @endcan
@@ -143,10 +140,20 @@
                         <x-nav-link :href="route('reports.attendance-summary')" :active="request()->routeIs('reports.attendance-summary')" icon="chart">Attendance Summary</x-nav-link>
                     @endcan
 
-                    @can('app.settings.manage')
+                    {{-- Section shown when the signer holds anything inside it,
+                         and each link gated on its own permission — the same
+                         rule as every other section. Gating the heading on one
+                         of them would hide the other from whoever only holds
+                         that. --}}
+                    @if (auth()->user()->canAny(['app.settings.manage', 'attendance.networks.manage']))
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">System</p>
-                        <x-nav-link :href="route('settings')" :active="request()->routeIs('settings')" icon="tag">Settings</x-nav-link>
-                    @endcan
+                        @can('app.settings.manage')
+                            <x-nav-link :href="route('settings')" :active="request()->routeIs('settings')" icon="tag">Settings</x-nav-link>
+                        @endcan
+                        @can('attendance.networks.manage')
+                            <x-nav-link :href="route('attendance.networks')" :active="request()->routeIs('attendance.networks')" icon="building">Office Networks</x-nav-link>
+                        @endcan
+                    @endif
                 </nav>
             </aside>
 

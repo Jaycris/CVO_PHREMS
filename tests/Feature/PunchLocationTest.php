@@ -231,4 +231,39 @@ class PunchLocationTest extends TestCase
 
         $this->actingAs($user)->get('/office-networks')->assertForbidden();
     }
+    #[Test]
+    public function an_address_set_on_the_server_works_without_any_database_row(): void
+    {
+        // The way back in when somebody deletes the wrong row. This cannot be
+        // changed from inside the app at all.
+        config(["attendance.office_ips" => "198.51.100.7,203.0.113.0/24"]);
+        $this->enforce();
+
+        $employee = Employee::factory()->create(["workplace_type" => "Onsite"]);
+
+        $this->assertTrue($this->policy->allows($employee, "198.51.100.7"));
+        $this->assertTrue($this->policy->allows($employee, "203.0.113.99"));
+        $this->assertFalse($this->policy->allows($employee, "112.198.1.50"));
+    }
+
+    #[Test]
+    public function a_server_address_still_works_when_every_row_is_switched_off(): void
+    {
+        config(["attendance.office_ips" => "198.51.100.7"]);
+        $this->enforce();
+        $this->office()->update(["is_active" => false]);
+
+        $employee = Employee::factory()->create(["workplace_type" => "Onsite"]);
+
+        $this->assertTrue($this->policy->allows($employee, "198.51.100.7"));
+    }
+
+    #[Test]
+    public function a_typo_on_the_server_is_dropped_rather_than_breaking_the_page(): void
+    {
+        // A malformed entry here must not take attendance down for everybody.
+        config(["attendance.office_ips" => "not-an-address, 198.51.100.7 ,,999.9.9.9"]);
+
+        $this->assertSame(["198.51.100.7"], \App\Models\OfficeNetwork::fromConfig());
+    }
 }
