@@ -10,7 +10,17 @@ use App\Models\User;
 use App\Notifications\LeaveRequestActionNeeded;
 use App\Notifications\LeaveRequestStatusUpdated;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
+/**
+ * Filing leave and deciding it.
+ *
+ * Leave credits are paid time, so every write that moves them runs inside a
+ * transaction with the row locked first. Without that, two people clicking
+ * Approve at the same moment both pass the status check and both write a
+ * deduction, taking the days twice — and nothing downstream can tell, because
+ * a balance is only ever the sum of its transactions.
+ */
 class LeaveService
 {
     public function submit(Employee $employee, LeaveType $leaveType, string $startDate, string $endDate, ?string $reason): LeaveRequest
@@ -25,22 +35,31 @@ class LeaveService
             "This employee is not entitled to {$leaveType->name}."
         );
 
-        $balance = $employee->leaveBalance($leaveType);
-        $isLwop = ! $employee->isRegular() || $balance < $daysRequested;
+        $leaveRequest = DB::transaction(function () use ($employee, $leaveType, $start, $end, $daysRequested, $reason) {
+            // Locking the employee serialises their own submissions, so two
+            // requests filed at once cannot both read the same balance and
+            // both come out as paid leave when only one is covered.
+            Employee::whereKey($employee->id)->lockForUpdate()->first();
+
+            $balance = $employee->leaveBalance($leaveType);
+            $isLwop = ! $employee->isRegular() || $balance < $daysRequested;
+
+            $manager = $employee->reportsTo;
+
+            return LeaveRequest::create([
+                'employee_id' => $employee->id,
+                'leave_type_id' => $leaveType->id,
+                'start_date' => $start,
+                'end_date' => $end,
+                'days_requested' => $daysRequested,
+                'reason' => $reason,
+                'is_lwop' => $isLwop,
+                'status' => $manager ? 'pending_manager' : 'pending_ceo',
+                'manager_id' => $manager?->id,
+            ]);
+        });
 
         $manager = $employee->reportsTo;
-
-        $leaveRequest = LeaveRequest::create([
-            'employee_id' => $employee->id,
-            'leave_type_id' => $leaveType->id,
-            'start_date' => $start,
-            'end_date' => $end,
-            'days_requested' => $daysRequested,
-            'reason' => $reason,
-            'is_lwop' => $isLwop,
-            'status' => $manager ? 'pending_manager' : 'pending_ceo',
-            'manager_id' => $manager?->id,
-        ]);
 
         $this->notifyHr($leaveRequest, "New leave request from " . $this->employeeName($employee) . " ({$daysRequested} day(s), {$leaveType->name}) submitted.");
 
@@ -55,13 +74,21 @@ class LeaveService
 
     public function managerDecide(LeaveRequest $leaveRequest, bool $approved, ?string $note = null): void
     {
-        abort_unless($leaveRequest->status === 'pending_manager', 403, 'This request is not awaiting manager approval.');
+        DB::transaction(function () use ($leaveRequest, $approved) {
+            // Re-read under a lock. Checking the status on a copy loaded before
+            // the click means two managers can both find it pending.
+            $locked = LeaveRequest::whereKey($leaveRequest->id)->lockForUpdate()->firstOrFail();
 
-        $leaveRequest->update([
-            'manager_decision' => $approved ? 'approved' : 'declined',
-            'manager_decided_at' => now(),
-            'status' => $approved ? 'pending_ceo' : 'declined',
-        ]);
+            abort_unless($locked->status === 'pending_manager', 403, 'This request is not awaiting manager approval.');
+
+            $locked->update([
+                'manager_decision' => $approved ? 'approved' : 'declined',
+                'manager_decided_at' => now(),
+                'status' => $approved ? 'pending_ceo' : 'declined',
+            ]);
+        });
+
+        $leaveRequest->refresh();
 
         if (! $approved) {
             $this->notifyFinalDecision($leaveRequest, 'declined by Manager', $note);
@@ -79,25 +106,36 @@ class LeaveService
 
     public function ceoDecide(LeaveRequest $leaveRequest, Employee $ceoActor, bool $approved, ?string $note = null): void
     {
-        abort_unless($leaveRequest->status === 'pending_ceo', 403, 'This request is not awaiting CEO/COO approval.');
+        DB::transaction(function () use ($leaveRequest, $ceoActor, $approved) {
+            // The status check and the credit deduction have to be one
+            // indivisible step. Apart, two approvals racing each other both see
+            // "pending_ceo" and both deduct the days — the employee is charged
+            // twice for one absence, and the only trace is a balance that is
+            // quietly wrong.
+            $locked = LeaveRequest::whereKey($leaveRequest->id)->lockForUpdate()->firstOrFail();
 
-        $leaveRequest->update([
-            'ceo_id' => $ceoActor->id,
-            'ceo_decision' => $approved ? 'approved' : 'declined',
-            'ceo_decided_at' => now(),
-            'status' => $approved ? 'approved' : 'declined',
-        ]);
+            abort_unless($locked->status === 'pending_ceo', 403, 'This request is not awaiting CEO/COO approval.');
 
-        if ($approved && ! $leaveRequest->is_lwop) {
-            LeaveCreditTransaction::create([
-                'employee_id' => $leaveRequest->employee_id,
-                'leave_type_id' => $leaveRequest->leave_type_id,
-                'transaction_date' => now()->toDateString(),
-                'amount' => -$leaveRequest->days_requested,
-                'reason' => 'leave_taken',
-                'leave_request_id' => $leaveRequest->id,
+            $locked->update([
+                'ceo_id' => $ceoActor->id,
+                'ceo_decision' => $approved ? 'approved' : 'declined',
+                'ceo_decided_at' => now(),
+                'status' => $approved ? 'approved' : 'declined',
             ]);
-        }
+
+            if ($approved && ! $locked->is_lwop) {
+                LeaveCreditTransaction::create([
+                    'employee_id' => $locked->employee_id,
+                    'leave_type_id' => $locked->leave_type_id,
+                    'transaction_date' => now()->toDateString(),
+                    'amount' => -$locked->days_requested,
+                    'reason' => 'leave_taken',
+                    'leave_request_id' => $locked->id,
+                ]);
+            }
+        });
+
+        $leaveRequest->refresh();
 
         $this->notifyFinalDecision($leaveRequest, $approved ? 'approved by CEO/COO' : 'declined by CEO/COO', $note);
     }
