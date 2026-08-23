@@ -21,7 +21,7 @@ class AccountInviteMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Activate your CreatiVision HRIS account',
+            subject: 'Activate your PHEMS account',
         );
     }
 

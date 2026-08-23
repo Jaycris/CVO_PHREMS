@@ -83,18 +83,10 @@ new #[Layout('layouts.app')] class extends Component
                     </span>
                 </a>
 
-                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    @foreach ([
-                        ['route' => 'leave-requests.create', 'label' => 'Request Leave', 'icon' => 'calendar'],
-                        ['route' => 'attendance.punch', 'label' => 'Attendance', 'icon' => 'clock'],
-                        ['route' => 'overtime.create', 'label' => 'Overtime', 'icon' => 'trending-up'],
-                        ['route' => 'requests.index', 'label' => 'New Request', 'icon' => 'clipboard'],
-                    ] as $action)
-                        <a href="{{ route($action['route']) }}" wire:navigate class="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white transition hover:border-brand-300/40 hover:bg-white/15">
-                            <x-icon :name="$action['icon']" class="h-4 w-4 shrink-0" />
-                            <span class="whitespace-nowrap">{{ $action['label'] }}</span>
-                        </a>
-                    @endforeach
+                <div class="text-left lg:text-right">
+                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-200">Greetings!</p>
+                    <p class="mt-1 text-2xl font-bold text-white">{{ $greeting }}, {{ explode(' ', auth()->user()->name)[0] }}</p>
+                    <p class="mt-1 text-sm font-medium text-ink-300">Have a productive {{ strtolower($today->format('l')) }}.</p>
                 </div>
             </div>
         </div>
@@ -179,6 +171,45 @@ new #[Layout('layouts.app')] class extends Component
                     @endforelse
                 </div>
             </section>
+            @php
+                $calendarStart = $today->copy()->startOfMonth()->startOfWeek(\Carbon\Carbon::SUNDAY);
+                $calendarEnd = $today->copy()->endOfMonth()->endOfWeek(\Carbon\Carbon::SATURDAY);
+            @endphp
+            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                <div class="flex items-center justify-between border-b border-ink-200 px-5 py-4 dark:border-white/10">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Schedule</p>
+                        <h2 class="mt-0.5 text-base font-bold text-ink-950 dark:text-white">Calendar</h2>
+                    </div>
+                    <p class="text-sm font-bold text-ink-700 dark:text-ink-200">{{ $today->format('F Y') }}</p>
+                </div>
+                <div class="p-4 sm:p-5">
+                    <div class="grid grid-cols-7 border-b border-ink-100 pb-2 dark:border-white/10">
+                        @foreach (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as $dayName)
+                            <div class="text-center text-xs font-bold uppercase text-ink-400">{{ $dayName }}</div>
+                        @endforeach
+                    </div>
+                    <div class="mt-2 grid grid-cols-7 gap-1.5">
+                        @for ($calendarDay = $calendarStart->copy(); $calendarDay->lte($calendarEnd); $calendarDay->addDay())
+                            @php
+                                $isToday = $calendarDay->isSameDay($today);
+                                $isCurrentMonth = $calendarDay->month === $today->month;
+                                $hasRequest = $recentRequests->contains(fn ($request) => $calendarDay->betweenIncluded($request->start_date, $request->end_date));
+                            @endphp
+                            <div class="relative flex h-11 items-center justify-center rounded-lg text-sm font-semibold transition {{ $isToday ? 'bg-brand-700 text-white shadow-sm' : ($isCurrentMonth ? 'bg-ink-50 text-ink-700 dark:bg-white/5 dark:text-ink-200' : 'text-ink-300 dark:text-ink-600') }}">
+                                {{ $calendarDay->day }}
+                                @if ($hasRequest)
+                                    <span class="absolute bottom-1 h-1.5 w-1.5 rounded-full {{ $isToday ? 'bg-white' : 'bg-amber-500' }}"></span>
+                                @endif
+                            </div>
+                        @endfor
+                    </div>
+                    <div class="mt-4 flex items-center gap-2 text-sm font-medium text-ink-500 dark:text-ink-400">
+                        <span class="h-2 w-2 rounded-full bg-amber-500"></span>
+                        Leave request dates
+                    </div>
+                </div>
+            </section>
         </main>
 
         <aside class="space-y-5 xl:col-span-4">
@@ -225,6 +256,24 @@ new #[Layout('layouts.app')] class extends Component
                             <p class="mt-2 text-sm font-medium text-ink-500 dark:text-ink-400">No employee birthdays today.</p>
                         </div>
                     @endforelse
+                </div>
+            </section>
+            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                <div class="border-b border-ink-200 px-4 py-3 dark:border-white/10">
+                    <h2 class="text-base font-bold text-ink-950 dark:text-white">Quick Actions</h2>
+                </div>
+                <div class="grid grid-cols-2 gap-2 p-3">
+                    @foreach ([
+                        ['route' => 'leave-requests.create', 'label' => 'Request Leave', 'icon' => 'calendar'],
+                        ['route' => 'attendance.punch', 'label' => 'Attendance', 'icon' => 'clock'],
+                        ['route' => 'overtime.create', 'label' => 'Overtime', 'icon' => 'trending-up'],
+                        ['route' => 'requests.index', 'label' => 'New Request', 'icon' => 'clipboard'],
+                    ] as $action)
+                        <a href="{{ route($action['route']) }}" wire:navigate class="flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border border-ink-200 bg-ink-50 px-2 py-3 text-center text-sm font-bold text-ink-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-white/5 dark:text-ink-200 dark:hover:bg-brand-400/10 dark:hover:text-brand-200">
+                            <x-icon :name="$action['icon']" class="h-5 w-5" />
+                            <span>{{ $action['label'] }}</span>
+                        </a>
+                    @endforeach
                 </div>
             </section>
         </aside>

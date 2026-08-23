@@ -21,7 +21,7 @@ class OnboardingLinkMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Complete your CreatiVision HRIS profile',
+            subject: 'Complete your PHEMS profile',
         );
     }
 

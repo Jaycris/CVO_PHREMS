@@ -47,7 +47,11 @@ new #[Layout('layouts.guest')] class extends Component
                 </div>
 
                 <div class="relative z-10">
-                    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-200">CreatiVision HRIS</p>
+                    {{-- The one place with room to say what the initials stand
+                         for. Everywhere else it is just the mark. --}}
+                    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-200">
+                        PHEMS <span class="font-normal normal-case tracking-normal text-brand-200/70">· Philippine Employment System</span>
+                    </p>
                     <h1 class="mt-4 text-3xl font-bold leading-tight text-white">Professional HR operations for your BPO team.</h1>
                     <p class="mt-4 text-sm leading-6 text-ink-300">
                         Manage attendance, leave, employee records, and payroll readiness from one secure workspace.
