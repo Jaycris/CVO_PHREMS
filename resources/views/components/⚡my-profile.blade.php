@@ -198,7 +198,7 @@ new #[Layout('layouts.app')] class extends Component
         'Basic Salary' => 'PHP ' . number_format((float) $employee->basic_salary, 2),
         'Allowance' => 'PHP ' . number_format((float) $employee->allowance, 2),
         'Commission Scheme' => $employee->commission_scheme ?: '-',
-        'Quota' => $employee->quota ? 'PHP ' . number_format((float) $employee->quota, 2) : '-',
+        'Agent Target' => $employee->quota ? 'USD ' . number_format((float) $employee->quota, 2) : '-',
     ];
 @endphp
 

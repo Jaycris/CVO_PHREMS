@@ -300,237 +300,450 @@ new #[Layout('layouts.app')] class extends Component
 };
 ?>
 
-<div class="space-y-6">
-    <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-            <x-avatar :employee="$employee" size="lg" />
-            <div>
-                <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">{{ $employee->fullName() ?: $employee->employee_id }}</h1>
-                <p class="text-sm font-medium text-[#778599]">{{ $employee->employee_id }}</p>
+<div class="space-y-6" x-data="{ activeTab: 'personal' }">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="min-w-0">
+            <div class="flex items-center gap-3">
+                <x-avatar :employee="$employee" size="lg" />
+                <div class="min-w-0">
+                    <h1 class="truncate text-2xl font-bold text-ink-950 dark:text-white">{{ $employee->fullName() ?: $employee->employee_id }}</h1>
+                    <p class="mt-0.5 text-sm font-medium text-ink-500 dark:text-ink-400">
+                        {{ $employee->employee_id }}
+                        <span class="mx-1.5 text-ink-300 dark:text-ink-600">·</span>
+                        {{ $employee->position?->title ?? 'No position assigned' }}
+                    </p>
+                </div>
             </div>
         </div>
-        <div class="flex items-center gap-4">
-            <a href="{{ route('employees.edit', $employee) }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Edit Profile</a>
-            <a href="{{ route('employees.index') }}" wire:navigate class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">← Back to Employees</a>
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ route('employees.edit', $employee) }}" wire:navigate
+                class="inline-flex h-10 items-center gap-2 rounded-lg border border-ink-200 bg-white px-4 text-sm font-bold text-ink-700 shadow-sm transition hover:border-brand-300 hover:text-brand-700 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                <x-icon name="pencil" class="h-4 w-4" />
+                Edit Profile
+            </a>
+            <a href="{{ route('employees.index') }}" wire:navigate
+                class="inline-flex h-10 items-center gap-2 rounded-lg border border-ink-200 bg-white px-4 text-sm font-bold text-ink-700 shadow-sm transition hover:border-brand-300 hover:text-brand-700 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                <x-icon name="arrow-right" class="h-4 w-4 rotate-180" />
+                Employees
+            </a>
         </div>
     </div>
 
     @if ($statusMessage)
-        <div class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{{ $statusMessage }}</div>
+        <div class="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">
+            <x-icon name="check" class="h-5 w-5 shrink-0" />
+            {{ $statusMessage }}
+        </div>
     @endif
 
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <x-card>
-            <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">HR-Managed Info</h2>
-            <dl class="space-y-2 text-sm">
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Employee ID</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->employee_id }}</dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Phone Name</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->phone_name ?: '—' }}</dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Company Email</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->company_email }}</dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Department</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->department->name }}</dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Position</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->position->title }}</dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Hire Date</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->hire_date->format('M d, Y') }}</dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Basic Salary</dt><dd class="text-[#65758c] dark:text-white">₱{{ number_format($employee->basic_salary, 2) }}</dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Allowance</dt><dd class="text-[#65758c] dark:text-white">₱{{ number_format($employee->allowance, 2) }}</dd></div>
-                @if ($employee->commission_scheme)
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Commission Scheme</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->commission_scheme }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Quota</dt><dd class="text-[#65758c] dark:text-white">₱{{ number_format($employee->quota, 2) }}</dd></div>
-                @endif
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Employment Status</dt><dd><x-badge :color="$employee->employment_status === 'Regular' ? 'green' : 'amber'">{{ $employee->employment_status }}</x-badge></dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Employment Type</dt><dd class="font-medium text-[#65758c] dark:text-white">{{ $employee->employment_type ?: '—' }}</dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Workplace Type</dt><dd class="font-medium text-[#65758c] dark:text-white">{{ $employee->workplace_type ?: '—' }}</dd></div>
-                <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Reports To</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->reportsTo?->fullName() ?? '—' }}</dd></div>
-            </dl>
-        </x-card>
+    <div class="border-b border-ink-200 dark:border-white/10">
+        <nav class="-mb-px flex gap-7 overflow-x-auto" aria-label="Employee profile sections">
+            @foreach ([
+                'personal' => 'Personal Info',
+                'employment' => 'Employment Details',
+                'payroll' => 'Payroll Details',
+                'schedule' => 'Work Schedule',
+                'leave' => 'Leave Credits',
+            ] as $tab => $label)
+                <button type="button" @click="activeTab = '{{ $tab }}'"
+                    class="relative shrink-0 border-b-2 px-0.5 pb-3 text-sm font-semibold transition"
+                    :class="activeTab === '{{ $tab }}'
+                        ? 'border-brand-600 text-brand-700 dark:border-brand-400 dark:text-brand-300'
+                        : 'border-transparent text-ink-500 hover:text-ink-800 dark:text-ink-400 dark:hover:text-white'">
+                    {{ $label }}
+                </button>
+            @endforeach
+        </nav>
+    </div>
 
-        <x-card>
-            <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Personal Info (self-filled)</h2>
-            @if ($employee->onboarding_completed_at)
-                <dl class="space-y-2 text-sm">
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Birthdate</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->birthdate->format('M d, Y') }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Gender</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->gender ?: '—' }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Civil Status</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->civil_status }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Address</dt><dd class="text-right text-[#65758c] dark:text-white">{{ $employee->address }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Personal Contact</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->personal_contact_number }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Personal Email</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->personal_email }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Emergency Contact</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->emergency_contact_name }} ({{ $employee->emergency_contact_number }})</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">TIN</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->tin_number ?: '—' }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">SSS</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->sss_number ?: '—' }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">PhilHealth</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->philhealth_number ?: '—' }}</dd></div>
-                    <div class="flex justify-between"><dt class="font-medium text-[#778599] dark:text-neutral-400">Pag-IBIG</dt><dd class="text-[#65758c] dark:text-white">{{ $employee->pagibig_number ?: '—' }}</dd></div>
+    <section x-show="activeTab === 'personal'" x-cloak class="space-y-4">
+        <h2 class="text-xl font-bold text-ink-950 dark:text-white">Personal Info</h2>
+
+        <div class="professional-panel overflow-hidden">
+            <div class="flex items-center justify-between border-b border-ink-100 px-5 py-4 dark:border-white/10">
+                <h3 class="text-lg font-bold text-ink-950 dark:text-white">Basic Information</h3>
+                <a href="{{ route('employees.edit', $employee) }}" wire:navigate
+                    class="flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 transition hover:bg-ink-100 hover:text-brand-700 dark:text-ink-400 dark:hover:bg-white/10 dark:hover:text-brand-300"
+                    title="Edit employee profile">
+                    <x-icon name="pencil" class="h-4 w-4" />
+                </a>
+            </div>
+
+            <div class="grid gap-8 px-5 py-6 lg:grid-cols-[minmax(0,1.05fr)_1px_minmax(0,1fr)]">
+                <div class="flex flex-col gap-6 sm:flex-row sm:items-center">
+                    <x-avatar :employee="$employee" size="xl" class="h-32 w-32 text-3xl ring-4 ring-ink-100 dark:ring-white/10" />
+                    <div class="min-w-0">
+                        <h3 class="truncate text-2xl font-bold text-ink-950 dark:text-white">{{ $employee->fullName() ?: $employee->employee_id }}</h3>
+                        <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">{{ $employee->employee_id }}</p>
+                        <div class="mt-4 space-y-2.5 text-sm font-medium text-ink-700 dark:text-ink-200">
+                            <div class="flex items-center gap-2.5">
+                                <x-icon name="user-circle" class="h-4 w-4 shrink-0 text-ink-400" />
+                                <span>{{ $employee->gender ?: 'Gender not provided' }}</span>
+                            </div>
+                            <div class="flex min-w-0 items-center gap-2.5">
+                                <x-icon name="mail" class="h-4 w-4 shrink-0 text-ink-400" />
+                                <span class="truncate" title="{{ $employee->personal_email ?: $employee->company_email }}">{{ $employee->personal_email ?: $employee->company_email }}</span>
+                            </div>
+                            <div class="flex items-center gap-2.5">
+                                <x-icon name="phone" class="h-4 w-4 shrink-0 text-ink-400" />
+                                <span>{{ $employee->personal_contact_number ?: 'Contact number not provided' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hidden bg-ink-200 lg:block dark:bg-white/10"></div>
+
+                <dl class="grid content-center gap-x-6 gap-y-4 sm:grid-cols-[140px_minmax(0,1fr)]">
+                    <dt class="text-sm font-semibold text-ink-600 dark:text-ink-300">Birth Date</dt>
+                    <dd class="text-sm font-medium text-ink-950 dark:text-white">{{ $employee->birthdate?->format('M d, Y') ?? '—' }}</dd>
+                    <dt class="text-sm font-semibold text-ink-600 dark:text-ink-300">Civil Status</dt>
+                    <dd class="text-sm font-medium text-ink-950 dark:text-white">{{ $employee->civil_status ?: '—' }}</dd>
+                    <dt class="text-sm font-semibold text-ink-600 dark:text-ink-300">Phone Name</dt>
+                    <dd class="text-sm font-medium text-ink-950 dark:text-white">{{ $employee->phone_name ?: '—' }}</dd>
+                    <dt class="text-sm font-semibold text-ink-600 dark:text-ink-300">Employment Status</dt>
+                    <dd>
+                        <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-bold {{ $employee->isRegular() ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300' : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300' }}">
+                            {{ $employee->employment_status }}
+                        </span>
+                    </dd>
+                    <dt class="text-sm font-semibold text-ink-600 dark:text-ink-300">Onboarding</dt>
+                    <dd class="text-sm font-semibold {{ $employee->onboarding_completed_at ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300' }}">
+                        {{ $employee->onboarding_completed_at ? 'Completed' : 'Pending' }}
+                    </dd>
                 </dl>
-            @else
-                <p class="mb-4 text-sm font-medium text-[#778599]">Employee has not completed onboarding yet.</p>
-                <form wire:submit="sendOnboardingLink" class="space-y-3">
+            </div>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+            <div class="professional-panel p-5">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-ink-950 dark:text-white">Address</h3>
+                    <a href="{{ route('employees.edit', $employee) }}" wire:navigate class="text-ink-500 hover:text-brand-700 dark:text-ink-400 dark:hover:text-brand-300" title="Edit address">
+                        <x-icon name="pencil" class="h-4 w-4" />
+                    </a>
+                </div>
+                <dl class="grid gap-3 sm:grid-cols-[130px_minmax(0,1fr)]">
+                    <dt class="text-sm font-semibold text-ink-600 dark:text-ink-300">Home Address</dt>
+                    <dd class="text-sm font-medium leading-6 text-ink-950 dark:text-white">{{ $employee->address ?: 'Address not provided.' }}</dd>
+                </dl>
+            </div>
+
+            <div class="professional-panel p-5">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-ink-950 dark:text-white">Emergency Contact</h3>
+                    <a href="{{ route('employees.edit', $employee) }}" wire:navigate class="text-ink-500 hover:text-brand-700 dark:text-ink-400 dark:hover:text-brand-300" title="Edit emergency contact">
+                        <x-icon name="pencil" class="h-4 w-4" />
+                    </a>
+                </div>
+                <dl class="grid gap-3 sm:grid-cols-[130px_minmax(0,1fr)]">
+                    <dt class="text-sm font-semibold text-ink-600 dark:text-ink-300">Name</dt>
+                    <dd class="text-sm font-medium text-ink-950 dark:text-white">{{ $employee->emergency_contact_name ?: '—' }}</dd>
+                    <dt class="text-sm font-semibold text-ink-600 dark:text-ink-300">Phone Number</dt>
+                    <dd class="text-sm font-medium text-ink-950 dark:text-white">{{ $employee->emergency_contact_number ?: '—' }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        @if (! $employee->onboarding_completed_at)
+            <div class="professional-panel overflow-hidden">
+                <div class="border-b border-amber-200 bg-amber-50 px-5 py-4 dark:border-amber-400/20 dark:bg-amber-400/10">
+                    <div class="flex items-start gap-3">
+                        <x-icon name="clock" class="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300" />
+                        <div>
+                            <h3 class="font-bold text-amber-900 dark:text-amber-100">Personal information is awaiting onboarding</h3>
+                            <p class="mt-1 text-sm font-medium text-amber-700 dark:text-amber-200">Send the secure form to collect the remaining employee details.</p>
+                        </div>
+                    </div>
+                </div>
+                <form wire:submit="sendOnboardingLink" class="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                     <div>
                         <x-label>Send onboarding link to</x-label>
-                        <div class="mt-1 space-y-2">
-                            <label class="flex items-center gap-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
-                                <input type="radio" wire:model="onboardingEmailChoice" value="company"
-                                       class="border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
-                                Company email <span class="text-xs text-[#778599]">({{ $employee->company_email }})</span>
+                        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                            <label class="flex cursor-pointer items-center gap-3 rounded-lg border border-ink-200 px-4 py-3 text-sm font-semibold text-ink-700 transition hover:bg-ink-50 dark:border-white/10 dark:text-ink-200 dark:hover:bg-white/5">
+                                <input type="radio" wire:model="onboardingEmailChoice" value="company" class="border-ink-300 text-brand-600 focus:ring-brand-500 dark:border-white/20 dark:bg-ink-900">
+                                <span class="min-w-0">Company email <span class="block truncate text-xs font-medium text-ink-500">{{ $employee->company_email }}</span></span>
                             </label>
-                            <label class="flex items-center gap-2 text-sm font-medium text-[#65758c] dark:text-neutral-300">
-                                <input type="radio" wire:model="onboardingEmailChoice" value="personal"
-                                       class="border-neutral-300 text-brand-600 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800">
-                                Personal email <span class="text-xs text-[#778599]">({{ $employee->personal_email ?: 'not on file' }})</span>
+                            <label class="flex cursor-pointer items-center gap-3 rounded-lg border border-ink-200 px-4 py-3 text-sm font-semibold text-ink-700 transition hover:bg-ink-50 dark:border-white/10 dark:text-ink-200 dark:hover:bg-white/5">
+                                <input type="radio" wire:model="onboardingEmailChoice" value="personal" class="border-ink-300 text-brand-600 focus:ring-brand-500 dark:border-white/20 dark:bg-ink-900">
+                                <span class="min-w-0">Personal email <span class="block truncate text-xs font-medium text-ink-500">{{ $employee->personal_email ?: 'Not on file' }}</span></span>
                             </label>
                         </div>
                         @error('onboardingEmailChoice') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <x-button type="submit">Send Onboarding Link</x-button>
+                    <x-button type="submit">
+                        <x-icon name="arrow-right" class="h-4 w-4" />
+                        Send Onboarding Link
+                    </x-button>
                 </form>
-            @endif
-
-            <div class="mt-6 border-t border-neutral-200 pt-4 dark:border-neutral-800">
-                <h2 class="mb-2 text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Account</h2>
-                @if ($employee->user_id && $employee->user?->is_active)
-                    <x-badge color="green">Login active ({{ $employee->user->email }})</x-badge>
-                @elseif ($employee->user_id)
-                    {{-- The account exists but cannot sign in. Said plainly,
-                         with where to change it, because otherwise the only
-                         symptom is the person being unable to log in. --}}
-                    <x-badge color="red">Login disabled ({{ $employee->user->email }})</x-badge>
-                    <p class="mt-2 text-sm font-medium text-[#778599]">
-                        Re-enable it on the
-                        <a href="{{ route('users.index') }}" wire:navigate class="font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-400">Users</a>
-                        page.
-                    </p>
-                @elseif ($employee->onboarding_completed_at)
-                    <p class="text-sm font-medium text-[#778599]">
-                        Ready for credentials. Create the login from the
-                        <a href="{{ route('users.index') }}" wire:navigate class="font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-400">Users</a>
-                        page.
-                    </p>
-                @else
-                    <p class="text-sm font-medium text-[#778599]">Complete onboarding before creating a login.</p>
-                @endif
-            </div>
-        </x-card>
-    </div>
-
-    <x-card>
-        <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Work Schedule</h2>
-            <button wire:click="openScheduleModal" class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Update Work Schedule</button>
-        </div>
-
-        <p class="mb-4 text-sm font-medium text-[#778599] dark:text-neutral-300">
-            Current:
-            @if ($currentAssignment)
-                <span class="font-medium text-[#65758c] dark:text-white">{{ $currentAssignment->workSchedule->name }}</span>
-                <span class="font-medium text-[#778599] dark:text-neutral-400">(since {{ $currentAssignment->effective_start_date->format('M d, Y') }})</span>
-            @else
-                <span class="font-medium text-[#778599]">No schedule assigned</span>
-            @endif
-        </p>
-
-        @if ($scheduleHistory->isNotEmpty())
-            <div class="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-                <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-                    <thead class="bg-neutral-50 dark:bg-neutral-800/50">
-                        <tr>
-                            <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Schedule</th>
-                            <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">From</th>
-                            <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">To</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
-                        @foreach ($scheduleHistory as $assignment)
-                            <tr wire:key="assign-{{ $assignment->id }}">
-                                <td class="px-3 py-2 text-[#65758c] dark:text-white">{{ $assignment->workSchedule->name }}</td>
-                                <td class="px-3 py-2 font-medium text-[#778599] dark:text-neutral-400">{{ $assignment->effective_start_date->format('M d, Y') }}</td>
-                                <td class="px-3 py-2 font-medium text-[#778599] dark:text-neutral-400">{{ $assignment->effective_end_date?->format('M d, Y') ?? 'Present' }}</td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
             </div>
         @endif
-    </x-card>
 
-    <x-card>
-        <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Payroll Settings</h2>
-            <button wire:click="openPayrollModal" class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Edit Payroll Settings</button>
+        <div class="professional-panel p-5">
+            <div class="flex items-start gap-3">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                    <x-icon name="shield-check" class="h-5 w-5" />
+                </span>
+                <div class="min-w-0">
+                    <h3 class="text-lg font-bold text-ink-950 dark:text-white">Account Access</h3>
+                    @if ($employee->user_id && $employee->user?->is_active)
+                        <p class="mt-1 break-words text-sm font-semibold text-emerald-700 dark:text-emerald-300">Login active · {{ $employee->user->email }}</p>
+                    @elseif ($employee->user_id)
+                        <p class="mt-1 break-words text-sm font-semibold text-red-600 dark:text-red-300">Login disabled · {{ $employee->user->email }}</p>
+                        <a href="{{ route('users.index') }}" wire:navigate class="mt-1 inline-block text-sm font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-300">Manage access in Users</a>
+                    @elseif ($employee->onboarding_completed_at)
+                        <p class="mt-1 text-sm font-semibold text-ink-700 dark:text-ink-200">Ready for credentials.</p>
+                        <a href="{{ route('users.index') }}" wire:navigate class="mt-1 inline-block text-sm font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-300">Create login in Users</a>
+                    @else
+                        <p class="mt-1 text-sm font-semibold text-ink-600 dark:text-ink-300">Complete onboarding before creating a login.</p>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section x-show="activeTab === 'employment'" x-cloak class="space-y-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-xl font-bold text-ink-950 dark:text-white">Employment Details</h2>
+                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Assignment, reporting line, and compensation information.</p>
+            </div>
+            <a href="{{ route('employees.edit', $employee) }}" wire:navigate class="inline-flex h-10 items-center gap-2 rounded-lg border border-ink-200 bg-white px-4 text-sm font-bold text-ink-700 shadow-sm hover:text-brand-700 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                <x-icon name="pencil" class="h-4 w-4" />
+                Edit
+            </a>
         </div>
 
-        <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            @foreach ([
-                'Include in payroll runs' => $employee->include_in_payroll,
-                'SSS contribution' => $employee->sss_enrolled,
-                'PhilHealth contribution' => $employee->philhealth_enrolled,
-                'Pag-IBIG contribution' => $employee->pagibig_enrolled,
-                'BIR withholding tax' => $employee->bir_withholding_enrolled,
-                'Allowance is taxable' => $employee->allowance_taxable,
-            ] as $label => $on)
-                <div class="flex items-center justify-between">
-                    <dt class="font-medium text-[#778599] dark:text-neutral-400">{{ $label }}</dt>
-                    <dd><x-badge :color="$on ? 'green' : 'neutral'">{{ $on ? 'Yes' : 'No' }}</x-badge></dd>
+        <div class="grid gap-4 xl:grid-cols-2">
+            <div class="professional-panel overflow-hidden">
+                <div class="border-b border-ink-100 px-5 py-4 dark:border-white/10">
+                    <h3 class="text-lg font-bold text-ink-950 dark:text-white">Work Information</h3>
                 </div>
-            @endforeach
-            <div class="flex items-center justify-between">
-                <dt class="font-medium text-[#778599] dark:text-neutral-400">Separation Date</dt>
-                <dd class="text-[#65758c] dark:text-white">{{ $employee->separation_date?->format('M d, Y') ?? '—' }}</dd>
+                <dl class="grid gap-x-8 px-5 py-2 sm:grid-cols-2">
+                    @foreach ([
+                        'Employee ID' => $employee->employee_id,
+                        'Company Email' => $employee->company_email,
+                        'Department' => $employee->department?->name ?? '—',
+                        'Position' => $employee->position?->title ?? '—',
+                        'Hire Date' => $employee->hire_date->format('M d, Y'),
+                        'Employment Status' => $employee->employment_status,
+                        'Employment Type' => $employee->employment_type ?: '—',
+                        'Workplace Type' => $employee->workplace_type ?: '—',
+                        'Reports To' => $employee->reportsTo?->fullName() ?? '—',
+                    ] as $label => $value)
+                        <div class="min-w-0 border-b border-ink-100 py-4 dark:border-white/10">
+                            <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">{{ $label }}</dt>
+                            <dd class="mt-1 break-words text-sm font-semibold text-ink-950 dark:text-white">{{ $value }}</dd>
+                        </div>
+                    @endforeach
+                </dl>
             </div>
-            <div class="flex items-center justify-between">
-                <dt class="font-medium text-[#778599] dark:text-neutral-400">Separation Reason</dt>
-                <dd class="text-[#65758c] dark:text-white">{{ $employee->separation_reason ?: '—' }}</dd>
-            </div>
-        </dl>
-    </x-card>
 
-    <x-card>
-        <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-sm font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Leave Credits</h2>
-            <button wire:click="openLeaveModal" class="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Update Leave Credits</button>
+            <div class="professional-panel overflow-hidden">
+                <div class="border-b border-ink-100 px-5 py-4 dark:border-white/10">
+                    <h3 class="text-lg font-bold text-ink-950 dark:text-white">Compensation</h3>
+                </div>
+                <dl class="grid gap-x-8 px-5 py-2 sm:grid-cols-2">
+                    @foreach ([
+                        'Basic Salary' => 'PHP '.number_format($employee->basic_salary, 2),
+                        'Allowance' => 'PHP '.number_format($employee->allowance, 2),
+                        'Commission Scheme' => $employee->commission_scheme ?: '—',
+                        'Agent Target' => $employee->commission_scheme ? 'USD '.number_format($employee->quota, 2) : '—',
+                    ] as $label => $value)
+                        <div class="min-w-0 border-b border-ink-100 py-4 dark:border-white/10">
+                            <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">{{ $label }}</dt>
+                            <dd class="mt-1 break-words text-base font-bold tabular-nums text-ink-950 dark:text-white">{{ $value }}</dd>
+                        </div>
+                    @endforeach
+                </dl>
+            </div>
+        </div>
+    </section>
+
+    <section x-show="activeTab === 'payroll'" x-cloak class="space-y-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-xl font-bold text-ink-950 dark:text-white">Payroll Details</h2>
+                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Payroll enrollment and statutory contribution settings.</p>
+            </div>
+            <button wire:click="openPayrollModal" class="inline-flex h-10 items-center gap-2 rounded-lg border border-ink-200 bg-white px-4 text-sm font-bold text-ink-700 shadow-sm hover:text-brand-700 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                <x-icon name="pencil" class="h-4 w-4" />
+                Edit Payroll Settings
+            </button>
+        </div>
+
+        <div class="professional-panel p-5">
+            <dl class="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
+                @foreach ([
+                    'Include in payroll runs' => $employee->include_in_payroll,
+                    'SSS contribution' => $employee->sss_enrolled,
+                    'PhilHealth contribution' => $employee->philhealth_enrolled,
+                    'Pag-IBIG contribution' => $employee->pagibig_enrolled,
+                    'BIR withholding tax' => $employee->bir_withholding_enrolled,
+                    'Allowance is taxable' => $employee->allowance_taxable,
+                ] as $label => $enabled)
+                    <div class="flex items-center justify-between gap-4 border-b border-ink-100 pb-4 dark:border-white/10">
+                        <dt class="text-sm font-semibold text-ink-700 dark:text-ink-200">{{ $label }}</dt>
+                        <dd class="rounded-full px-2.5 py-1 text-xs font-bold {{ $enabled ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300' : 'bg-ink-100 text-ink-600 dark:bg-white/10 dark:text-ink-300' }}">{{ $enabled ? 'Enabled' : 'Disabled' }}</dd>
+                    </div>
+                @endforeach
+                <div>
+                    <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Separation Date</dt>
+                    <dd class="mt-1 text-sm font-semibold text-ink-950 dark:text-white">{{ $employee->separation_date?->format('M d, Y') ?? '—' }}</dd>
+                </div>
+                <div class="sm:col-span-2">
+                    <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Separation Reason</dt>
+                    <dd class="mt-1 text-sm font-semibold text-ink-950 dark:text-white">{{ $employee->separation_reason ?: '—' }}</dd>
+                </div>
+            </dl>
+        </div>
+
+        <div class="professional-panel overflow-hidden">
+            <div class="flex flex-col gap-3 border-b border-ink-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+                <div>
+                    <h3 class="text-lg font-bold text-ink-950 dark:text-white">Bank Details</h3>
+                    <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Approved account used for direct deposit.</p>
+                </div>
+                @can('bank_details.approve')
+                    <a href="{{ route('bank-details.index') }}" wire:navigate
+                        class="text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300 dark:hover:text-brand-200">
+                        Manage Bank Details
+                    </a>
+                @endcan
+            </div>
+
+            <dl class="grid gap-x-8 gap-y-5 p-5 sm:grid-cols-2 xl:grid-cols-4">
+                <div>
+                    <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Bank</dt>
+                    <dd class="mt-1 text-sm font-semibold text-ink-950 dark:text-white">{{ $employee->bank_name ?: 'Not provided' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Account Name</dt>
+                    <dd class="mt-1 text-sm font-semibold text-ink-950 dark:text-white">{{ $employee->bank_account_name ?: 'Not provided' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Account Number</dt>
+                    <dd class="mt-1 font-mono text-sm font-bold tracking-wide text-ink-950 dark:text-white">{{ $employee->hasBankDetails() ? $employee->maskedBankAccount() : 'Not provided' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Last Updated</dt>
+                    <dd class="mt-1 text-sm font-semibold text-ink-950 dark:text-white">{{ $employee->bank_details_updated_at?->format('M d, Y') ?? '—' }}</dd>
+                </div>
+            </dl>
+        </div>
+    </section>
+
+    <section x-show="activeTab === 'schedule'" x-cloak class="space-y-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-xl font-bold text-ink-950 dark:text-white">Work Schedule</h2>
+                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">
+                    Current:
+                    @if ($currentAssignment)
+                        <span class="font-semibold text-ink-800 dark:text-white">{{ $currentAssignment->workSchedule->name }}</span>
+                        since {{ $currentAssignment->effective_start_date->format('M d, Y') }}
+                    @else
+                        No schedule assigned
+                    @endif
+                </p>
+            </div>
+            <button wire:click="openScheduleModal" class="inline-flex h-10 items-center gap-2 rounded-lg border border-ink-200 bg-white px-4 text-sm font-bold text-ink-700 shadow-sm hover:text-brand-700 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                <x-icon name="pencil" class="h-4 w-4" />
+                Update Schedule
+            </button>
+        </div>
+
+        <div class="professional-panel overflow-hidden">
+            @if ($scheduleHistory->isNotEmpty())
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-ink-200 text-sm dark:divide-white/10">
+                        <thead class="bg-ink-50 dark:bg-white/[0.03]">
+                            <tr>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Schedule</th>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">From</th>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">To</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-ink-100 dark:divide-white/10">
+                            @foreach ($scheduleHistory as $assignment)
+                                <tr>
+                                    <td class="px-5 py-4 font-semibold text-ink-950 dark:text-white">{{ $assignment->workSchedule->name }}</td>
+                                    <td class="px-5 py-4 text-ink-700 dark:text-ink-200">{{ $assignment->effective_start_date->format('M d, Y') }}</td>
+                                    <td class="px-5 py-4 text-ink-700 dark:text-ink-200">{{ $assignment->effective_end_date?->format('M d, Y') ?? 'Present' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="px-5 py-10 text-center text-sm font-medium text-ink-500 dark:text-ink-400">No schedule history yet.</div>
+            @endif
+        </div>
+    </section>
+
+    <section x-show="activeTab === 'leave'" x-cloak class="space-y-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-xl font-bold text-ink-950 dark:text-white">Leave Credits</h2>
+                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Eligibility, available balances, and year-end disposition.</p>
+            </div>
+            <button wire:click="openLeaveModal" class="inline-flex h-10 items-center gap-2 rounded-lg border border-ink-200 bg-white px-4 text-sm font-bold text-ink-700 shadow-sm hover:text-brand-700 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                <x-icon name="pencil" class="h-4 w-4" />
+                Update Leave Credits
+            </button>
         </div>
 
         @if (! $employee->isRegular())
-            <p class="mb-3 text-sm text-amber-600 dark:text-amber-400">Employee is {{ $employee->employment_status }} — not yet eligible to accrue or use leave credits. Any leave taken will be Leave Without Pay.</p>
+            <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+                Employee is {{ $employee->employment_status }} and is not yet eligible to accrue or use leave credits. Any leave taken will be Leave Without Pay.
+            </div>
         @endif
 
-        <div class="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-                <thead class="bg-neutral-50 dark:bg-neutral-800/50">
-                    <tr>
-                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Entitled</th>
-                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Type</th>
-                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Balance</th>
-                        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Year-end Disposition</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
-                    @foreach ($leaveTypes as $type)
-                        @php $eligible = $employee->isEligibleFor($type); @endphp
-                        <tr wire:key="lt-view-{{ $type->id }}">
-                            <td class="px-3 py-2">
-                                <x-badge :color="$eligible ? 'green' : 'neutral'">{{ $eligible ? 'Yes' : 'No' }}</x-badge>
-                            </td>
-                            <td class="px-3 py-2 text-[#65758c] dark:text-white">
-                                {{ $type->code }} — {{ $type->name }}
-                                @if ($type->accrual_mode === 'event_based')
-                                    <span class="block text-xs font-medium text-[#778599]">Event-based — granted per occurrence</span>
-                                @elseif ($type->accrual_mode === 'monthly_accrual')
-                                    <span class="block text-xs font-medium text-[#778599]">Accrues {{ rtrim(rtrim(number_format((float) $type->monthly_accrual_rate, 3), '0'), '.') }}/mo</span>
-                                @endif
-                            </td>
-                            <td class="px-3 py-2 font-medium text-[#65758c] dark:text-white">{{ $employee->leaveBalance($type) }} days</td>
-                            <td class="px-3 py-2 font-medium text-[#778599] dark:text-neutral-400">
-                                @if ($type->allow_carry_over || $type->allow_cash_conversion)
-                                    {{ $employee->leaveDispositionFor($type) === 'cash_out' ? 'Cash Out' : 'Carry Over' }}
-                                @else
-                                    —
-                                @endif
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+        <div class="professional-panel overflow-hidden">
+            @if ($leaveTypes->isNotEmpty())
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-ink-200 text-sm dark:divide-white/10">
+                        <thead class="bg-ink-50 dark:bg-white/[0.03]">
+                            <tr>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Leave Type</th>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Eligibility</th>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Balance</th>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Year-End</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-ink-100 dark:divide-white/10">
+                            @foreach ($leaveTypes as $type)
+                                @php $eligible = $employee->isEligibleFor($type); @endphp
+                                <tr>
+                                    <td class="px-5 py-4">
+                                        <p class="font-semibold text-ink-950 dark:text-white">{{ $type->name }}</p>
+                                        <p class="mt-0.5 text-xs font-medium text-ink-500">{{ $type->code }}</p>
+                                    </td>
+                                    <td class="px-5 py-4">
+                                        <span class="rounded-full px-2.5 py-1 text-xs font-bold {{ $eligible ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300' : 'bg-ink-100 text-ink-600 dark:bg-white/10 dark:text-ink-300' }}">{{ $eligible ? 'Eligible' : 'Not eligible' }}</span>
+                                    </td>
+                                    <td class="px-5 py-4 font-semibold text-ink-950 dark:text-white">{{ $employee->leaveBalance($type) }} days</td>
+                                    <td class="px-5 py-4 text-ink-700 dark:text-ink-200">
+                                        @if ($type->allow_carry_over && $type->allow_cash_conversion)
+                                            {{ $employee->leaveDispositionFor($type) === 'cash_out' ? 'Cash Out' : 'Carry Over' }}
+                                        @elseif ($type->allow_carry_over)
+                                            Carry Over
+                                        @elseif ($type->allow_cash_conversion)
+                                            Cash Out
+                                        @else
+                                            —
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="px-5 py-10 text-center text-sm font-medium text-ink-500 dark:text-ink-400">No active leave types configured.</div>
+            @endif
         </div>
-    </x-card>
-
-    {{-- Editors. The profile itself stays read-only; each opens from its section. --}}
-
+    </section>
     <x-modal :show="$showScheduleModal" onClose="closeModals">
         <h2 class="mb-4 text-lg font-bold text-[#0f172a] dark:text-white">Update Work Schedule</h2>
         <form wire:submit="assignSchedule" class="space-y-4">

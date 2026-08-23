@@ -352,8 +352,9 @@ new #[Layout('layouts.app')] class extends Component
                             @error('commission_frequency') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                         </div>
                         <div>
-                            <x-label>Quota</x-label>
+                            <x-label>Agent Target</x-label>
                             <x-input wire:model="quota" type="number" step="0.01" />
+                            <p class="mt-1 text-xs font-medium text-[#778599]">In US dollars. Must match Agent Target in the CRM commission profile &mdash; the CRM measures every agent against its own figure, not this one.</p>
                             @error('quota') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                         </div>
                     </div>
