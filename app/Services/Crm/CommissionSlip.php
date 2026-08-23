@@ -37,6 +37,20 @@ class CommissionSlip
          */
         public readonly array $schemeRules = [],
 
+        /**
+         * The agent's commission threshold: the slice of each qualifying sale
+         * that earns nothing before the rate is applied.
+         *
+         * Three separate facts, because they answer different questions. The
+         * threshold is what the agent's profile is set to; exempt says the rule
+         * does not apply to them at all; applied is what it actually cost them
+         * this month — which is zero in a month with no qualifying sale, and
+         * that is not the same as having no threshold.
+         */
+        public readonly ?float $threshold = null,
+        public readonly bool $thresholdExempt = false,
+        public readonly ?float $thresholdApplied = null,
+
         public readonly ?float $mtd = null,
         public readonly ?float $target = null,
         public readonly ?float $mtdPercent = null,
@@ -77,6 +91,13 @@ class CommissionSlip
 
             scheme: self::schemeName($agent, $summary),
             schemeRules: self::schemeRules($agent, $summary),
+
+            threshold: self::money($agent, ['commission_threshold_amount', 'commissionThresholdAmount', 'threshold'])
+                ?? self::money($summary, ['commission_threshold_amount', 'threshold']),
+            thresholdExempt: (bool) ($agent['is_commission_threshold_exempt']
+                ?? $summary['is_commission_threshold_exempt']
+                ?? false),
+            thresholdApplied: self::money($summary, ['threshold_applied_amount', 'thresholdAppliedAmount']),
 
             mtd: self::money($summary, ['mtd', 'mtd_amount']),
             target: self::money($summary, ['target', 'agent_target', 'quota'])

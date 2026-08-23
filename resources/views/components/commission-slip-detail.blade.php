@@ -42,6 +42,14 @@
         ['Card payment hold', $percent($slip->card_hold_percent)],
         ['Card payment hold amount', $money($slip->card_hold_amount, '₱')],
     ];
+
+    // The threshold is the slice of a qualifying sale that earns nothing before
+    // the rate is applied. The CRM applies it and sends the commission already
+    // reduced, so this is shown to explain a figure rather than to produce one.
+    //
+    // Exempt and "nothing applied this month" are kept apart: the first says
+    // the rule does not apply to this agent, the second says it did not bite.
+    $hasThreshold = $slip->commission_threshold !== null || $slip->threshold_exempt;
 @endphp
 
 <div class="space-y-5">
@@ -87,6 +95,40 @@
             </p>
         </div>
     </div>
+
+    @if ($hasThreshold)
+        <div class="overflow-hidden rounded-xl border border-ink-200 dark:border-white/10">
+            <p class="bg-ink-50 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-ink-500 dark:bg-white/5 dark:text-ink-400">
+                Commission threshold
+            </p>
+
+            @if ($slip->threshold_exempt)
+                <p class="px-5 py-4 text-sm font-medium text-ink-700 dark:text-ink-300">
+                    This agent is exempt from the commission threshold, so every peso of a sale earns commission.
+                </p>
+            @else
+                <div class="divide-y divide-ink-100 dark:divide-white/10">
+                    <div class="flex items-center justify-between gap-4 px-5 py-2.5">
+                        <span class="text-sm font-medium text-ink-700 dark:text-ink-300">Threshold per qualifying sale</span>
+                        <span class="text-sm font-semibold tabular-nums text-ink-900 dark:text-white">{{ $money($slip->commission_threshold, '$') }}</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4 px-5 py-2.5">
+                        <span class="text-sm font-medium text-ink-700 dark:text-ink-300">Taken off this month</span>
+                        <span class="text-sm font-semibold tabular-nums text-ink-900 dark:text-white">{{ $money($slip->threshold_applied, '$') }}</span>
+                    </div>
+                </div>
+
+                <p class="border-t border-ink-100 px-5 py-2.5 text-xs font-medium text-ink-500 dark:border-white/10 dark:text-ink-400">
+                    @if ($slip->threshold_applied !== null && (float) $slip->threshold_applied <= 0)
+                        Nothing was taken off this month. The threshold still applies &mdash; no sale reached it.
+                    @else
+                        Deducted from a sale before the commission rate is applied. The statement below shows which
+                        sales it came off.
+                    @endif
+                </p>
+            @endif
+        </div>
+    @endif
 
     {{-- The conversion, spelled out. Everything above it is dollars, everything
          below it is pesos, and this is where it changes. --}}
@@ -159,7 +201,7 @@
                             @foreach (['Sold', 'Brand', 'Author / Client', 'Book Title', 'Service', 'Payment'] as $heading)
                                 <th class="whitespace-nowrap px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">{{ $heading }}</th>
                             @endforeach
-                            @foreach (['Sale', 'Service Amt', 'Markup Amt', 'Service Comm', 'Markup Comm', 'USD', 'PHP', 'Card Hold', 'Net'] as $heading)
+                            @foreach (['Sale', 'Service Amt', 'Markup Amt', 'Threshold', 'Service Comm', 'Markup Comm', 'USD', 'PHP', 'Card Hold', 'Net'] as $heading)
                                 <th class="whitespace-nowrap px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">{{ $heading }}</th>
                             @endforeach
                         </tr>
@@ -182,6 +224,9 @@
                                     $money($row->sale_amount, '$'),
                                     $money($row->service_amount, '$'),
                                     $money($row->markup_amount, '$'),
+                                    $row->threshold_applied === null || (float) $row->threshold_applied <= 0
+                                        ? '—'
+                                        : '−' . $money($row->threshold_applied, '$'),
                                     $money($row->service_commission, '$'),
                                     $money($row->markup_commission, '$'),
                                     $money($row->usd_total, '$'),
@@ -194,7 +239,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="15" class="px-3 py-8 text-center font-medium text-ink-500">
+                                <td colspan="16" class="px-3 py-8 text-center font-medium text-ink-500">
                                     No commission records in {{ $slip->monthLabel() }}.
                                 </td>
                             </tr>

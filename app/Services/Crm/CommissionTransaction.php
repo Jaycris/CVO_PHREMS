@@ -21,6 +21,12 @@ class CommissionTransaction
         public readonly ?float $saleAmount = null,
         public readonly ?float $serviceAmount = null,
         public readonly ?float $markupAmount = null,
+
+        // How much of this sale the threshold took off before commission was
+        // worked out. The CRM applies it and sends the result already reduced,
+        // so this exists purely so the slip can show its working.
+        public readonly ?float $thresholdApplied = null,
+
         public readonly ?float $serviceCommission = null,
         public readonly ?float $markupCommission = null,
         public readonly ?float $usdTotal = null,
@@ -42,6 +48,7 @@ class CommissionTransaction
             saleAmount: self::money($row, ['sale_amount', 'saleAmount', 'amount']),
             serviceAmount: self::money($row, ['service_amount', 'service_mtd', 'serviceAmount']),
             markupAmount: self::money($row, ['markup_amount', 'markup_mtd', 'markupAmount']),
+            thresholdApplied: self::money($row, ['threshold_applied_amount', 'thresholdAppliedAmount']),
             serviceCommission: self::money($row, ['service_commission', 'serviceCommission']),
             markupCommission: self::money($row, ['markup_commission', 'markupCommission']),
             usdTotal: self::money($row, ['usd_total', 'usdTotal', 'total_usd']),

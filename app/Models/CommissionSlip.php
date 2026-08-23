@@ -23,6 +23,7 @@ class CommissionSlip extends Model
         'mtd', 'target', 'mtd_percent',
         'service_commission', 'markup_commission', 'usd_total', 'exchange_rate', 'php_total',
         'card_hold_percent', 'card_hold_amount', 'net_commission',
+        'commission_threshold', 'threshold_exempt', 'threshold_applied',
         'statement_supplied', 'transaction_count', 'fetch_error', 'notified_at',
     ];
 
@@ -31,6 +32,9 @@ class CommissionSlip extends Model
         return [
             'employee_snapshot' => 'array',
             'scheme_rules' => 'array',
+            'commission_threshold' => 'decimal:2',
+            'threshold_exempt' => 'boolean',
+            'threshold_applied' => 'decimal:2',
             'mtd' => 'decimal:2',
             'target' => 'decimal:2',
             'mtd_percent' => 'decimal:2',

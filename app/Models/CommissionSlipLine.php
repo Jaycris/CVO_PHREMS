@@ -17,7 +17,7 @@ class CommissionSlipLine extends Model
     protected $fillable = [
         'commission_slip_id', 'sort_order',
         'sold_date', 'brand', 'client', 'book_title', 'service', 'payment_method',
-        'sale_amount', 'service_amount', 'markup_amount',
+        'sale_amount', 'service_amount', 'markup_amount', 'threshold_applied',
         'service_commission', 'markup_commission',
         'usd_total', 'php_total', 'card_hold_amount', 'net_commission',
     ];
