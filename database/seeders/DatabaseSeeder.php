@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
         $this->call(AppSettingSeeder::class);
         $this->call(LeaveTypeSeeder::class);
         $this->call(HolidaySeeder::class);
+        $this->call(CashCategorySeeder::class);
 
         $admin = User::factory()->create([
             'name' => 'Admin User',

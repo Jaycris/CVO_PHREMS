@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CashLedgerExportController;
 use App\Http\Controllers\CommissionSlipPdfController;
 use App\Http\Controllers\EmployeeExportController;
 use App\Http\Controllers\MyPayslipPdfController;
@@ -132,6 +133,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::livewire('/payroll/runs/{run}', 'payroll.show')->name('payroll.show');
         Route::livewire('/payroll/payslips/{payslip}', 'payroll.payslip')->name('payroll.payslip');
         Route::get('/payroll/runs/{run}/export', PayrollRegisterExportController::class)->name('payroll.export');
+    });
+
+    Route::middleware('can:cash.manage')->group(function () {
+        Route::livewire('/money', 'cash.index')->name('cash.index');
+        Route::get('/money/export', CashLedgerExportController::class)->name('cash.export');
     });
 
     Route::middleware('can:app.settings.manage')->group(function () {

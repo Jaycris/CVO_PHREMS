@@ -85,6 +85,7 @@ class SmokeTest extends TestCase
             'run payroll' => ['/payroll'],
             '13th month' => ['/payroll/13th-month'],
             'payroll settings' => ['/payroll/settings'],
+            'money in and out' => ['/money'],
             'attendance summary' => ['/reports/attendance-summary'],
             'system settings' => ['/settings'],
         ];
@@ -197,6 +198,7 @@ class SmokeTest extends TestCase
             'payroll settings' => ['/payroll/settings'],
             'commission runs' => ['/commissions'],
             'system settings' => ['/settings'],
+            'money in and out' => ['/money'],
             'bank details' => ['/bank-details'],
             'departments' => ['/org/departments'],
             'positions' => ['/org/positions'],

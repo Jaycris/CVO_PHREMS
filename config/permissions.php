@@ -89,6 +89,10 @@ return [
             'payroll.settings.manage' => 'Payroll Settings — government contribution rates, which cutoff they come out of, and company payroll policy',
         ],
 
+        'Company Money' => [
+            'cash.manage' => 'Money In & Out — record what the company received and paid, and see the totals',
+        ],
+
         'Reports' => [
             'reports.view' => 'Reports — attendance summary and exports',
         ],

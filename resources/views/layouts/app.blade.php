@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-        <title>{{ $title ?? config('app.name') }}</title>
+        <title>PHREMS | CreatiVision Outsourcing</title>
         <link rel="icon" type="image/png" href="{{ asset('images/logo-mark.png') }}">
 
         <script>
@@ -129,6 +129,11 @@
                             <x-nav-link :href="route('payroll.settings')" :active="request()->routeIs('payroll.settings')" icon="tag">Payroll Settings</x-nav-link>
                         @endcan
                     @endif
+
+                    @can('cash.manage')
+                        <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Company Money</p>
+                        <x-nav-link :href="route('cash.index')" :active="request()->routeIs('cash.*')" icon="money">Money In &amp; Out</x-nav-link>
+                    @endcan
 
                     @can('reports.view')
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Reports</p>
