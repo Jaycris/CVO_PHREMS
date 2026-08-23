@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\CommissionScheme;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Position;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -71,7 +73,7 @@ new #[Layout('layouts.app')] class extends Component
         ];
 
         if ($this->isSalesDepartment()) {
-            $rules['commission_scheme'] = ['required', 'in:Tier 1,Tier 2,Tier 3'];
+            $rules['commission_scheme'] = ['required', Rule::in(array_keys(CommissionScheme::options()))];
             $rules['quota'] = ['required', 'numeric', 'min:0'];
         }
 
@@ -301,10 +303,10 @@ new #[Layout('layouts.app')] class extends Component
                         <div>
                             <x-label>Commission Scheme</x-label>
                             <x-select wire:model="commission_scheme">
-                                <option value="">Select tier</option>
-                                <option value="Tier 1">Tier 1</option>
-                                <option value="Tier 2">Tier 2</option>
-                                <option value="Tier 3">Tier 3</option>
+                                <option value="">Select scheme</option>
+                                @foreach (\App\Models\CommissionScheme::options() as $schemeName)
+                                    <option value="{{ $schemeName }}">{{ $schemeName }}</option>
+                                @endforeach
                             </x-select>
                             @error('commission_scheme') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                         </div>

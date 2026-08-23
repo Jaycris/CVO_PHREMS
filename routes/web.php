@@ -112,6 +112,7 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     Route::middleware('can:commissions.runs.manage')->group(function () {
         Route::livewire('/commissions', 'commissions.runs')->name('commissions.runs');
+        Route::livewire('/commissions/schemes', 'commissions.schemes')->name('commissions.schemes');
         Route::livewire('/commissions/runs/{run}', 'commissions.run-show')->name('commissions.run-show');
     });
 
