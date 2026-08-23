@@ -383,6 +383,13 @@ class CommissionRunService
             'agent_name' => $slip?->agentName ?? ($employee->fullName() ?: $employee->employee_id),
             'team' => $slip?->team ?? $employee->department?->name,
             'work_type' => $slip?->workType ?? $employee->workplace_type,
+
+            // The CRM's answer wins. What HR recorded on the employee is the
+            // fallback for a slip that could not be fetched, and the two
+            // disagreeing is exactly what the slip page points out.
+            'commission_scheme' => $slip?->scheme ?? $employee->commission_scheme,
+            'scheme_rules' => $slip?->schemeRules ?: null,
+
             'mtd' => $slip?->mtd,
             'target' => $slip?->target,
             'mtd_percent' => $slip?->mtdPercent,

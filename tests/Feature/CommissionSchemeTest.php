@@ -142,4 +142,45 @@ class CommissionSchemeTest extends TestCase
         $this->assertNotContains('Tier 1', $allowed);
         $this->assertNotContains('Whatever Somebody Typed', $allowed);
     }
+
+    #[Test]
+    public function the_slip_reads_the_scheme_the_crm_sends_under_any_of_its_names(): void
+    {
+        // The CRM stores this as the service profile while its screen says
+        // Commission Scheme, so both spellings are accepted rather than one
+        // being guessed at and the other silently ignored.
+        foreach (["commission_scheme", "scheme", "service_profile", "serviceProfile"] as $key) {
+            $slip = \App\Services\Crm\CommissionSlip::fromCrm([
+                "agent" => ["name" => "Mia Santos", $key => "Default Tier"],
+            ], "2026-08");
+
+            $this->assertSame("Default Tier", $slip->scheme, "the CRM key {$key} was ignored");
+        }
+    }
+
+    #[Test]
+    public function a_scheme_changed_in_the_crm_is_flagged_against_the_one_on_file(): void
+    {
+        $slip = \App\Services\Crm\CommissionSlip::fromCrm([
+            "agent" => ["name" => "Mia Santos", "commission_scheme" => "Senior Tier"],
+        ], "2026-08");
+
+        $this->assertTrue($slip->schemeDisagreesWith("Default Tier"));
+        $this->assertFalse($slip->schemeDisagreesWith("Senior Tier"));
+        $this->assertFalse($slip->schemeDisagreesWith("  senior tier  "), "spacing and case should not count as a difference");
+    }
+
+    #[Test]
+    public function nothing_is_flagged_while_the_crm_sends_no_scheme_at_all(): void
+    {
+        // Which is where it stands today. Warning on every slip because the CRM
+        // is silent would teach people to ignore the warning before it ever
+        // meant anything.
+        $slip = \App\Services\Crm\CommissionSlip::fromCrm([
+            "agent" => ["name" => "Mia Santos"],
+        ], "2026-08");
+
+        $this->assertNull($slip->scheme);
+        $this->assertFalse($slip->schemeDisagreesWith("Default Tier"));
+    }
 }

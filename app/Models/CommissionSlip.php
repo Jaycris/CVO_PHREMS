@@ -19,6 +19,7 @@ class CommissionSlip extends Model
     protected $fillable = [
         'commission_run_id', 'employee_id', 'employee_snapshot',
         'agent_name', 'team', 'work_type',
+        'commission_scheme', 'scheme_rules',
         'mtd', 'target', 'mtd_percent',
         'service_commission', 'markup_commission', 'usd_total', 'exchange_rate', 'php_total',
         'card_hold_percent', 'card_hold_amount', 'net_commission',
@@ -29,6 +30,7 @@ class CommissionSlip extends Model
     {
         return [
             'employee_snapshot' => 'array',
+            'scheme_rules' => 'array',
             'mtd' => 'decimal:2',
             'target' => 'decimal:2',
             'mtd_percent' => 'decimal:2',

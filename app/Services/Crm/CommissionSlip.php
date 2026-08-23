@@ -20,6 +20,23 @@ class CommissionSlip
         public readonly ?string $agentName = null,
         public readonly ?string $team = null,
         public readonly ?string $workType = null,
+
+        // What the CRM says this agent's plan is called.
+        public readonly ?string $scheme = null,
+
+        /**
+         * The rate bands behind that plan, as the CRM defines them: the
+         * commission percentage that applies once the agent passes each share
+         * of their target. Ordered lowest threshold first.
+         *
+         * Displayed, never applied. The CRM has already worked out what this
+         * agent earned; re-deriving it here would be a second copy of the
+         * maths to keep in step, and the two would eventually disagree.
+         *
+         * @var list<array{minimum_mtd_percent: float, commission_percent: float}>
+         */
+        public readonly array $schemeRules = [],
+
         public readonly ?float $mtd = null,
         public readonly ?float $target = null,
         public readonly ?float $mtdPercent = null,
@@ -57,8 +74,13 @@ class CommissionSlip
                 ?? self::text($payload, ['agent_name']),
             team: self::text($agent, ['team']) ?? self::text($summary, ['team']),
             workType: self::text($agent, ['work_type', 'workType']) ?? self::text($summary, ['work_type']),
+
+            scheme: self::schemeName($agent, $summary),
+            schemeRules: self::schemeRules($agent, $summary),
+
             mtd: self::money($summary, ['mtd', 'mtd_amount']),
-            target: self::money($summary, ['target', 'quota']),
+            target: self::money($summary, ['target', 'agent_target', 'quota'])
+                ?? self::money($agent, ['agent_target', 'target']),
             mtdPercent: self::money($summary, ['mtd_percent', 'mtdPercent', 'mtd_percentage']),
             serviceCommission: self::money($summary, ['service_commission', 'serviceCommission']),
             markupCommission: self::money($summary, ['markup_commission', 'markupCommission']),
@@ -71,6 +93,132 @@ class CommissionSlip
             transactions: $rows,
             statementSupplied: $hasStatement,
         );
+    }
+
+    /**
+     * The scheme's name, however the CRM chose to wrap it.
+     *
+     * It sends an object — a name plus the rate bands — but a plain string is
+     * just as reasonable a thing for it to send later, and the name is all
+     * most of the app needs. Both are read rather than one being assumed.
+     *
+     * @param  array<string, mixed>  $agent
+     * @param  array<string, mixed>  $summary
+     */
+    protected static function schemeName(array $agent, array $summary): ?string
+    {
+        $keys = ['commission_scheme', 'commissionScheme', 'scheme', 'service_profile', 'serviceProfile', 'profile'];
+
+        foreach ([$agent, $summary] as $source) {
+            foreach ($keys as $key) {
+                $value = $source[$key] ?? null;
+
+                if (is_array($value)) {
+                    $name = self::text($value, ['name', 'title', 'label']);
+
+                    if ($name !== null) {
+                        return $name;
+                    }
+
+                    continue;
+                }
+
+                $name = self::text($source, [$key]);
+
+                if ($name !== null) {
+                    return $name;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The rate bands, normalised and sorted by threshold.
+     *
+     * Sorted here rather than trusted, because "the band you are on" is read
+     * off the first row whose threshold you have passed, and an out-of-order
+     * list would quietly name the wrong one.
+     *
+     * @param  array<string, mixed>  $agent
+     * @param  array<string, mixed>  $summary
+     * @return list<array{minimum_mtd_percent: float, commission_percent: float}>
+     */
+    protected static function schemeRules(array $agent, array $summary): array
+    {
+        foreach ([$agent, $summary] as $source) {
+            foreach (['commission_scheme', 'commissionScheme', 'scheme', 'service_profile'] as $key) {
+                $scheme = $source[$key] ?? null;
+
+                if (! is_array($scheme) || ! is_array($scheme['rules'] ?? null)) {
+                    continue;
+                }
+
+                $rules = [];
+
+                foreach ($scheme['rules'] as $rule) {
+                    if (! is_array($rule)) {
+                        continue;
+                    }
+
+                    $percent = self::money($rule, ['commission_percent', 'commissionPercent', 'percent']);
+
+                    if ($percent === null) {
+                        continue;
+                    }
+
+                    $rules[] = [
+                        'minimum_mtd_percent' => self::money($rule, ['minimum_mtd_percent', 'minimumMtdPercent', 'min_mtd_percent']) ?? 0.0,
+                        'commission_percent' => $percent,
+                    ];
+                }
+
+                usort($rules, fn ($a, $b) => $a['minimum_mtd_percent'] <=> $b['minimum_mtd_percent']);
+
+                return $rules;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * The band this agent has actually reached, or null when it cannot be told.
+     *
+     * @return array{minimum_mtd_percent: float, commission_percent: float}|null
+     */
+    public function currentSchemeRule(): ?array
+    {
+        if ($this->schemeRules === [] || $this->mtdPercent === null) {
+            return null;
+        }
+
+        $reached = null;
+
+        foreach ($this->schemeRules as $rule) {
+            if ($this->mtdPercent >= $rule['minimum_mtd_percent']) {
+                $reached = $rule;
+            }
+        }
+
+        return $reached;
+    }
+
+    /**
+     * Whether the CRM's plan for this agent differs from what HR recorded.
+     *
+     * Silent when either side is missing. The CRM does not send the scheme
+     * yet, and warning about every slip because of that would teach people to
+     * ignore the warning before it ever meant anything.
+     */
+    public function schemeDisagreesWith(?string $recorded): bool
+    {
+        if ($this->scheme === null || blank($recorded)) {
+            return false;
+        }
+
+        return mb_strtolower(trim($this->scheme)) !== mb_strtolower(trim($recorded));
     }
 
     public function monthLabel(): string
