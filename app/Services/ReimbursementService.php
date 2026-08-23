@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Notifications\ReimbursementActionNeeded;
 use App\Notifications\ReimbursementStatusUpdated;
 use App\Support\StoresReceipt;
+use App\Services\Concerns\SerialisesConcurrentWrites;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\DB;
  */
 class ReimbursementService
 {
+    use SerialisesConcurrentWrites;
     use StoresReceipt;
 
     public function submit(
@@ -90,7 +92,14 @@ class ReimbursementService
         }
 
         return DB::transaction(function () use ($claim, $actor, $approved, $amount, $note) {
-            $claim->update([
+            // Two approvers allowing different amounts would otherwise both
+            // succeed, and the last write would quietly decide what the
+            // company pays back. Re-read under the lock and refuse the second.
+            $locked = $this->lockRow(ReimbursementRequest::class, $claim->id);
+
+            abort_unless($locked->isPending(), 403, 'This claim has already been decided.');
+
+            $locked->update([
                 'status' => $approved ? 'approved' : 'declined',
                 'amount_approved' => $approved ? $amount : null,
                 'decided_by_user_id' => $actor->id,

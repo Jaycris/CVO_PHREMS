@@ -8,6 +8,7 @@ use App\Models\RequestType;
 use App\Models\User;
 use App\Notifications\EmployeeRequestActionNeeded;
 use App\Notifications\EmployeeRequestStatusUpdated;
+use App\Services\Concerns\SerialisesConcurrentWrites;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,8 @@ use Illuminate\Support\Facades\DB;
  */
 class EmployeeRequestService
 {
+    use SerialisesConcurrentWrites;
+
     /**
      * @param  list<string>  $dates  Ignored for types that do not need dates.
      */
@@ -55,18 +58,25 @@ class EmployeeRequestService
                 abort(422, 'This has to be asked for in advance. '
                     . $past->first()->format('M j') . ' has already passed.');
             }
-
-            $clash = $this->clashingDates($employee, $type, $dates);
-
-            if ($clash->isNotEmpty()) {
-                abort(422, 'You already have a ' . $type->name . ' request covering '
-                    . $clash->first()->format('M j') . '. Withdraw it first if you need to change it.');
-            }
         }
 
         $manager = $employee->reportsTo;
 
         return DB::transaction(function () use ($employee, $type, $details, $dates, $manager) {
+            // The clash check has to happen inside the lock. Outside it, two
+            // submissions racing each other both find no clash and both get
+            // filed for the same days.
+            $this->lockEmployee($employee);
+
+            if ($type->needs_dates) {
+                $clash = $this->clashingDates($employee, $type, $dates);
+
+                if ($clash->isNotEmpty()) {
+                    abort(422, 'You already have a ' . $type->name . ' request covering '
+                        . $clash->first()->format('M j') . '. Withdraw it first if you need to change it.');
+                }
+            }
+
             $request = EmployeeRequest::create([
                 'employee_id' => $employee->id,
                 'request_type_id' => $type->id,
@@ -101,15 +111,24 @@ class EmployeeRequestService
         abort_unless($isAssignedManager || $isFallbackApprover, 403, 'You cannot decide this request.');
 
         DB::transaction(function () use ($request, $actor, $approved, $note) {
-            $request->update([
+            // The status above was read off a copy loaded before the click.
+            // Re-read it under the lock so a second approver is turned away
+            // rather than overwriting the first decision and its note.
+            $locked = $this->lockRow(EmployeeRequest::class, $request->id);
+
+            abort_unless($locked->isPending(), 403, 'This request has already been decided.');
+
+            $locked->update([
                 'status' => $approved ? 'approved' : 'declined',
-                'manager_id' => $request->manager_id ?? $actor->id,
+                'manager_id' => $locked->manager_id ?? $actor->id,
                 'decided_at' => now(),
                 'decision_note' => $note,
             ]);
 
-            $this->notifyRequestor($request->fresh(['employee', 'type', 'manager', 'days']));
+            $this->notifyRequestor($locked->fresh(['employee', 'type', 'manager', 'days']));
         });
+
+        $request->refresh();
     }
 
     /** An employee may withdraw their own request while it is still pending. */

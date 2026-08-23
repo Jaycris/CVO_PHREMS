@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Notifications\BankDetailActionNeeded;
 use App\Notifications\BankDetailChangeNotice;
 use App\Notifications\BankDetailStatusUpdated;
+use App\Services\Concerns\SerialisesConcurrentWrites;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -35,6 +36,8 @@ use Illuminate\Support\Facades\DB;
  */
 class BankDetailService
 {
+    use SerialisesConcurrentWrites;
+
     /**
      * Files a change, or writes the details straight through on a first entry.
      *
@@ -48,12 +51,6 @@ class BankDetailService
         string $accountNumber,
         ?string $reason = null,
     ): ?BankDetailRequest {
-        abort_if(
-            $this->pendingFor($employee) !== null,
-            422,
-            'You already have a bank detail change waiting for approval. Withdraw it first if you need to change it again.'
-        );
-
         $bankName = trim($bankName);
         $accountName = trim($accountName);
         $accountNumber = trim($accountNumber);
@@ -65,6 +62,19 @@ class BankDetailService
         );
 
         return DB::transaction(function () use ($employee, $bankName, $accountName, $accountNumber, $reason) {
+            // Locked before the check, because "do they already have one
+            // waiting?" and the insert that follows have to be one step. Two
+            // requests filed at once would otherwise both find nothing pending,
+            // and an approver would be handed two competing accounts for the
+            // same person with no way to tell which was meant.
+            $this->lockEmployee($employee);
+
+            abort_if(
+                $this->pendingFor($employee) !== null,
+                422,
+                'You already have a bank detail change waiting for approval. Withdraw it first if you need to change it again.'
+            );
+
             if (! $this->hasDetails($employee)) {
                 $this->write($employee, $bankName, $accountName, $accountNumber);
 
@@ -112,6 +122,13 @@ class BankDetailService
         abort_unless($this->canApprove($actor), 403, 'You cannot decide bank detail changes.');
 
         return DB::transaction(function () use ($request, $actor, $approved, $note) {
+            // This is the write that redirects someone's salary, so the check
+            // that it is still undecided has to happen under the lock, in the
+            // same breath as the write itself.
+            $locked = $this->lockRow(BankDetailRequest::class, $request->id);
+
+            abort_unless($locked->isPending(), 403, 'This request has already been decided.');
+
             if ($approved) {
                 $this->write(
                     $request->employee,

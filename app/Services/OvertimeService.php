@@ -6,6 +6,7 @@ use App\Models\AttendanceDay;
 use App\Models\Employee;
 use App\Models\OvertimeRequest;
 use App\Models\User;
+use App\Services\Concerns\SerialisesConcurrentWrites;
 use App\Notifications\OvertimeRequestActionNeeded;
 use App\Notifications\OvertimeRequestStatusUpdated;
 use Illuminate\Support\Carbon;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 
 class OvertimeService
 {
+    use SerialisesConcurrentWrites;
+
     /**
      * Overtime pays a flat hourly rate, so an inflated claim is money out the
      * door. Submission is therefore capped against what attendance actually
@@ -24,16 +27,20 @@ class OvertimeService
 
         abort_if($date->isFuture(), 422, 'Overtime can only be filed for a date that has already passed.');
 
-        $duplicate = OvertimeRequest::where('employee_id', $employee->id)
-            ->whereDate('work_date', $date)
-            ->whereIn('status', ['pending_manager', 'approved'])
-            ->exists();
-
-        abort_if($duplicate, 422, 'An overtime request for that date is already pending or approved.');
-
         $manager = $employee->reportsTo;
 
         return DB::transaction(function () use ($employee, $date, $hours, $reason, $manager) {
+            // The duplicate check and the insert have to be one step. Apart, a
+            // double-click files the same overtime twice, and both get paid.
+            $this->lockEmployee($employee);
+
+            $duplicate = OvertimeRequest::where('employee_id', $employee->id)
+                ->whereDate('work_date', $date)
+                ->whereIn('status', ['pending_manager', 'approved'])
+                ->exists();
+
+            abort_if($duplicate, 422, 'An overtime request for that date is already pending or approved.');
+
             $request = OvertimeRequest::create([
                 'employee_id' => $employee->id,
                 'work_date' => $date,
@@ -81,17 +88,27 @@ class OvertimeService
         }
 
         DB::transaction(function () use ($request, $actor, $approved, $hours, $note) {
-            $request->update([
+            // Re-read under the lock: the status checked above came off a copy
+            // loaded before the click, so two approvers can both have found it
+            // pending. Approved hours are what payroll pays, so a second
+            // decision overwriting the first silently changes someone's pay.
+            $locked = $this->lockRow(OvertimeRequest::class, $request->id);
+
+            abort_unless($locked->isPending(), 403, 'This overtime request has already been decided.');
+
+            $locked->update([
                 'status' => $approved ? 'approved' : 'declined',
                 'hours_approved' => $hours,
-                'manager_id' => $request->manager_id ?? $actor->id,
+                'manager_id' => $locked->manager_id ?? $actor->id,
                 'manager_decision' => $approved ? 'approved' : 'declined',
                 'manager_decided_at' => now(),
                 'manager_note' => $note,
             ]);
 
-            $this->notifyRequestor($request->fresh(['employee', 'manager']));
+            $this->notifyRequestor($locked->fresh(['employee', 'manager']));
         });
+
+        $request->refresh();
     }
 
     /** An employee may withdraw their own request while it is still pending. */

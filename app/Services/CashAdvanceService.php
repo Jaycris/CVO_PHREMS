@@ -9,12 +9,15 @@ use App\Models\Employee;
 use App\Models\User;
 use App\Notifications\CashAdvanceRequestActionNeeded;
 use App\Notifications\CashAdvanceRequestStatusUpdated;
+use App\Services\Concerns\SerialisesConcurrentWrites;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class CashAdvanceService
 {
+    use SerialisesConcurrentWrites;
+
     public function open(
         Employee $employee,
         float $principal,
@@ -210,13 +213,18 @@ class CashAdvanceService
 
         $this->guardDeductionPlan($deductionPlan);
 
-        $pending = CashAdvanceRequest::where('employee_id', $employee->id)
-            ->where('status', 'pending')
-            ->exists();
-
-        abort_if($pending, 422, 'You already have a cash advance request awaiting approval.');
-
         return DB::transaction(function () use ($employee, $amount, $deductionPlan, $neededBy, $reason) {
+            // One pending request at a time is the rule, so the check and the
+            // insert have to be one step. Outside the lock, a double-click
+            // files two and the company could release the money twice.
+            $this->lockEmployee($employee);
+
+            $pending = CashAdvanceRequest::where('employee_id', $employee->id)
+                ->where('status', 'pending')
+                ->exists();
+
+            abort_if($pending, 422, 'You already have a cash advance request awaiting approval.');
+
             $request = CashAdvanceRequest::create([
                 'employee_id' => $employee->id,
                 'amount_requested' => round($amount, 2),
@@ -296,6 +304,14 @@ class CashAdvanceService
         }
 
         DB::transaction(function () use ($request, $actor, $approved, $amount, $plan, $note, $startDate) {
+            // The heaviest one in the app. Approving opens a real cash advance,
+            // so two approvals racing each other open two — the company hands
+            // out the money twice and then recovers it twice from payslips.
+            // Nothing downstream can tell the second one was a mistake.
+            $locked = $this->lockRow(CashAdvanceRequest::class, $request->id);
+
+            abort_unless($locked->isPending(), 403, 'This request has already been decided.');
+
             $advance = null;
 
             if ($approved) {
