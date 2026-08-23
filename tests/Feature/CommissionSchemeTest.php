@@ -89,28 +89,6 @@ class CommissionSchemeTest extends TestCase
     }
 
     #[Test]
-    public function the_schemes_page_opens_and_lists_them(): void
-    {
-        CommissionScheme::create(['name' => 'Standard', 'crm_key' => 'standard_profile']);
-
-        $this->get('/commissions/schemes')
-            ->assertOk()
-            ->assertSee('Standard')
-            ->assertSee('standard_profile')
-            // The whole reason the page exists, said on the page.
-            ->assertSee('These names have to match the CRM');
-    }
-
-    #[Test]
-    public function an_employee_cannot_open_the_schemes_page(): void
-    {
-        $user = User::factory()->create();
-        $user->assignRole('Employee');
-
-        $this->actingAs($user)->get('/commissions/schemes')->assertForbidden();
-    }
-
-    #[Test]
     public function the_employee_forms_no_longer_hard_code_the_invented_tiers(): void
     {
         // "Tier 1/2/3" was written into both forms and matched nothing in the

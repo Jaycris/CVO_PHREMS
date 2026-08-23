@@ -111,7 +111,6 @@
                         @endcan
                         @can('commissions.runs.manage')
                             <x-nav-link :href="route('commissions.runs')" :active="request()->routeIs('commissions.runs') || request()->routeIs('commissions.run-show')" icon="chart">Commission Runs</x-nav-link>
-                            <x-nav-link :href="route('commissions.schemes')" :active="request()->routeIs('commissions.schemes')" icon="tag">Commission Schemes</x-nav-link>
                         @endcan
                         @can('bank_details.approve')
                             <x-nav-link :href="route('bank-details.index')" :active="request()->routeIs('bank-details.*')" icon="money">Bank Details</x-nav-link>
