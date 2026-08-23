@@ -21,34 +21,11 @@
         'Month' => $slip->monthLabel(),
     ];
 
-    $identity['Commission Scheme'] = $slip->commission_scheme ?: '—';
-
     $performance = [
         'MTD' => $money($slip->mtd, '$'),
-        'Agent Target' => $money($slip->target, '$'),
+        'Target' => $money($slip->target, '$'),
         'MTD %' => $percent($slip->mtd_percent),
     ];
-
-    // The rate bands as the CRM defined them when this slip was computed, and
-    // which one the agent had reached. Shown, never applied — the CRM has
-    // already worked out what is owed, and a second copy of the maths here
-    // would eventually disagree with it.
-    $rules = collect($slip->scheme_rules ?? [])
-        ->filter(fn ($rule) => isset($rule['commission_percent']))
-        ->sortBy('minimum_mtd_percent')
-        ->values();
-
-    // The band reached is simply the last one whose threshold has been passed,
-    // which is why the list is sorted first.
-    $reachedIndex = null;
-
-    if ($slip->mtd_percent !== null) {
-        foreach ($rules as $i => $rule) {
-            if ((float) $slip->mtd_percent >= (float) ($rule['minimum_mtd_percent'] ?? 0)) {
-                $reachedIndex = $i;
-            }
-        }
-    }
 
     $earned = [
         ['Service commission', $money($slip->service_commission, '$')],
@@ -85,40 +62,6 @@
             </div>
         @endforeach
     </div>
-
-    @if ($rules->isNotEmpty())
-        <div class="overflow-hidden rounded-xl border border-ink-200 dark:border-white/10">
-            <div class="flex flex-wrap items-baseline justify-between gap-2 bg-ink-50 px-5 py-2.5 dark:bg-white/5">
-                <p class="text-xs font-bold uppercase tracking-[0.14em] text-ink-500 dark:text-ink-400">
-                    {{ $slip->commission_scheme ?: 'Commission scheme' }} &mdash; rates
-                </p>
-                <p class="text-xs font-medium text-ink-500 dark:text-ink-400">
-                    As set in the CRM when this slip was computed.
-                </p>
-            </div>
-
-            <div class="divide-y divide-ink-100 dark:divide-white/10">
-                @foreach ($rules as $i => $rule)
-                    @php $reached = $reachedIndex === $i; @endphp
-                    <div class="flex items-center justify-between gap-4 px-5 py-2.5 {{ $reached ? 'bg-brand-50 dark:bg-brand-500/10' : '' }}">
-                        <span class="text-sm font-medium {{ $reached ? 'text-brand-800 dark:text-brand-200' : 'text-ink-700 dark:text-ink-300' }}">
-                            @if ((float) ($rule['minimum_mtd_percent'] ?? 0) <= 0)
-                                Up to {{ number_format((float) ($rules[$i + 1]['minimum_mtd_percent'] ?? 100), 0) }}% of target
-                            @else
-                                From {{ number_format((float) $rule['minimum_mtd_percent'], 0) }}% of target
-                            @endif
-                            @if ($reached)
-                                <span class="ml-1 text-xs font-bold uppercase tracking-wide">&larr; reached</span>
-                            @endif
-                        </span>
-                        <span class="text-sm font-bold tabular-nums {{ $reached ? 'text-brand-800 dark:text-brand-200' : 'text-ink-900 dark:text-white' }}">
-                            {{ number_format((float) $rule['commission_percent'], 2) }}%
-                        </span>
-                    </div>
-                @endforeach
-            </div>
-        </div>
-    @endif
 
     <div class="grid gap-0 overflow-hidden rounded-xl border border-ink-200 md:grid-cols-2 md:divide-x md:divide-ink-200 dark:border-white/10 dark:md:divide-white/10">
         <div class="divide-y divide-ink-100 dark:divide-white/10">

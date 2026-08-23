@@ -2,6 +2,7 @@
 
 use App\Livewire\Concerns\WithTablePagination;
 use App\Models\CommissionScheme;
+use App\Services\Commission\CommissionProfileSync;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -31,6 +32,35 @@ new #[Layout('layouts.app')] class extends Component
     public string $description = '';
     public bool $is_active = true;
     public string $sort_order = '0';
+
+    /**
+     * Pulls every agent's plan and target down from the CRM.
+     *
+     * One way only. The CRM decides what an agent is on; this brings the copy
+     * on the employee record back in line with it.
+     */
+    public function syncFromCrm(CommissionProfileSync $sync): void
+    {
+        $this->statusMessage = null;
+        $this->errorMessage = null;
+
+        $result = $sync->syncAll();
+
+        $parts = [];
+        $parts[] = $result['changed'] === 0
+            ? 'Everyone already matched the CRM.'
+            : $result['changed'] . ' employee record(s) brought in line with the CRM.';
+
+        if ($result['failed'] !== []) {
+            // Named rather than counted: the usual cause is a CRM user with no
+            // HRIS Employee ID on it, and knowing which agent is the fix.
+            $this->errorMessage = 'The CRM had no answer for '
+                . implode(', ', array_keys($result['failed']))
+                . '. Usually that means the CRM user is missing its HRIS Employee ID.';
+        }
+
+        $this->statusMessage = implode(' ', $parts);
+    }
 
     public function create(): void
     {
@@ -131,9 +161,22 @@ new #[Layout('layouts.app')] class extends Component
             </p>
         </div>
 
-        <x-button wire:click="create" @click="$wire.showForm = true" pill>
-            <x-icon name="plus" class="h-4 w-4" /> Add Scheme
-        </x-button>
+        <div class="flex flex-wrap items-center gap-2">
+            <x-button wire:click="syncFromCrm"
+                      wire:loading.attr="disabled"
+                      wire:target="syncFromCrm"
+                      variant="secondary" pill>
+                <span wire:loading.remove wire:target="syncFromCrm">Sync from CRM</span>
+                <span wire:loading wire:target="syncFromCrm" class="flex items-center gap-2">
+                    <span class="h-3 w-3 animate-spin rounded-full border-2 border-brand-200 border-t-brand-700"></span>
+                    Asking the CRM…
+                </span>
+            </x-button>
+
+            <x-button wire:click="create" @click="$wire.showForm = true" pill>
+                <x-icon name="plus" class="h-4 w-4" /> Add Scheme
+            </x-button>
+        </div>
     </div>
 
     @if ($statusMessage)
@@ -150,6 +193,12 @@ new #[Layout('layouts.app')] class extends Component
             The CRM works out every commission figure. PHREMS only records which plan someone is on and prints
             what the CRM sends back — so if the two lists drift apart, a slip ends up describing an agent's pay
             by a name nobody else in the business uses, and the first person to notice is the agent.
+        </p>
+        <p class="mt-2 text-sm font-medium text-[#778599]">
+            <span class="font-bold text-[#0f172a] dark:text-white">Sync from CRM</span> copies each agent's plan and
+            target down from the CRM onto their employee record, and adds any scheme it names that is not on this
+            list. It only ever reads — nothing here is written back, so a mistake in PHREMS cannot change what
+            anyone is actually paid.
         </p>
         <p class="mt-2 text-sm font-medium text-[#778599]">
             In the CRM this is stored as the <span class="font-bold text-[#0f172a] dark:text-white">service profile</span>,
