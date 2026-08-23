@@ -94,6 +94,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::livewire('/dtr', 'attendance.dtr')->name('attendance.dtr');
     });
 
+    Route::middleware('can:attendance.networks.manage')->group(function () {
+        Route::livewire('/office-networks', 'attendance.office-networks')->name('attendance.networks');
+    });
+
     Route::middleware('can:holidays.manage')->group(function () {
         Route::livewire('/holidays', 'holidays.index')->name('holidays.index');
     });

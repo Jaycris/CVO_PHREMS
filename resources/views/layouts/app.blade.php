@@ -43,7 +43,7 @@
                     $showPeople = auth()->user()->canAny([
                         'employees.manage', 'users.manage', 'schedules.manage',
                         'attendance.view_all', 'leave.types.manage', 'cash_advances.manage',
-                        'requests.types.manage', 'holidays.manage',
+                        'requests.types.manage', 'holidays.manage', 'attendance.networks.manage',
                         'recruitment.manage',
                         'reimbursements.view_all',
                         'bank_details.approve',
@@ -93,6 +93,9 @@
                         @endcan
                         @can('attendance.view_all')
                             <x-nav-link :href="route('attendance.dtr')" :active="request()->routeIs('attendance.dtr')" icon="clock">DTR</x-nav-link>
+                        @endcan
+                        @can('attendance.networks.manage')
+                            <x-nav-link :href="route('attendance.networks')" :active="request()->routeIs('attendance.networks')" icon="building">Office Networks</x-nav-link>
                         @endcan
                         @can('holidays.manage')
                             <x-nav-link :href="route('holidays.index')" :active="request()->routeIs('holidays.*')" icon="calendar">Holidays</x-nav-link>

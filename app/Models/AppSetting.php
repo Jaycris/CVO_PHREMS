@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class AppSetting extends Model
 {
@@ -49,6 +50,31 @@ class AppSetting extends Model
         $value = static::all_()[$key] ?? null;
 
         return $value === null || $value === '' ? $default : $value;
+    }
+
+    public static function flag(string $key, bool $default = false): bool
+    {
+        $value = static::get($key);
+
+        return $value === null ? $default : filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Writes a setting, creating the row if this is the first time.
+     *
+     * The label is required by the table and is what the settings screen shows,
+     * so a row created here derives a readable one from the key rather than
+     * failing on a NOT NULL constraint the caller never asked about.
+     */
+    public static function put(string $key, ?string $value, ?string $label = null): void
+    {
+        static::updateOrCreate(
+            ['key' => $key],
+            [
+                'value' => $value,
+                'label' => $label ?? static::firstWhere('key', $key)?->label ?? Str::headline($key),
+            ],
+        );
     }
 
     /**

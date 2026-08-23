@@ -3,6 +3,7 @@
 use App\Livewire\Concerns\WithTablePagination;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
+use App\Services\Attendance\PunchLocationPolicy;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -77,8 +78,32 @@ new #[Layout('layouts.app')] class extends Component
             ->first();
     }
 
+    /**
+     * Refuses the punch when an on-site employee is not on an office network.
+     *
+     * Checked on all four actions rather than only on Time In. Guarding the
+     * way in but not the way out would let someone clock in at the office and
+     * then take their breaks and clock out from a bus.
+     */
+    protected function atAllowedLocation(): bool
+    {
+        $policy = app(PunchLocationPolicy::class);
+        $ip = request()->ip();
+
+        if ($policy->allows($this->employee, $ip)) {
+            return true;
+        }
+
+        $this->errorMessage = $policy->refusalMessage($ip);
+
+        return false;
+    }
+
     public function timeIn(): void
     {
+        if (! $this->atAllowedLocation()) {
+            return;
+        }
         if ($this->openDay()) {
             $this->errorMessage = 'You are already timed in.';
 
@@ -104,6 +129,9 @@ new #[Layout('layouts.app')] class extends Component
 
     public function timeOut(): void
     {
+        if (! $this->atAllowedLocation()) {
+            return;
+        }
         $day = $this->openDay();
 
         if (! $day) {
@@ -124,6 +152,9 @@ new #[Layout('layouts.app')] class extends Component
 
     public function startBreak(): void
     {
+        if (! $this->atAllowedLocation()) {
+            return;
+        }
         $day = $this->openDay();
 
         if (! $day) {
@@ -144,6 +175,9 @@ new #[Layout('layouts.app')] class extends Component
 
     public function endBreak(): void
     {
+        if (! $this->atAllowedLocation()) {
+            return;
+        }
         $day = $this->openDay();
         $break = $day?->openBreak();
 
