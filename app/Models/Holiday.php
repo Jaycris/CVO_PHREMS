@@ -14,13 +14,23 @@ use Illuminate\Support\Carbon;
  * "additional special days" that get added around Christmas — are not knowable
  * in advance. HR types in the proclamation; nobody waits for a release.
  *
- * The three types are not labels. Each answers a different pay question:
+ * The types are not labels. Each answers a different pay question:
  *
  *   Regular Holiday          Paid whether or not it is worked.
  *   Special (Non-Working)    Paid for monthly-paid staff; nobody is expected in.
  *   Special (Working) Day    An ordinary working day. This is the government
  *                            explicitly saying it is *not* a holiday, so not
  *                            turning up is still an absence.
+ *   Paid Day Off             A day the company simply gives, with no Philippine
+ *                            statute behind it. This is where US holidays and
+ *                            company shutdowns live — the first three are
+ *                            Philippine Labor Code categories and calling
+ *                            Thanksgiving a "Special (Non-Working) Day" would
+ *                            be inventing a legal status it does not have.
+ *
+ * Observance is a separate question from pay. It records whose holiday it is,
+ * because this company follows both Philippine and American calendars and a
+ * list that cannot tell them apart is a list nobody trusts.
  */
 class Holiday extends Model
 {
@@ -30,14 +40,45 @@ class Holiday extends Model
 
     public const SPECIAL_WORKING = 'special_working';
 
+    public const PAID_DAY_OFF = 'paid_day_off';
+
     /** @var array<string, string> */
     public const TYPES = [
         self::REGULAR => 'Regular Holiday',
         self::SPECIAL_NON_WORKING => 'Special (Non-Working) Day',
         self::SPECIAL_WORKING => 'Special (Working) Day',
+        self::PAID_DAY_OFF => 'Paid Day Off',
     ];
 
-    protected $fillable = ['date', 'name', 'type', 'note'];
+    public const PHILIPPINES = 'philippines';
+
+    public const UNITED_STATES = 'united_states';
+
+    public const COMPANY = 'company';
+
+    /** @var array<string, string> */
+    public const OBSERVANCES = [
+        self::PHILIPPINES => 'Philippines',
+        self::UNITED_STATES => 'United States',
+        self::COMPANY => 'Company',
+    ];
+
+    /**
+     * The types that make sense for each observance.
+     *
+     * Only Philippine holidays carry Labor Code categories. Offering "Regular
+     * Holiday" for the Fourth of July would invite somebody to tick it and
+     * later expect the 200% premium that goes with it.
+     *
+     * @var array<string, list<string>>
+     */
+    public const TYPES_BY_OBSERVANCE = [
+        self::PHILIPPINES => [self::REGULAR, self::SPECIAL_NON_WORKING, self::SPECIAL_WORKING],
+        self::UNITED_STATES => [self::PAID_DAY_OFF, self::SPECIAL_WORKING],
+        self::COMPANY => [self::PAID_DAY_OFF, self::SPECIAL_WORKING],
+    ];
+
+    protected $fillable = ['date', 'name', 'type', 'observance', 'note'];
 
     protected function casts(): array
     {
@@ -49,6 +90,31 @@ class Holiday extends Model
         return self::TYPES[$this->type] ?? $this->type;
     }
 
+    public function observanceLabel(): string
+    {
+        return self::OBSERVANCES[$this->observance] ?? $this->observance;
+    }
+
+    /**
+     * The type options that apply to an observance, as value => label.
+     *
+     * Ordered as listed in TYPES_BY_OBSERVANCE rather than as listed in TYPES,
+     * because the first one is what a new holiday defaults to — and for a US
+     * or company holiday that has to be the paid day off, not the working day.
+     */
+    public static function typesFor(string $observance): array
+    {
+        $allowed = self::TYPES_BY_OBSERVANCE[$observance] ?? array_keys(self::TYPES);
+
+        $options = [];
+
+        foreach ($allowed as $type) {
+            $options[$type] = self::TYPES[$type];
+        }
+
+        return $options;
+    }
+
     /**
      * Whether an employee keeps their day's pay without working it.
      *
@@ -58,6 +124,11 @@ class Holiday extends Model
     public function isPaidWhenNotWorked(): bool
     {
         return $this->type !== self::SPECIAL_WORKING;
+    }
+
+    public function scopeObservance(Builder $query, string $observance): Builder
+    {
+        return $query->where('observance', $observance);
     }
 
     public function scopeBetween(Builder $query, Carbon $start, Carbon $end): Builder

@@ -241,6 +241,101 @@ class HolidayTest extends PayrollTestCase
     }
 
     #[Test]
+    public function a_us_holiday_the_company_observes_protects_the_day_s_pay(): void
+    {
+        $period = $this->period();
+        $employee = $this->makeEmployee();
+        $holidayOn = $this->workday($employee, $period);
+
+        // The company is US-facing and follows some American holidays. A day
+        // off is a day off — payroll must not mark anyone absent for it.
+        Holiday::create([
+            'date' => $holidayOn,
+            'name' => 'Thanksgiving Day',
+            'type' => Holiday::PAID_DAY_OFF,
+            'observance' => Holiday::UNITED_STATES,
+        ]);
+
+        $this->fillAttendance($employee, $period, absentOn: [$holidayOn]);
+
+        $counters = $this->aggregate($employee, $period);
+
+        $this->assertSame(0, $counters['days_absent'], 'a US holiday was counted as an absence');
+        $this->assertSame(1, $counters['days_holiday']);
+    }
+
+    #[Test]
+    public function philippine_and_us_holidays_both_reach_payroll(): void
+    {
+        $period = $this->period();
+        $employee = $this->makeEmployee();
+        $days = $this->workingDays($employee, $period);
+
+        Holiday::create(['date' => $days[1], 'name' => 'Ninoy Aquino Day', 'type' => Holiday::SPECIAL_NON_WORKING, 'observance' => Holiday::PHILIPPINES]);
+        Holiday::create(['date' => $days[3], 'name' => 'Independence Day (US)', 'type' => Holiday::PAID_DAY_OFF, 'observance' => Holiday::UNITED_STATES]);
+        Holiday::create(['date' => $days[5], 'name' => 'Founding Anniversary', 'type' => Holiday::PAID_DAY_OFF, 'observance' => Holiday::COMPANY]);
+
+        $this->fillAttendance($employee, $period, absentOn: [$days[1], $days[3], $days[5]]);
+
+        $counters = $this->aggregate($employee, $period);
+
+        // Payroll asks one question — does this day protect pay — and does not
+        // care whose calendar it came from.
+        $this->assertSame(0, $counters['days_absent']);
+        $this->assertSame(3, $counters['days_holiday']);
+    }
+
+    #[Test]
+    public function a_us_holiday_the_company_works_through_is_still_a_workday(): void
+    {
+        $period = $this->period();
+        $employee = $this->makeEmployee();
+        $holidayOn = $this->workday($employee, $period);
+
+        // On the list so everyone can see it, but the client is open and so
+        // are we.
+        Holiday::create([
+            'date' => $holidayOn,
+            'name' => 'Columbus Day',
+            'type' => Holiday::SPECIAL_WORKING,
+            'observance' => Holiday::UNITED_STATES,
+        ]);
+
+        $this->fillAttendance($employee, $period, absentOn: [$holidayOn]);
+
+        $this->assertSame(1, $this->aggregate($employee, $period)['days_absent']);
+    }
+
+    #[Test]
+    public function only_philippine_holidays_offer_labor_code_categories(): void
+    {
+        // Offering "Regular Holiday" for the Fourth of July would invite
+        // somebody to tick it and later expect the 200% premium that carries.
+        $ph = array_keys(Holiday::typesFor(Holiday::PHILIPPINES));
+        $us = array_keys(Holiday::typesFor(Holiday::UNITED_STATES));
+
+        $this->assertContains(Holiday::REGULAR, $ph);
+        $this->assertNotContains(Holiday::REGULAR, $us);
+        $this->assertNotContains(Holiday::SPECIAL_NON_WORKING, $us);
+
+        // And the default for a US holiday is the day off, not the workday.
+        $this->assertSame(Holiday::PAID_DAY_OFF, array_key_first(Holiday::typesFor(Holiday::UNITED_STATES)));
+        $this->assertSame(Holiday::REGULAR, array_key_first(Holiday::typesFor(Holiday::PHILIPPINES)));
+    }
+
+    #[Test]
+    public function existing_holidays_default_to_the_philippine_calendar(): void
+    {
+        $holiday = Holiday::create([
+            'date' => '2026-12-25',
+            'name' => 'Christmas Day',
+            'type' => Holiday::REGULAR,
+        ]);
+
+        $this->assertSame(Holiday::PHILIPPINES, $holiday->fresh()->observance);
+    }
+
+    #[Test]
     public function the_holidays_page_loads_and_lists_the_year(): void
     {
         Holiday::create(['date' => '2026-12-25', 'name' => 'Christmas Day', 'type' => Holiday::REGULAR]);
