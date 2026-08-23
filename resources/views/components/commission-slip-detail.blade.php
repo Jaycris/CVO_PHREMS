@@ -102,29 +102,35 @@
                 Commission threshold
             </p>
 
+            @php
+                $thresholdTaken = (float) ($slip->threshold_applied ?? 0);
+            @endphp
+
+            {{-- One figure, not two. Showing "threshold per sale" beside
+                 "taken off this month" put the same number on the page twice
+                 with nothing to tell the reader why it was there twice. What
+                 an agent needs is the amount that came off their own pay; the
+                 rule behind it belongs in the sentence, not in a second row. --}}
             @if ($slip->threshold_exempt)
                 <p class="px-5 py-4 text-sm font-medium text-ink-700 dark:text-ink-300">
-                    This agent is exempt from the commission threshold, so every peso of a sale earns commission.
+                    You are exempt from the commission threshold, so every peso of every sale earns commission.
+                </p>
+            @elseif ($thresholdTaken > 0)
+                <div class="flex flex-wrap items-baseline justify-between gap-3 px-5 py-4">
+                    <span class="text-sm font-medium text-ink-700 dark:text-ink-300">Taken off before commission was worked out</span>
+                    <span class="text-lg font-bold tabular-nums text-ink-900 dark:text-white">−{{ $money($thresholdTaken, '$') }}</span>
+                </div>
+                <p class="border-t border-ink-100 px-5 py-2.5 text-xs font-medium text-ink-500 dark:border-white/10 dark:text-ink-400">
+                    The first {{ $money($slip->commission_threshold, '$') }} of a qualifying sale does not earn
+                    commission. The statement below marks the sale it came off.
                 </p>
             @else
-                <div class="divide-y divide-ink-100 dark:divide-white/10">
-                    <div class="flex items-center justify-between gap-4 px-5 py-2.5">
-                        <span class="text-sm font-medium text-ink-700 dark:text-ink-300">Threshold per qualifying sale</span>
-                        <span class="text-sm font-semibold tabular-nums text-ink-900 dark:text-white">{{ $money($slip->commission_threshold, '$') }}</span>
-                    </div>
-                    <div class="flex items-center justify-between gap-4 px-5 py-2.5">
-                        <span class="text-sm font-medium text-ink-700 dark:text-ink-300">Taken off this month</span>
-                        <span class="text-sm font-semibold tabular-nums text-ink-900 dark:text-white">{{ $money($slip->threshold_applied, '$') }}</span>
-                    </div>
-                </div>
-
+                <p class="px-5 py-4 text-sm font-medium text-ink-700 dark:text-ink-300">
+                    Nothing was taken off this month.
+                </p>
                 <p class="border-t border-ink-100 px-5 py-2.5 text-xs font-medium text-ink-500 dark:border-white/10 dark:text-ink-400">
-                    @if ($slip->threshold_applied !== null && (float) $slip->threshold_applied <= 0)
-                        Nothing was taken off this month. The threshold still applies &mdash; no sale reached it.
-                    @else
-                        Deducted from a sale before the commission rate is applied. The statement below shows which
-                        sales it came off.
-                    @endif
+                    The first {{ $money($slip->commission_threshold, '$') }} of a qualifying sale does not earn
+                    commission, but no sale this month reached it.
                 </p>
             @endif
         </div>
