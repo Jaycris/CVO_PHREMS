@@ -3,7 +3,6 @@
 namespace App\Services\Commission;
 
 use App\Models\CommissionRun;
-use App\Models\CommissionScheme;
 use App\Models\CommissionSlip;
 use App\Models\Employee;
 use App\Models\User;
@@ -232,7 +231,7 @@ class CommissionRunService
             // here is what keeps the Payroll Details tab honest — otherwise it
             // shows whatever HR last typed, however long ago that was.
             if ($slip) {
-                $this->mirrorProfile($employee, $slip);
+                app(CommissionProfileMirror::class)->apply($employee, $slip);
             }
 
             DB::transaction(function () use ($run, $employee, $slip, $error, &$totals) {
@@ -377,40 +376,6 @@ class CommissionRunService
             ->whereNull('separation_date')
             ->orderBy('employee_id')
             ->get();
-    }
-
-    /**
-     * Brings the employee's Payroll Details tab in line with the CRM.
-     *
-     * One way only, and only when something actually differs — a run that
-     * changes nothing must not stamp updated_at across every agent.
-     */
-    protected function mirrorProfile(Employee $employee, \App\Services\Crm\CommissionSlip $slip): void
-    {
-        $changes = [];
-
-        if ($slip->scheme !== null && $employee->commission_scheme !== $slip->scheme) {
-            // An agent must never sit on a plan the employee form cannot offer,
-            // or the next edit silently moves them off it.
-            CommissionScheme::firstOrCreate(
-                ['name' => $slip->scheme],
-                [
-                    'description' => 'Added automatically from the CRM.',
-                    'is_active' => true,
-                    'sort_order' => (int) CommissionScheme::max('sort_order') + 1,
-                ],
-            );
-
-            $changes['commission_scheme'] = $slip->scheme;
-        }
-
-        if ($slip->target !== null && (float) $employee->quota !== $slip->target) {
-            $changes['quota'] = $slip->target;
-        }
-
-        if ($changes !== []) {
-            $employee->update($changes);
-        }
     }
 
     /** @return array<string, mixed> */

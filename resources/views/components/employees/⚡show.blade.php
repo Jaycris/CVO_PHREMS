@@ -7,6 +7,7 @@ use App\Models\EmployeeLeaveEligibility;
 use App\Models\LeaveCreditTransaction;
 use App\Models\LeaveType;
 use App\Models\WorkSchedule;
+use App\Services\Commission\CommissionProfileMirror;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Livewire\Attributes\Layout;
@@ -51,7 +52,9 @@ new #[Layout('layouts.app')] class extends Component
     public function openPayrollModal(): void
     {
         // Re-read from the record so a cancelled edit never leaves stale values.
-        $this->mount($this->employee);
+        // Deliberately not mount(): that asks the CRM, and opening a modal is
+        // not a reason to make an HTTP call.
+        $this->loadPayrollState();
         $this->resetValidation();
         $this->showPayrollModal = true;
     }
@@ -70,10 +73,26 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetValidation();
     }
 
-    public function mount(Employee $employee): void
+    public function mount(Employee $employee, CommissionProfileMirror $mirror): void
     {
-        $this->employee = $employee->load(['department', 'position', 'reportsTo', 'user']);
+        // The CRM owns an agent's scheme and target, so this page asks it
+        // before showing them rather than printing whatever was last written
+        // down. Answers are cached for a few minutes, non-agents are skipped
+        // entirely, and a CRM that cannot answer leaves the stored figures
+        // exactly as they were — opening a profile must never fail because
+        // another system is down.
+        $mirror->refresh($employee);
+
+        $this->employee = $employee->fresh()->load(['department', 'position', 'reportsTo', 'user']);
         $this->newScheduleStartDate = now()->toDateString();
+
+        $this->loadPayrollState();
+    }
+
+    /** The editable payroll flags, read off the record. */
+    protected function loadPayrollState(): void
+    {
+        $employee = $this->employee;
 
         $this->includeInPayroll = (bool) $employee->include_in_payroll;
         $this->sssEnrolled = (bool) $employee->sss_enrolled;
