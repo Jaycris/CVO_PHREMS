@@ -213,4 +213,42 @@ class PerPersonSettingsTest extends PayrollTestCase
                 "{$form} does not use the per-person check");
         }
     }
+    #[Test]
+    public function a_run_covers_only_the_people_marked_as_earning_commission(): void
+    {
+        $wanted = Employee::factory()->create(["commission_frequency" => "monthly"]);
+        Employee::factory()->count(3)->create(["commission_frequency" => "none"]);
+
+        $chosen = app(\App\Services\Commission\CommissionRunService::class)
+            ->defaultAgentsFor("monthly");
+
+        $this->assertSame([$wanted->id], $chosen->pluck("id")->all());
+    }
+
+    #[Test]
+    public function a_run_refuses_to_open_when_nobody_earns_commission(): void
+    {
+        // This used to fall back to the whole roster, which meant setting every
+        // employee to No produced a run containing every employee — the switch
+        // did nothing at all.
+        Employee::factory()->count(3)->create(["commission_frequency" => "none"]);
+
+        $this->expectExceptionMessage("Nobody is set to earn commission");
+
+        app(\App\Services\Commission\CommissionRunService::class)
+            ->openRun("2026-07-01", "2026-07-31", "monthly");
+    }
+
+    #[Test]
+    public function somebody_can_still_be_added_to_a_run_by_hand(): void
+    {
+        // The switch pre-selects; it does not forbid. Someone who sold once
+        // can be put on a run without changing their profile.
+        $occasional = Employee::factory()->create(["commission_frequency" => "none"]);
+
+        $run = app(\App\Services\Commission\CommissionRunService::class)
+            ->openRun("2026-07-01", "2026-07-31", "monthly", agentIds: [$occasional->id]);
+
+        $this->assertSame([$occasional->id], $run->agents()->pluck("employees.id")->all());
+    }
 }

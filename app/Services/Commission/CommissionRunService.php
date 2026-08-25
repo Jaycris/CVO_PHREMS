@@ -83,7 +83,15 @@ class CommissionRunService
             ? $this->defaultAgentsFor($type)->pluck('id')
             : Employee::whereIn('id', $agentIds)->pluck('id');
 
-        abort_if($chosen->isEmpty(), 422, 'Pick at least one agent for this run.');
+        // Says why rather than just refusing. The usual cause is that nobody
+        // has been marked as earning commission yet, and the fix is on the
+        // employee's profile rather than on this screen.
+        if ($chosen->isEmpty()) {
+            abort(422, $agentIds === null
+                ? 'Nobody is set to earn commission, so this run would cover nobody. '
+                    . 'Set "Earns commission?" on the people who do, or choose them by hand.'
+                : 'Pick at least one agent for this run.');
+        }
 
         return DB::transaction(function () use ($type, $start, $end, $label, $chosen) {
             $run = CommissionRun::create([
@@ -159,9 +167,20 @@ class CommissionRunService
      */
     public function defaultAgentsFor(string $type): Collection
     {
-        $matching = $this->suggestedAgentsFor($type);
-
-        return $matching->isNotEmpty() ? $matching : $this->selectableAgents();
+        /*
+         * Exactly the people whose switch says they earn commission, and
+         * nobody else.
+         *
+         * This used to fall back to the whole roster when nobody matched, back
+         * when commission_frequency was a field nobody had filled in and an
+         * empty run looked broken. That reading is now wrong: the switch is
+         * something a person sets deliberately, so "nobody matches" means
+         * "nobody earns commission", not "nobody has said yet".
+         *
+         * Keeping the fallback defeated the switch entirely — setting every
+         * employee to No produced a run containing every employee.
+         */
+        return $this->suggestedAgentsFor($type);
     }
 
     /**
