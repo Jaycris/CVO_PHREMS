@@ -145,6 +145,27 @@ class AttendanceAggregator
 
             $counters['days_expected']++;
 
+            /*
+             * Someone who does not use the punch clock counts as present for
+             * every scheduled day.
+             *
+             * There is no attendance in their arrangement, so there is nothing
+             * to measure — and measuring anyway means reading every day as an
+             * absence and deducting for it.
+             *
+             * Counted present rather than skipped, because the day still has to
+             * feed the daily rate: that rate is the cutoff's half salary
+             * divided by days_expected, and skipping would leave it at zero.
+             *
+             * Leave is still honoured below. Unpaid leave is a decision
+             * somebody made on purpose, not a missing punch.
+             */
+            if (! $employee->tracks_attendance && $leaveKind === null) {
+                $counters['days_present']++;
+
+                continue;
+            }
+
             if ($leaveKind === 'lwop') {
                 $counters['days_lwop']++;
 

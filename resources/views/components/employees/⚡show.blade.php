@@ -548,6 +548,7 @@ new #[Layout('layouts.app')] class extends Component
                         'Employment Status' => $employee->employment_status,
                         'Employment Type' => $employee->employment_type ?: '—',
                         'Workplace Type' => $employee->workplace_type ?: '—',
+                        'Clocks In' => $employee->tracks_attendance ? 'Yes' : 'No — fixed work',
                         'Reports To' => $employee->reportsTo?->fullName() ?? '—',
                     ] as $label => $value)
                         <div class="min-w-0 border-b border-ink-100 py-4 dark:border-white/10">

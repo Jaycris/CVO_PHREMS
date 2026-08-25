@@ -31,6 +31,12 @@ class EmployeeFactory extends Factory
             'basic_salary' => 20000,
             'allowance' => 0,
             'employment_status' => 'Regular',
+
+            // The column defaults true in the database, but a factory-made
+            // model is never read back, so the attribute would be null in
+            // memory — and payroll would read that as "does not clock in" and
+            // stop deducting absences. Same trap as is_active on UserFactory.
+            'tracks_attendance' => true,
             'include_in_payroll' => true,
             'sss_enrolled' => true,
             'philhealth_enrolled' => true,

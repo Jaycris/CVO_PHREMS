@@ -19,6 +19,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $gender = '';
     public string $phone_name = '';
     public string $workplace_type = '';
+    public bool $tracks_attendance = true;
     public string $employment_type = '';
     public string $company_email = '';
     public string $personal_email = '';
@@ -38,11 +39,18 @@ new #[Layout('layouts.app')] class extends Component
         $this->employee_id = Employee::generateEmployeeId();
     }
 
-    public function isSalesDepartment(): bool
+    /**
+     * Whether this person earns commission.
+     *
+     * Per person, not per department. Somebody in Admin may well sell,
+     * and somebody in Sales may not — this used to check that the
+     * department was literally named "Sales", which hid the whole
+     * section from the first and would have stripped every agent's setup
+     * the day that department was renamed.
+     */
+    public function earnsCommission(): bool
     {
-        return $this->department_id
-            ? Department::find($this->department_id)?->name === 'Sales'
-            : false;
+        return $this->commission_frequency !== 'none';
     }
 
     public function save(): void
@@ -56,6 +64,7 @@ new #[Layout('layouts.app')] class extends Component
             // at the point of creating the record, and the employee fills it in.
             'gender' => ['nullable', 'in:Male,Female'],
             'phone_name' => ['nullable', 'string', 'max:255'],
+            'tracks_attendance' => ['boolean'],
             'workplace_type' => ['nullable', 'in:Onsite,Hybrid,Remote'],
             'employment_type' => ['nullable', 'in:Full-time,Part-time'],
             'company_email' => ['required', 'email', 'unique:employees,company_email'],
@@ -72,7 +81,7 @@ new #[Layout('layouts.app')] class extends Component
             'commission_frequency' => ['required', 'in:none,monthly,biweekly'],
         ];
 
-        if ($this->isSalesDepartment()) {
+        if ($this->earnsCommission()) {
             $rules['commission_scheme'] = ['required', Rule::in(array_keys(CommissionScheme::options()))];
             $rules['quota'] = ['required', 'numeric', 'min:0'];
         }
@@ -90,7 +99,7 @@ new #[Layout('layouts.app')] class extends Component
             }
         }
 
-        if (! $this->isSalesDepartment()) {
+        if (! $this->earnsCommission()) {
             $data['commission_scheme'] = null;
             $data['quota'] = null;
         }
@@ -208,6 +217,15 @@ new #[Layout('layouts.app')] class extends Component
                         <p class="mt-1 text-xs font-medium text-[#778599]">Where they work. Sent to the CRM when creating their user.</p>
                         @error('workplace_type') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
+                    <div class="min-w-0">
+                        <x-label>Clocks in and out?</x-label>
+                        <x-select wire:model="tracks_attendance">
+                            <option value="1">Yes — uses the punch clock</option>
+                            <option value="0">No — fixed work, no punching</option>
+                        </x-select>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Set per person, whatever their department. Choose No and payroll counts every scheduled day as worked, so no absence is ever deducted.</p>
+                        @error('tracks_attendance') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
                     <div>
                         <x-label>Job Title / Position</x-label>
                         <x-select wire:model="position_id">
@@ -293,13 +311,24 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </section>
 
-            @if ($this->isSalesDepartment())
-                <section class="professional-panel overflow-hidden rounded-2xl border-brand-200 bg-brand-50/60 dark:border-brand-500/20 dark:bg-brand-500/10">
-                    <div class="border-b border-brand-100 px-6 py-5 dark:border-brand-500/20">
-                        <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">Sales Compensation</p>
-                        <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Commission Setup</h2>
+            <section class="professional-panel overflow-hidden rounded-2xl border-brand-200 bg-brand-50/60 dark:border-brand-500/20 dark:bg-brand-500/10">
+                <div class="border-b border-brand-100 px-6 py-5 dark:border-brand-500/20">
+                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">Sales Compensation</p>
+                    <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Commission Setup</h2>
+                </div>
+                <div class="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
+                    <div>
+                        <x-label>Earns commission?</x-label>
+                        <x-select wire:model.live="commission_frequency">
+                            <option value="none">No</option>
+                            <option value="monthly">Yes — monthly</option>
+                            <option value="biweekly">Yes — bi-weekly</option>
+                        </x-select>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">Set per person, whatever their department. Pre-selects them on commission runs of that kind; they can still be added to any run by hand.</p>
+                        @error('commission_frequency') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div class="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
+
+                    @if ($this->earnsCommission())
                         <div>
                             <x-label>Commission Scheme</x-label>
                             <x-select wire:model="commission_scheme">
@@ -308,17 +337,8 @@ new #[Layout('layouts.app')] class extends Component
                                     <option value="{{ $schemeName }}">{{ $schemeName }}</option>
                                 @endforeach
                             </x-select>
+                            <p class="mt-1 text-xs font-medium text-[#778599]">Kept in step with the CRM whenever this profile is opened.</p>
                             @error('commission_scheme') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                        </div>
-                        <div>
-                            <x-label>Commission Frequency</x-label>
-                            <x-select wire:model="commission_frequency">
-                                <option value="none">Not on commission</option>
-                                <option value="monthly">Monthly</option>
-                                <option value="biweekly">Bi-weekly</option>
-                            </x-select>
-                            <p class="mt-1 text-xs font-medium text-[#778599]">Pre-selects them on commission runs of that kind. They can still be added to any run by hand.</p>
-                            @error('commission_frequency') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                         </div>
                         <div>
                             <x-label>Agent Target</x-label>
@@ -326,9 +346,9 @@ new #[Layout('layouts.app')] class extends Component
                             <p class="mt-1 text-xs font-medium text-[#778599]">In US dollars. Must match Agent Target in the CRM commission profile &mdash; the CRM measures every agent against its own figure, not this one.</p>
                             @error('quota') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                         </div>
-                    </div>
-                </section>
-            @endif
+                    @endif
+                </div>
+            </section>
         </div>
 
         <aside class="space-y-4">

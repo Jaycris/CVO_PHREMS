@@ -79,6 +79,24 @@ new #[Layout('layouts.app')] class extends Component
     }
 
     /**
+     * Refuses a punch from somebody who is not on the punch clock at all.
+     *
+     * The buttons are already hidden for them, but a tab left open from before
+     * the change would still have them — and a stray punch would put a day of
+     * attendance on a record payroll deliberately ignores.
+     */
+    protected function usesPunchClock(): bool
+    {
+        if ($this->employee->tracks_attendance) {
+            return true;
+        }
+
+        $this->errorMessage = 'Your work is on fixed pay, so you do not clock in. Refresh the page.';
+
+        return false;
+    }
+
+    /**
      * Refuses the punch when an on-site employee is not on an office network.
      *
      * Checked on all four actions rather than only on Time In. Guarding the
@@ -101,9 +119,10 @@ new #[Layout('layouts.app')] class extends Component
 
     public function timeIn(): void
     {
-        if (! $this->atAllowedLocation()) {
+        if (! $this->usesPunchClock() || ! $this->atAllowedLocation()) {
             return;
         }
+
         if ($this->openDay()) {
             $this->errorMessage = 'You are already timed in.';
 
@@ -129,9 +148,10 @@ new #[Layout('layouts.app')] class extends Component
 
     public function timeOut(): void
     {
-        if (! $this->atAllowedLocation()) {
+        if (! $this->usesPunchClock() || ! $this->atAllowedLocation()) {
             return;
         }
+
         $day = $this->openDay();
 
         if (! $day) {
@@ -152,9 +172,10 @@ new #[Layout('layouts.app')] class extends Component
 
     public function startBreak(): void
     {
-        if (! $this->atAllowedLocation()) {
+        if (! $this->usesPunchClock() || ! $this->atAllowedLocation()) {
             return;
         }
+
         $day = $this->openDay();
 
         if (! $day) {
@@ -175,9 +196,10 @@ new #[Layout('layouts.app')] class extends Component
 
     public function endBreak(): void
     {
-        if (! $this->atAllowedLocation()) {
+        if (! $this->usesPunchClock() || ! $this->atAllowedLocation()) {
             return;
         }
+
         $day = $this->openDay();
         $break = $day?->openBreak();
 
@@ -467,6 +489,19 @@ new #[Layout('layouts.app')] class extends Component
                     </p>
                 </div>
 
+                {{-- Somebody who does not use the punch clock is told so
+                     plainly, rather than being shown three buttons that would
+                     refuse them. Their history stays visible below, so a move
+                     onto fixed pay does not hide what came before it. --}}
+                @if (! $this->employee->tracks_attendance)
+                    <div class="rounded-xl bg-[#f8fafc] px-5 py-4 dark:bg-neutral-800/50">
+                        <p class="text-sm font-bold text-[#0f172a] dark:text-white">You do not need to clock in</p>
+                        <p class="mt-1 text-sm font-medium text-[#778599]">
+                            Your work is on fixed pay, so payroll does not measure your hours and no absence is
+                            ever deducted. Leave and overtime are filed the same way as everyone else.
+                        </p>
+                    </div>
+                @else
                 <div class="flex flex-wrap gap-3">
                     @if (! $day)
                         <x-button wire:click="timeIn" class="h-12 rounded-xl px-6">
@@ -487,6 +522,7 @@ new #[Layout('layouts.app')] class extends Component
                         @endif
                     @endif
                 </div>
+                @endif
             </div>
         </x-card>
     </section>
