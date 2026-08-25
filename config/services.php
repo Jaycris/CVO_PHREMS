@@ -58,6 +58,11 @@ return [
         // Commission figures move during the month, so this is short. It only
         // exists to stop a page refresh hammering the CRM.
         'cache_ttl' => (int) env('CRM_API_CACHE_TTL', 300),
+
+        // The agent list is held far more briefly than a slip. Slip figures are
+        // a month's sales and barely move; this is setup somebody changes by
+        // hand in the CRM and then checks in PHREMS moments later.
+        'agent_cache_ttl' => (int) env('CRM_AGENT_CACHE_TTL', 60),
         'verify_tls' => filter_var(env('CRM_API_VERIFY_TLS', true), FILTER_VALIDATE_BOOLEAN),
 
         /*

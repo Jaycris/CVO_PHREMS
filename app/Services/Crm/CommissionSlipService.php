@@ -89,9 +89,19 @@ class CommissionSlipService
         $month = Carbon::parse($month)->startOfMonth();
 
         try {
+            /*
+             * Held far more briefly than a slip.
+             *
+             * Slip figures are a month's sales and barely move, so five minutes
+             * of staleness costs nothing. This is somebody's setup, changed by
+             * hand in the CRM and then checked in PHREMS a moment later — and
+             * at five minutes that check shows the old answer, which is
+             * indistinguishable from the mirror being broken. It was reported
+             * as exactly that.
+             */
             $payload = Cache::remember(
                 'crm:agents:' . $month->format('Y-m'),
-                (int) config('services.crm.cache_ttl', 300),
+                (int) config('services.crm.agent_cache_ttl', 60),
                 fn () => $this->client->get('/api/hris/sales-performance-mtd', [
                     'month' => $month->format('Y-m'),
                 ]),
