@@ -189,8 +189,8 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </section>
 
-            <section class="professional-panel overflow-hidden rounded-2xl">
-                <div class="border-b border-ink-200 bg-ink-50 px-6 py-5 dark:border-white/10 dark:bg-white/5">
+            <section class="professional-panel relative z-10 overflow-visible rounded-2xl">
+                <div class="rounded-t-2xl border-b border-ink-200 bg-ink-50 px-6 py-5 dark:border-white/10 dark:bg-white/5">
                     <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">Employment</p>
                     <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Assignment And Compensation</h2>
                 </div>
@@ -243,10 +243,24 @@ new #[Layout('layouts.app')] class extends Component
                                 <span x-text="display()"></span>
                                 <x-icon name="calendar" class="h-4 w-4 text-ink-400" />
                             </button>
-                            <div x-cloak x-show="open" x-transition class="absolute z-20 mt-2 w-80 rounded-2xl border border-ink-200 bg-white p-4 shadow-xl shadow-ink-200/70 dark:border-white/10 dark:bg-ink-900 dark:shadow-black/30">
+                            <div x-cloak x-show="open" x-transition class="absolute z-50 mt-2 w-80 rounded-2xl border border-ink-200 bg-white p-4 shadow-xl shadow-ink-200/70 dark:border-white/10 dark:bg-ink-900 dark:shadow-black/30">
                                 <div class="mb-4 flex items-center justify-between">
                                     <button type="button" @click="previousMonth()" class="rounded-lg p-2 text-ink-500 hover:bg-ink-100 dark:hover:bg-white/10"><x-icon name="chevron-down" class="h-4 w-4 rotate-90" /></button>
-                                    <div class="flex items-center gap-1.5"><label class="sr-only">Calendar month</label><select x-model.number="month" aria-label="Calendar month" class="h-9 w-28 rounded-lg border border-ink-200 bg-white px-2 text-sm font-bold text-ink-950 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-950 dark:text-white"><template x-for="(monthName, monthIndex) in monthNames" :key="monthName"><option :value="monthIndex" x-text="monthName"></option></template></select><label class="sr-only">Calendar year</label><select x-model.number="year" aria-label="Calendar year" class="h-9 w-20 rounded-lg border border-ink-200 bg-white px-2 text-sm font-bold text-ink-950 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-950 dark:text-white"><template x-for="yearOption in yearOptions()" :key="yearOption"><option :value="yearOption" x-text="yearOption"></option></template></select></div>
+                                    <div class="flex items-center gap-1.5">
+                                        <label class="sr-only">Calendar month</label>
+                                        <select x-model.number="month" aria-label="Calendar month" class="h-9 w-28 shrink-0 rounded-lg border border-ink-200 bg-white px-2 text-sm font-bold text-ink-950 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-950 dark:text-white">
+                                            <template x-for="(monthName, monthIndex) in monthNames" :key="monthName">
+                                                <option :value="monthIndex" x-text="monthName"></option>
+                                            </template>
+                                        </select>
+
+                                        <label class="sr-only">Calendar year</label>
+                                        <select x-model.number="year" aria-label="Calendar year" class="h-9 w-24 shrink-0 rounded-lg border border-ink-200 bg-white px-2 text-sm font-bold text-ink-950 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-950 dark:text-white" style="width: 6rem; min-width: 6rem;">
+                                            @for ($calendarYear = now()->year + 20; $calendarYear >= now()->year - 100; $calendarYear--)
+                                                <option value="{{ $calendarYear }}">{{ $calendarYear }}</option>
+                                            @endfor
+                                        </select>
+                                    </div>
                                     <button type="button" @click="nextMonth()" class="rounded-lg p-2 text-ink-500 hover:bg-ink-100 dark:hover:bg-white/10"><x-icon name="chevron-down" class="h-4 w-4 -rotate-90" /></button>
                                 </div>
                                 <div class="grid grid-cols-7 gap-1 text-center text-xs font-bold uppercase text-ink-400">
