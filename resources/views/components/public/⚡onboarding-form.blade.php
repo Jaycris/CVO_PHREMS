@@ -261,16 +261,37 @@ new #[Layout('layouts.guest')] class extends Component
                             <section class="border-t border-ink-200 pt-7 dark:border-white/10">
                                 <h3 class="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-ink-500 dark:text-ink-400">Profile Photo</h3>
 
-                                <div class="flex flex-wrap items-center gap-5">
-                                    @if ($photo)
-                                        <img src="{{ $photo->temporaryUrl() }}" alt="Selected photo preview"
-                                             class="h-24 w-24 shrink-0 rounded-full object-cover ring-1 ring-black/5 dark:ring-white/10">
-                                    @else
-                                        <x-avatar :employee="$employee" size="xl" />
-                                    @endif
+                                {{--
+                                    The preview is drawn from the file the browser already holds,
+                                    not from a link back to the server.
+
+                                    It used to use Livewire's temporary-file URL, which is a signed
+                                    link into this app. Behind the host's proxy that link came back
+                                    as a broken image, and a broken image renders its alt text — so
+                                    the words "Selected photo preview" sat spilling out of the
+                                    circle. Reading the file locally cannot break that way, and the
+                                    picture appears the moment it is chosen instead of after the
+                                    upload finishes. The upload itself is unchanged.
+                                --}}
+                                <div class="flex flex-wrap items-center gap-5" x-data="{ preview: null }">
+                                    {{-- Left alone by Livewire so a re-render cannot discard the preview. --}}
+                                    <div wire:ignore class="shrink-0">
+                                        <template x-if="preview">
+                                            <img :src="preview" alt=""
+                                                 class="h-24 w-24 rounded-full object-cover ring-1 ring-black/5 dark:ring-white/10">
+                                        </template>
+
+                                        <x-avatar :employee="$employee" size="xl" x-show="! preview" />
+                                    </div>
 
                                     <div class="min-w-[14rem] flex-1">
                                         <input type="file" wire:model="photo" accept="image/jpeg,image/png,image/webp"
+                                               x-on:change="
+                                                   if (preview) URL.revokeObjectURL(preview);
+                                                   preview = $event.target.files[0]
+                                                       ? URL.createObjectURL($event.target.files[0])
+                                                       : null;
+                                               "
                                                class="block w-full text-sm text-ink-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-700 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-brand-800 dark:text-ink-300">
                                         <p class="mt-2 text-xs font-medium text-ink-500 dark:text-ink-400">
                                             Optional. JPG, PNG or WEBP, up to 4MB. You can change it later from your profile.
@@ -295,7 +316,7 @@ new #[Layout('layouts.guest')] class extends Component
                                             <div x-cloak x-show="open" x-transition class="absolute z-20 mt-2 w-80 rounded-2xl border border-ink-200 bg-white p-4 shadow-xl shadow-ink-200/70 dark:border-white/10 dark:bg-ink-900 dark:shadow-black/30">
                                                 <div class="mb-4 flex items-center justify-between">
                                                     <button type="button" @click="previousMonth()" class="rounded-lg p-2 text-ink-500 hover:bg-ink-100 dark:hover:bg-white/10"><x-icon name="chevron-down" class="h-4 w-4 rotate-90" /></button>
-                                                    <p class="text-sm font-bold text-ink-950 dark:text-white"><span x-text="monthNames[month]"></span> <span x-text="year"></span></p>
+                                                    <div class="flex items-center gap-1.5"><label class="sr-only">Calendar month</label><select x-model.number="month" aria-label="Calendar month" class="h-9 w-28 rounded-lg border border-ink-200 bg-white px-2 text-sm font-bold text-ink-950 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-950 dark:text-white"><template x-for="(monthName, monthIndex) in monthNames" :key="monthName"><option :value="monthIndex" x-text="monthName"></option></template></select><label class="sr-only">Calendar year</label><select x-model.number="year" aria-label="Calendar year" class="h-9 w-20 rounded-lg border border-ink-200 bg-white px-2 text-sm font-bold text-ink-950 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-950 dark:text-white"><template x-for="yearOption in yearOptions()" :key="yearOption"><option :value="yearOption" x-text="yearOption"></option></template></select></div>
                                                     <button type="button" @click="nextMonth()" class="rounded-lg p-2 text-ink-500 hover:bg-ink-100 dark:hover:bg-white/10"><x-icon name="chevron-down" class="h-4 w-4 -rotate-90" /></button>
                                                 </div>
                                                 <div class="grid grid-cols-7 gap-1 text-center text-xs font-bold uppercase text-ink-400">

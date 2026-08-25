@@ -67,6 +67,16 @@ window.datePicker = function (model) {
         daysInMonth() {
             return new Date(this.year, this.month + 1, 0).getDate();
         },
+        yearOptions() {
+            const currentYear = new Date().getFullYear();
+            const firstYear = currentYear - 100;
+            const lastYear = currentYear + 20;
+
+            return Array.from(
+                { length: lastYear - firstYear + 1 },
+                (_, index) => lastYear - index,
+            );
+        },
         previousMonth() {
             if (this.month === 0) {
                 this.month = 11;
