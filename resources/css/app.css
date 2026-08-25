@@ -80,6 +80,15 @@
             linear-gradient(180deg, #020617 0%, #0f172a 100%);
     }
 
+    .sidebar-nav {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .sidebar-nav::-webkit-scrollbar {
+        display: none;
+    }
+
     .professional-panel {
         @apply rounded-lg border border-ink-200/80 bg-white shadow-sm shadow-ink-200/60 dark:border-white/10 dark:bg-ink-900/90 dark:shadow-black/20;
     }

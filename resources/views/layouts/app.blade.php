@@ -56,7 +56,7 @@
                     <p class="px-1 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-400">Human Resources</p>
                 </div>
 
-                <nav class="mt-2 flex-1 space-y-1 overflow-y-auto px-2.5 pb-6">
+                <nav class="sidebar-nav mt-2 flex-1 space-y-1 overflow-y-auto overscroll-contain px-2.5 pb-6">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" icon="home">Dashboard</x-nav-link>
                     <x-nav-link :href="route('attendance.punch')" :active="request()->routeIs('attendance.punch')" icon="clock">My Attendance</x-nav-link>
                     <x-nav-link :href="route('my-payslips')" :active="request()->routeIs('my-payslips*')" icon="money">My Payslips</x-nav-link>
