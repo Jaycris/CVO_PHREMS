@@ -226,8 +226,13 @@
                                     $refs.userMenuPanel.classList.toggle('scale-100', willOpen);
                                 " class="flex h-12 items-center gap-3 rounded-2xl border border-transparent py-1 pl-1.5 pr-3 transition hover:border-ink-200 hover:bg-white hover:shadow-sm dark:hover:border-white/10 dark:hover:bg-white/10">
                                 <img src="{{ asset('images/logo-mark.png') }}" alt="" class="h-10 w-10 rounded-full border border-ink-200 bg-white object-contain p-1 dark:border-white/10">
+                                {{-- The signed-in person, not the app. This
+                                     showed config('app.name') sitting above
+                                     their role, which read as somebody called
+                                     PHREMS — the app is already named in the
+                                     top left and on the tab. --}}
                                 <div class="hidden text-left text-sm leading-tight sm:block">
-                                    <p class="font-bold text-ink-950 dark:text-white">{{ config('app.name') }}</p>
+                                    <p class="font-bold text-ink-950 dark:text-white">{{ auth()->user()->name ?: auth()->user()->email }}</p>
                                     <p class="text-xs font-medium text-ink-500 dark:text-ink-400">{{ auth()->user()->getRoleNames()->join(', ') ?: 'No role' }}</p>
                                 </div>
                                 <x-icon name="chevron-down" class="hidden h-4 w-4 font-medium text-ink-500 sm:block" />
