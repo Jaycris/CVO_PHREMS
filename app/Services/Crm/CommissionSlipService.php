@@ -64,6 +64,74 @@ class CommissionSlipService
         );
     }
 
+    /**
+     * Every agent the CRM knows about for a month, keyed by HRIS employee ID.
+     *
+     * One request for the whole company rather than one per employee. The
+     * per-agent slip endpoint can only answer about somebody already believed
+     * to be an agent, which is no use for the question this exists to answer:
+     * who is an agent that PHREMS does not yet know about.
+     *
+     * Agents with no HRIS employee ID are dropped. They are people the CRM
+     * knows and PHREMS does not, so there is nothing here to match them to.
+     *
+     * Never throws. This runs while somebody is looking at a page, and a CRM
+     * that cannot answer must leave what is on file alone rather than blank it.
+     *
+     * @return array<string, array{eligible: bool, scheme: ?string, target: ?float}>
+     */
+    public function agentDirectory(Carbon|string $month): array
+    {
+        if (! $this->isConfigured()) {
+            return [];
+        }
+
+        $month = Carbon::parse($month)->startOfMonth();
+
+        try {
+            $payload = Cache::remember(
+                'crm:agents:' . $month->format('Y-m'),
+                (int) config('services.crm.cache_ttl', 300),
+                fn () => $this->client->get('/api/hris/sales-performance-mtd', [
+                    'month' => $month->format('Y-m'),
+                ]),
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        $directory = [];
+
+        foreach ($payload['agents'] ?? [] as $agent) {
+            $id = trim((string) ($agent['hris_employee_id'] ?? ''));
+
+            if ($id === '') {
+                continue;
+            }
+
+            $scheme = $agent['commission_scheme'] ?? null;
+
+            $directory[$id] = [
+                // Absent means the CRM has not been taught this yet. Treated as
+                // eligible, because it is listed as an agent at all — reading a
+                // missing field as "no" would switch people off wholesale the
+                // moment an older CRM answered.
+                'eligible' => (bool) ($agent['is_commission_eligible'] ?? true),
+                'scheme' => is_array($scheme) ? ($scheme['name'] ?? null) : ($scheme ?: null),
+                'target' => isset($agent['agent_target']) ? (float) $agent['agent_target'] : null,
+            ];
+        }
+
+        return $directory;
+    }
+
+    public function forgetAgentDirectory(Carbon|string $month): void
+    {
+        Cache::forget('crm:agents:' . Carbon::parse($month)->startOfMonth()->format('Y-m'));
+    }
+
     public function forgetPeriod(Employee $employee, Carbon|string $start, Carbon|string $end): void
     {
         Cache::forget($this->periodCacheKey(

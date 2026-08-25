@@ -55,16 +55,28 @@ class AgentTargetTest extends TestCase
         foreach ($screens as $screen) {
             $source = file_get_contents(resource_path($screen));
 
-            preg_match_all("/'(?:Quota|Agent Target)' => .*/", $source, $matches);
+            // Reads a window after each mention rather than matching a
+            // statement: the value is written three different ways across
+            // these screens, and on the profile it spans two lines because the
+            // rows are only built for people who earn commission.
+            $found = false;
 
-            $this->assertNotEmpty($matches[0], "{$screen} no longer shows the agent target");
+            foreach (['Agent Target', 'Quota'] as $label) {
+                $at = 0;
 
-            foreach ($matches[0] as $line) {
-                $this->assertStringNotContainsString('PHP', $line,
-                    "{$screen} shows the agent target in pesos, but the CRM sets it in dollars");
-                $this->assertStringContainsString('USD', $line,
-                    "{$screen} does not say which currency the agent target is in");
+                while (($at = strpos($source, "'{$label}'", $at)) !== false) {
+                    $found = true;
+                    $window = substr($source, $at, 200);
+                    $at += strlen($label);
+
+                    $this->assertStringNotContainsString('PHP ', $window,
+                        "{$screen} shows the agent target in pesos, but the CRM sets it in dollars");
+                    $this->assertStringContainsString('USD ', $window,
+                        "{$screen} does not say which currency the agent target is in");
+                }
             }
+
+            $this->assertTrue($found, "{$screen} no longer shows the agent target");
         }
     }
 

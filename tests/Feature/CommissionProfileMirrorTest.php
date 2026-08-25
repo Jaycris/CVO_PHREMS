@@ -108,25 +108,21 @@ class CommissionProfileMirrorTest extends TestCase
     }
 
     #[Test]
-    public function only_commission_agents_are_asked_about(): void
+    public function somebody_not_yet_marked_as_an_agent_is_still_asked_about(): void
     {
-        // Most of the company is not on commission. Asking the CRM about them
-        // would be an HTTP call per profile view to learn nothing.
-        $agent = Employee::factory()->create(['commission_scheme' => 'Tier 1']);
-        $byFrequency = Employee::factory()->create(['commission_frequency' => 'monthly']);
-        $notAnAgent = Employee::factory()->create(['commission_scheme' => null, 'commission_frequency' => 'none']);
+        // The old design only asked about people already believed to be
+        // agents, so it could switch somebody off but never on — and
+        // forgetting to switch somebody on is what costs them their pay.
+        $employee = Employee::factory()->create([
+            'commission_scheme' => null,
+            'commission_frequency' => 'none',
+        ]);
 
-        $this->assertTrue($this->mirror()->tracks($agent));
-        $this->assertTrue($this->mirror()->tracks($byFrequency));
-        $this->assertFalse($this->mirror()->tracks($notAnAgent));
-    }
+        $this->mirror()->applyDirectoryEntry($employee, [
+            'eligible' => true, 'scheme' => 'Tier 2', 'target' => 10000.0,
+        ]);
 
-    #[Test]
-    public function a_non_agent_is_never_sent_to_the_crm(): void
-    {
-        $employee = Employee::factory()->create(['commission_scheme' => null, 'commission_frequency' => 'none']);
-
-        $this->assertFalse($this->mirror()->refresh($employee));
+        $this->assertSame('monthly', $employee->fresh()->commission_frequency);
     }
 
     #[Test]
@@ -153,5 +149,79 @@ class CommissionProfileMirrorTest extends TestCase
         $employee = Employee::factory()->create(['commission_scheme' => 'Tier 1']);
 
         $this->assertFalse($this->mirror()->refresh($employee));
+    }
+
+    #[Test]
+    public function the_crm_decides_who_earns_commission(): void
+    {
+        $employee = Employee::factory()->create(["commission_frequency" => "none"]);
+
+        $mirror = $this->mirror();
+        $mirror->applyDirectoryEntry($employee, ["eligible" => true, "scheme" => "Tier 2", "target" => 10000.0]);
+
+        // The whole point: forgetting to switch somebody on cannot cost them
+        // their commission, because PHREMS is not the one deciding.
+        $this->assertSame("monthly", $employee->fresh()->commission_frequency);
+        $this->assertSame("Tier 2", $employee->fresh()->commission_scheme);
+        $this->assertSame(10000.0, (float) $employee->fresh()->quota);
+    }
+
+    #[Test]
+    public function a_deliberate_bi_weekly_choice_survives_a_refresh(): void
+    {
+        // The CRM answers yes or no and has no concept of a run frequency, so
+        // overwriting bi-weekly with monthly would be inventing an answer.
+        $employee = Employee::factory()->create(["commission_frequency" => "biweekly"]);
+
+        $this->mirror()->applyDirectoryEntry($employee, ["eligible" => true, "scheme" => null, "target" => null]);
+
+        $this->assertSame("biweekly", $employee->fresh()->commission_frequency);
+    }
+
+    #[Test]
+    public function somebody_the_crm_says_is_not_eligible_is_switched_off(): void
+    {
+        $employee = Employee::factory()->create(["commission_frequency" => "monthly"]);
+
+        $this->mirror()->applyDirectoryEntry($employee, ["eligible" => false, "scheme" => "Tier 2", "target" => 10000.0]);
+
+        $this->assertSame("none", $employee->fresh()->commission_frequency);
+    }
+
+    #[Test]
+    public function a_scheme_is_not_copied_onto_somebody_who_is_not_an_agent(): void
+    {
+        // It would sit on a profile that then hides it, which reads as a bug.
+        $employee = Employee::factory()->create(["commission_frequency" => "monthly", "commission_scheme" => null]);
+
+        $this->mirror()->applyDirectoryEntry($employee, ["eligible" => false, "scheme" => "Tier 2", "target" => 10000.0]);
+
+        $this->assertNull($employee->fresh()->commission_scheme);
+    }
+
+    #[Test]
+    public function an_employee_the_crm_has_never_heard_of_is_left_alone(): void
+    {
+        // An unreachable CRM returns an empty directory too, so absence must
+        // never be read as "no longer an agent".
+        config(["services.crm.base_url" => "http://127.0.0.1:9"]);
+
+        $employee = Employee::factory()->create([
+            "commission_frequency" => "monthly",
+            "commission_scheme" => "Tier 2",
+        ]);
+
+        $this->assertFalse($this->mirror()->refresh($employee));
+        $this->assertSame("monthly", $employee->fresh()->commission_frequency);
+        $this->assertSame("Tier 2", $employee->fresh()->commission_scheme);
+    }
+
+    #[Test]
+    public function the_profile_hides_commission_rows_from_people_who_do_not_earn_it(): void
+    {
+        $source = file_get_contents(resource_path("views/components/employees/⚡show.blade.php"));
+
+        $this->assertStringContainsString("commission_frequency !== \x27none\x27", $source,
+            "the compensation card still shows commission rows to everybody");
     }
 }

@@ -563,13 +563,25 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="border-b border-ink-100 px-5 py-4 dark:border-white/10">
                     <h3 class="text-lg font-bold text-ink-950 dark:text-white">Compensation</h3>
                 </div>
-                <dl class="grid gap-x-8 px-5 py-2 sm:grid-cols-2">
-                    @foreach ([
+                @php
+                    $compensation = [
                         'Basic Salary' => 'PHP '.number_format($employee->basic_salary, 2),
                         'Allowance' => 'PHP '.number_format($employee->allowance, 2),
-                        'Commission Scheme' => $employee->commission_scheme ?: '—',
-                        'Agent Target' => $employee->commission_scheme ? 'USD '.number_format($employee->quota, 2) : '—',
-                    ] as $label => $value)
+                    ];
+
+                    // Commission rows only for people who earn it. Everybody
+                    // else was being shown two dashes, which reads as something
+                    // missing rather than something that does not apply.
+                    if ($employee->commission_frequency !== 'none') {
+                        $compensation['Commission Scheme'] = $employee->commission_scheme ?: '—';
+                        $compensation['Agent Target'] = $employee->quota !== null
+                            ? 'USD '.number_format($employee->quota, 2)
+                            : '—';
+                    }
+                @endphp
+
+                <dl class="grid gap-x-8 px-5 py-2 sm:grid-cols-2">
+                    @foreach ($compensation as $label => $value)
                         <div class="min-w-0 border-b border-ink-100 py-4 dark:border-white/10">
                             <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">{{ $label }}</dt>
                             <dd class="mt-1 break-words text-base font-bold tabular-nums text-ink-950 dark:text-white">{{ $value }}</dd>
