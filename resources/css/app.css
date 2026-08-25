@@ -58,6 +58,16 @@
 }
 
 @layer components {
+    select[aria-label='Calendar month'] {
+        min-width: 7rem;
+        flex-shrink: 0;
+    }
+
+    select[aria-label='Calendar year'] {
+        min-width: 6rem;
+        flex-shrink: 0;
+    }
+
     .app-surface {
         background:
             radial-gradient(circle at top left, rgba(21, 122, 82, 0.08), transparent 34rem),
