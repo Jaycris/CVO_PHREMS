@@ -4,6 +4,7 @@ use App\Models\CommissionScheme;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Position;
+use App\Services\Commission\CommissionProfileMirror;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
@@ -38,8 +39,16 @@ new #[Layout('layouts.app')] class extends Component
     public string $employment_status = 'Probationary';
     public ?int $reports_to_id = null;
 
-    public function mount(Employee $employee): void
+    public function mount(Employee $employee, CommissionProfileMirror $mirror): void
     {
+        // Asked before the fields are filled in, for the same reason the
+        // profile does it: the CRM owns the commission setup. Without this the
+        // form shows whatever was last written down, and saving would push that
+        // stale answer back over the CRM's — which is how somebody ends up
+        // switched off in PHREMS while the CRM says they earn commission.
+        $mirror->refresh($employee);
+        $employee->refresh();
+
         $this->employee = $employee;
         $this->employee_id = $employee->employee_id;
         $this->first_name = (string) $employee->first_name;
