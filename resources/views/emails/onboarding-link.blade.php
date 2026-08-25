@@ -1,5 +1,14 @@
 @php
-    $displayName = $employee->phone_name ?: $employee->employee_id;
+    /*
+     * Their own name, not the one they use for CRM work.
+     *
+     * This reached for the phone name first, which most employees do not have
+     * because most of them are not in the CRM at all — so the very first email
+     * a new hire ever received opened "Hi EMP-9372,". The employee ID stays as
+     * a last resort, for a record created before anybody typed a name.
+     */
+    $displayName = $employee->first_name
+        ?: ($employee->fullName() ?: ($employee->phone_name ?: $employee->employee_id));
     $logoPath = public_path('images/CreativeVision-LOGO-v2-01.png');
     $logoSrc = isset($message) && file_exists($logoPath)
         ? $message->embed($logoPath)
