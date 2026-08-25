@@ -169,4 +169,39 @@ class CrmApiTest extends TestCase
 
         $this->getJson('/api/crm/health', $this->auth())->assertStatus(429);
     }
+
+    #[Test]
+    public function a_blank_phone_name_falls_back_to_the_employees_real_name(): void
+    {
+        // The field is optional, so leaving it blank has to still give the CRM
+        // a name to open its Create User form with. Sending null made it
+        // optional in name only.
+        Employee::factory()->create([
+            "employee_id" => "EMP-4242",
+            "first_name" => "Maria",
+            "last_name" => "Santos",
+            "phone_name" => null,
+        ]);
+
+        $this->getJson("/api/crm/employees/EMP-4242", $this->auth())
+            ->assertOk()
+            ->assertJsonPath("data.first_name", "Maria")
+            ->assertJsonPath("data.last_name", "Santos");
+    }
+
+    #[Test]
+    public function a_phone_name_still_wins_when_one_is_set(): void
+    {
+        Employee::factory()->create([
+            "employee_id" => "EMP-4243",
+            "first_name" => "Maria",
+            "last_name" => "Santos",
+            "phone_name" => "Lewis Anderson",
+        ]);
+
+        $this->getJson("/api/crm/employees/EMP-4243", $this->auth())
+            ->assertOk()
+            ->assertJsonPath("data.first_name", "Lewis")
+            ->assertJsonPath("data.last_name", "Anderson");
+    }
 }

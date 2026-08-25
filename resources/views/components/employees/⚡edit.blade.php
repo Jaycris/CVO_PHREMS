@@ -221,9 +221,9 @@ new #[Layout('layouts.app')] class extends Component
                         @error('gender') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     <div class="min-w-0">
-                        <x-label>Phone Name <span class="font-medium text-[#778599]">(name used for CRM work)</span></x-label>
+                        <x-label>Phone Name <span class="font-medium text-[#778599]">(optional)</span></x-label>
                         <x-input wire:model="phone_name" type="text" />
-                        <p class="mt-1 text-xs font-medium text-[#778599]">The CRM splits this into first and last name when creating their user.</p>
+                        <p class="mt-1 text-xs font-medium text-[#778599]">The name they use for CRM work, if it differs from their own. The CRM splits it into a first and last name. Leave blank and their real name is used.</p>
                     </div>
                     </div>
 

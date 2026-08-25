@@ -21,7 +21,21 @@ class CrmSafeEmployee
     /** @return array<string, mixed> */
     public static function from(Employee $employee): array
     {
+        /*
+         * The phone name is optional, so it falls back to the real one.
+         *
+         * Most people use their own name for CRM work; the field exists for the
+         * few who do not. Sending null when it is blank made it optional in
+         * name only — the CRM's Create User form would open with no name in it,
+         * so whoever filled it in had to know to go back and set the phone name
+         * first.
+         */
         [$firstName, $lastName] = self::splitPhoneName($employee->phone_name);
+
+        if ($firstName === null) {
+            $firstName = $employee->first_name ?: null;
+            $lastName = $employee->last_name ?: null;
+        }
 
         return [
             // The bridge between the two systems. The CRM stores this against
