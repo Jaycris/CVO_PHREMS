@@ -34,6 +34,12 @@ new #[Layout('layouts.app')] class extends Component
     /** @var list<int> */
     public array $selectedAgents = [];
     public string $agentSearch = '';
+    public string $search = '';
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
 
     public function mount(): void
     {
@@ -161,6 +167,16 @@ new #[Layout('layouts.app')] class extends Component
     {
         return [
             'runs' => CommissionRun::withCount(['slips', 'agents'])
+                ->when($this->search !== '', function ($query): void {
+                    $term = '%' . trim($this->search) . '%';
+
+                    $query->where(function ($query) use ($term): void {
+                        $query->where('run_type', 'like', $term)
+                            ->orWhere('status', 'like', $term)
+                            ->orWhere('period_start', 'like', $term)
+                            ->orWhere('period_end', 'like', $term);
+                    });
+                })
                 ->orderByDesc('period_start')
                 ->orderByDesc('id')
                 ->paginate($this->perPage()),
@@ -208,54 +224,93 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     @endunless
 
-    <x-card :padding="false">
+    <x-card :padding="false" class="directory-panel"
+        x-data="{ selected: [], runUrls: @js($runs->getCollection()->mapWithKeys(fn ($run) => [(string) $run->id => route('commissions.run-show', $run)])) }">
+        <div class="directory-toolbar">
+            <div>
+                <h2 class="directory-title">Commission Run Directory</h2>
+                <p x-cloak x-show="selected.length > 0"
+                    class="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-400"
+                    x-text="selected.length + ' selected'"></p>
+            </div>
+
+            <div class="directory-toolbar-actions">
+                <button type="button"
+                    x-on:click="if (selected.length === 1) Livewire.navigate(runUrls[selected[0]])"
+                    x-bind:disabled="selected.length !== 1"
+                    x-bind:title="selected.length === 1 ? 'View selected commission run' : 'Select one commission run to view'"
+                    x-bind:class="selected.length === 1 ? 'text-ink-500 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-400 dark:hover:bg-white/10 dark:hover:text-white' : 'pointer-events-none text-ink-400 opacity-40 dark:text-ink-500'"
+                    class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white shadow-sm transition dark:border-white/10 dark:bg-ink-900">
+                    <x-icon name="eye" class="h-4 w-4" />
+                </button>
+
+                <label class="directory-search">
+                    <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                    <input type="text" wire:model.live.debounce.300ms="search" @input="selected = []"
+                        placeholder="Search commission runs..."
+                        class="block h-10 w-full rounded-lg border border-ink-200 bg-white pl-9 pr-3.5 text-sm font-medium text-ink-700 shadow-sm placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                </label>
+            </div>
+        </div>
+
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-                <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
+            <table class="directory-table">
+                <thead class="directory-table-head">
                     <tr>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Period</th>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Status</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Agents</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">USD Total</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Net (PHP)</th>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Computed</th>
-                        <th class="px-4 py-4"></th>
+                        <th class="w-14 px-6 py-4 text-left">
+                            <input type="checkbox" class="directory-checkbox"
+                                x-bind:checked="selected.length === {{ $runs->count() }} && {{ $runs->count() }} > 0"
+                                @click="selected = selected.length === {{ $runs->count() }} ? [] : @js($runs->getCollection()->pluck('id')->map(fn ($id) => (string) $id)->values())">
+                        </th>
+                        <th class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Period</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Status</th>
+                        <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Agents</th>
+                        <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">USD Total</th>
+                        <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Net (PHP)</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Computed</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                <tbody class="directory-table-body">
                     @forelse ($runs as $run)
-                        <tr wire:key="run-{{ $run->id }}" class="transition hover:bg-ink-50 dark:hover:bg-white/5">
-                            <td class="px-4 py-3 font-bold text-[#0f172a] dark:text-white">
-                                {{ $run->periodLabel() }}
-                                <span class="block text-xs font-medium text-[#778599]">{{ $run->typeLabel() }} · {{ $run->dayCount() }} day(s)</span>
+                        <tr wire:key="run-{{ $run->id }}"
+                            @click="Livewire.navigate(runUrls['{{ $run->id }}'])"
+                            class="directory-row cursor-pointer"
+                            x-bind:class="selected.includes('{{ $run->id }}') ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''">
+                            <td class="px-6 py-4" @click.stop>
+                                <input type="checkbox" value="{{ $run->id }}" x-model="selected" class="directory-checkbox">
                             </td>
-                            <td class="px-4 py-3">
+                            <td class="whitespace-nowrap px-6 py-4 font-bold text-ink-800 dark:text-white">
+                                {{ $run->periodLabel() }}
+                                <span class="mt-0.5 block text-xs font-medium text-ink-500 dark:text-ink-400">{{ $run->typeLabel() }} · {{ $run->dayCount() }} day(s)</span>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-4">
                                 <x-badge :color="$run->statusColor()">{{ $run->statusLabel() }}</x-badge>
                                 @if ($run->failed_count > 0)
                                     <span class="ml-1 text-xs font-semibold text-amber-600 dark:text-amber-400">{{ $run->failed_count }} failed</span>
                                 @endif
                             </td>
-                            <td class="px-4 py-3 text-right font-medium tabular-nums text-[#778599]">{{ $run->slips_count ?: $run->agents_count }}</td>
-                            <td class="px-4 py-3 text-right font-medium tabular-nums text-[#778599]">${{ number_format((float) $run->total_usd, 2) }}</td>
-                            <td class="px-4 py-3 text-right font-bold tabular-nums text-[#0f172a] dark:text-white">₱{{ number_format((float) $run->total_net, 2) }}</td>
-                            <td class="px-4 py-3 font-medium text-[#778599]">
-                                {{ $run->computed_at?->format('M j, Y') ?? '—' }}
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                <a href="{{ route('commissions.run-show', $run) }}" wire:navigate class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Open</a>
-                            </td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-medium tabular-nums text-ink-600 dark:text-ink-300">{{ $run->slips_count ?: $run->agents_count }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-medium tabular-nums text-ink-600 dark:text-ink-300">&#36;{{ number_format((float) $run->total_usd, 2) }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-bold tabular-nums text-ink-950 dark:text-white">₱{{ number_format((float) $run->total_net, 2) }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $run->computed_at?->format('M j, Y') ?? '—' }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="px-4 py-10 text-center font-medium text-[#778599]">
-                            No commission runs yet. Start one for the month you want to pay.
-                        </td></tr>
+                        <tr>
+                            <td colspan="7" class="px-6 py-16 text-center">
+                                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                                    <x-icon name="document" class="h-7 w-7" />
+                                </div>
+                                <p class="mt-4 text-base font-bold text-ink-950 dark:text-white">No commission runs yet</p>
+                                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Start a run for the commission period you want to process.</p>
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
         @if ($runs->hasPages())
-            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <div class="directory-pagination" @click="selected = []">
                 {{ $runs->links('components.pagination', ['noun' => 'runs']) }}
             </div>
         @endif

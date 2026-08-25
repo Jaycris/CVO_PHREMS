@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-        <title>{{ $title ?? config('app.name') }}</title>
+        <title>PHREMS | CreatiVision Outsourcing</title>
         <link rel="icon" type="image/png" href="{{ asset('images/logo-mark.png') }}">
 
         <script>
@@ -25,7 +25,6 @@
     <body class="h-full bg-ink-50 font-sans antialiased dark:bg-ink-950">
         {{ $slot }}
 
-        <x-global-action-loader />
 
         @livewireScripts
     </body>

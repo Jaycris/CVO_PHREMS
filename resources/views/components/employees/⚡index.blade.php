@@ -101,18 +101,18 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </div>
 
-    <x-card :padding="false" class="overflow-hidden rounded-2xl">
-        <div class="flex flex-col gap-4 border-b border-ink-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+    <x-card :padding="false" class="directory-panel">
+        <div class="directory-toolbar">
             <div>
-                <h3 class="text-xl font-bold text-ink-950 dark:text-white">Employee Directory</h3>
-                <p class="mt-1 h-4 text-sm font-semibold text-amber-600 dark:text-amber-300" x-text="selected.length ? `${selected.length} selected` : ''"></p>
+                <h3 class="directory-title">Employee Directory</h3>
+                <p class="directory-selection" x-text="selected.length ? `${selected.length} selected` : ''"></p>
             </div>
 
-            <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+            <div class="directory-toolbar-actions">
                 <div class="flex items-center gap-2">
                     <button
                         type="button"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-ink-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-ink-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
                         :disabled="selected.length !== 1"
                         @click="if (selected.length === 1) $wire.viewEmployee(selected[0])"
                         title="View selected employee"
@@ -121,7 +121,7 @@ new #[Layout('layouts.app')] class extends Component
                     </button>
                     <button
                         type="button"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-ink-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-ink-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
                         :disabled="selected.length !== 1"
                         @click="if (selected.length === 1) $wire.editEmployee(selected[0])"
                         title="Edit selected employee"
@@ -130,7 +130,7 @@ new #[Layout('layouts.app')] class extends Component
                     </button>
                     <button
                         type="button"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
                         :disabled="selected.length !== 1"
                         @click="if (selected.length === 1 && confirm('Delete this employee record?')) { $wire.deleteEmployee(selected[0]); selected = []; }"
                         title="Delete selected employee"
@@ -138,7 +138,7 @@ new #[Layout('layouts.app')] class extends Component
                         <x-icon name="trash" class="h-4 w-4" />
                     </button>
                 </div>
-                <label class="relative block sm:w-80">
+                <label class="directory-search">
                     <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
                     <x-input
                         wire:model.live.debounce.250ms="search"
@@ -150,13 +150,13 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-ink-200 dark:divide-white/10">
-                <thead class="bg-ink-50/80 dark:bg-white/[0.03]">
+            <table class="directory-table">
+                <thead class="directory-table-head">
                     <tr>
                         <th class="w-14 px-6 py-4 text-left">
                             <input
                                 type="checkbox"
-                                class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
+                                class="directory-checkbox"
                                 @change="selected = $event.target.checked ? @js($employees->getCollection()->pluck('id')->values()) : []"
                                 :checked="selected.length === @js($employees->count()) && @js($employees->count()) > 0"
                             >
@@ -170,18 +170,20 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Login</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
+                <tbody class="directory-table-body">
                     @forelse ($employees as $employee)
                         <tr
-                            class="cursor-pointer transition hover:bg-brand-50/50 dark:hover:bg-white/[0.03]"
-                            @click="selected.includes({{ $employee->id }}) ? selected = selected.filter((id) => id !== {{ $employee->id }}) : selected.push({{ $employee->id }})"
+                            wire:key="employee-{{ $employee->id }}"
+                            class="directory-row cursor-pointer"
+                            x-bind:class="selected.includes({{ $employee->id }}) ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''"
+                            wire:click="viewEmployee({{ $employee->id }})"
                         >
                             <td class="px-6 py-4" @click.stop>
                                 <input
                                     type="checkbox"
                                     value="{{ $employee->id }}"
                                     x-model.number="selected"
-                                    class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
+                                    class="directory-checkbox"
                                 >
                             </td>
                             <td class="whitespace-nowrap px-4 py-4 text-sm font-bold text-ink-800 dark:text-ink-100">{{ $employee->employee_id }}</td>
@@ -237,7 +239,7 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         @if ($employees->hasPages())
-            <div class="border-t border-ink-200 px-6 py-4 dark:border-white/10">
+            <div class="directory-pagination" @click="selected = []">
                 {{ $employees->links('components.pagination', ['noun' => 'employees']) }}
             </div>
         @endif

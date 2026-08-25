@@ -3,6 +3,7 @@
 use App\Models\AttendanceDay;
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use Illuminate\Support\Facades\Auth;
@@ -18,6 +19,19 @@ new #[Layout('layouts.app')] class extends Component
         $isAdminHr = $user->can('employees.manage');
 
         $today = now('Asia/Manila');
+        $holidayWindow = Holiday::query()
+            ->whereDate('date', '>=', $today->copy()->startOfMonth()->toDateString())
+            ->whereDate('date', '<=', $today->copy()->addMonths(6)->endOfMonth()->toDateString())
+            ->ordered()
+            ->get();
+        $calendarHolidays = $holidayWindow
+            ->filter(fn (Holiday $holiday) => $holiday->date->isSameMonth($today))
+            ->groupBy(fn (Holiday $holiday) => $holiday->date->toDateString());
+        $upcomingHolidays = $holidayWindow
+            ->filter(fn (Holiday $holiday) => $holiday->date->gte($today->copy()->startOfDay()))
+            ->take(6)
+            ->values();
+
         $hour = $today->hour;
         $greeting = match (true) {
             $hour < 12 => 'Good Morning',
@@ -43,6 +57,8 @@ new #[Layout('layouts.app')] class extends Component
                     'balance' => $employee->leaveBalance($t),
                 ])
                 : collect(),
+            'calendarHolidays' => $calendarHolidays,
+            'upcomingHolidays' => $upcomingHolidays,
             'birthdaysToday' => Employee::whereNotNull('birthdate')
                 ->whereMonth('birthdate', $today->month)
                 ->whereDay('birthdate', $today->day)
@@ -175,41 +191,91 @@ new #[Layout('layouts.app')] class extends Component
                 $calendarStart = $today->copy()->startOfMonth()->startOfWeek(\Carbon\Carbon::SUNDAY);
                 $calendarEnd = $today->copy()->endOfMonth()->endOfWeek(\Carbon\Carbon::SATURDAY);
             @endphp
-            <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
-                <div class="flex items-center justify-between border-b border-ink-200 px-5 py-4 dark:border-white/10">
-                    <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Schedule</p>
-                        <h2 class="mt-0.5 text-base font-bold text-ink-950 dark:text-white">Calendar</h2>
+            <div class="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(17rem,0.65fr)]">
+                <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                    <div class="flex items-center justify-between border-b border-ink-200 px-5 py-4 dark:border-white/10">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Schedule</p>
+                            <h2 class="mt-0.5 text-base font-bold text-ink-950 dark:text-white">Calendar</h2>
+                        </div>
+                        <p class="text-sm font-bold text-ink-700 dark:text-ink-200">{{ $today->format('F Y') }}</p>
                     </div>
-                    <p class="text-sm font-bold text-ink-700 dark:text-ink-200">{{ $today->format('F Y') }}</p>
-                </div>
-                <div class="p-4 sm:p-5">
-                    <div class="grid grid-cols-7 border-b border-ink-100 pb-2 dark:border-white/10">
-                        @foreach (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as $dayName)
-                            <div class="text-center text-xs font-bold uppercase text-ink-400">{{ $dayName }}</div>
-                        @endforeach
+                    <div class="p-4 sm:p-5">
+                        <div class="grid grid-cols-7 border-b border-ink-100 pb-2 dark:border-white/10">
+                            @foreach (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as $dayName)
+                                <div class="text-center text-xs font-bold uppercase text-ink-400">{{ $dayName }}</div>
+                            @endforeach
+                        </div>
+                        <div class="mt-2 grid grid-cols-7 gap-1.5">
+                            @for ($calendarDay = $calendarStart->copy(); $calendarDay->lte($calendarEnd); $calendarDay->addDay())
+                                @php
+                                    $isToday = $calendarDay->isSameDay($today);
+                                    $isCurrentMonth = $calendarDay->month === $today->month;
+                                    $hasRequest = $recentRequests->contains(fn ($request) => $calendarDay->betweenIncluded($request->start_date, $request->end_date));
+                                    $holidaysForDay = $calendarHolidays->get($calendarDay->toDateString(), collect());
+                                    $isHoliday = $holidaysForDay->isNotEmpty();
+                                @endphp
+                                <div title="{{ $isHoliday ? $holidaysForDay->pluck('name')->join(', ') : '' }}"
+                                    class="relative flex h-11 items-center justify-center rounded-lg text-sm font-semibold transition {{ $isToday ? 'bg-brand-700 text-white shadow-sm' : ($isHoliday && $isCurrentMonth ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20' : ($isCurrentMonth ? 'bg-ink-50 text-ink-700 dark:bg-white/5 dark:text-ink-200' : 'text-ink-300 dark:text-ink-600')) }}">
+                                    {{ $calendarDay->day }}
+                                    @if ($hasRequest || $isHoliday)
+                                        <span class="absolute bottom-1 flex items-center gap-1">
+                                            @if ($hasRequest)
+                                                <span class="h-1.5 w-1.5 rounded-full {{ $isToday ? 'bg-white' : 'bg-amber-500' }}"></span>
+                                            @endif
+                                            @if ($isHoliday)
+                                                <span class="h-1.5 w-1.5 rounded-full {{ $isToday ? 'bg-emerald-200' : 'bg-emerald-600' }}"></span>
+                                            @endif
+                                        </span>
+                                    @endif
+                                </div>
+                            @endfor
+                        </div>
+                        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-ink-500 dark:text-ink-400">
+                            <span class="inline-flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-amber-500"></span>Leave request dates</span>
+                            <span class="inline-flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-600"></span>Holiday</span>
+                        </div>
                     </div>
-                    <div class="mt-2 grid grid-cols-7 gap-1.5">
-                        @for ($calendarDay = $calendarStart->copy(); $calendarDay->lte($calendarEnd); $calendarDay->addDay())
-                            @php
-                                $isToday = $calendarDay->isSameDay($today);
-                                $isCurrentMonth = $calendarDay->month === $today->month;
-                                $hasRequest = $recentRequests->contains(fn ($request) => $calendarDay->betweenIncluded($request->start_date, $request->end_date));
-                            @endphp
-                            <div class="relative flex h-11 items-center justify-center rounded-lg text-sm font-semibold transition {{ $isToday ? 'bg-brand-700 text-white shadow-sm' : ($isCurrentMonth ? 'bg-ink-50 text-ink-700 dark:bg-white/5 dark:text-ink-200' : 'text-ink-300 dark:text-ink-600') }}">
-                                {{ $calendarDay->day }}
-                                @if ($hasRequest)
-                                    <span class="absolute bottom-1 h-1.5 w-1.5 rounded-full {{ $isToday ? 'bg-white' : 'bg-amber-500' }}"></span>
-                                @endif
+                </section>
+
+                <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
+                    <div class="flex items-center justify-between gap-3 border-b border-ink-200 px-4 py-3 dark:border-white/10">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Company Calendar</p>
+                            <h2 class="mt-0.5 text-base font-bold text-ink-950 dark:text-white">Upcoming Holidays</h2>
+                        </div>
+                        @can('holidays.manage')
+                            <a href="{{ route('holidays.index') }}" wire:navigate class="text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">Manage</a>
+                        @endcan
+                    </div>
+
+                    <div class="divide-y divide-ink-100 dark:divide-white/10">
+                        @forelse ($upcomingHolidays as $holiday)
+                            <div class="flex items-center gap-3 px-4 py-3.5">
+                                <div class="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-200">
+                                    <span class="text-[10px] font-bold uppercase leading-none">{{ $holiday->date->format('M') }}</span>
+                                    <span class="mt-1 text-lg font-bold leading-none">{{ $holiday->date->format('d') }}</span>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-bold text-ink-900 dark:text-white" title="{{ $holiday->name }}">{{ $holiday->name }}</p>
+                                    <p class="mt-1 text-xs font-semibold text-ink-500 dark:text-ink-400">{{ $holiday->date->format('l') }}</p>
+                                    <span class="mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold {{ match ($holiday->type) {
+                                        \App\Models\Holiday::REGULAR => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300',
+                                        \App\Models\Holiday::SPECIAL_NON_WORKING => 'bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300',
+                                        default => 'bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300',
+                                    } }}">{{ $holiday->typeLabel() }}</span>
+                                </div>
                             </div>
-                        @endfor
+                        @empty
+                            <div class="px-4 py-9 text-center">
+                                <x-icon name="calendar" class="mx-auto h-7 w-7 text-ink-300 dark:text-ink-500" />
+                                <p class="mt-2 text-sm font-semibold text-ink-700 dark:text-ink-200">No upcoming holidays listed.</p>
+                                <p class="mt-1 text-xs font-medium text-ink-500 dark:text-ink-400">The next six months are clear.</p>
+                            </div>
+                        @endforelse
                     </div>
-                    <div class="mt-4 flex items-center gap-2 text-sm font-medium text-ink-500 dark:text-ink-400">
-                        <span class="h-2 w-2 rounded-full bg-amber-500"></span>
-                        Leave request dates
-                    </div>
-                </div>
-            </section>
+                </section>
+            </div>
         </main>
 
         <aside class="space-y-5 xl:col-span-4">

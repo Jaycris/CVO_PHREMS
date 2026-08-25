@@ -22,6 +22,10 @@ new #[Layout('layouts.app')] class extends Component
     public bool $showForm = false;
     public ?int $editingId = null;
     public ?string $statusMessage = null;
+    public string $search = '';
+    public bool $showDelete = false;
+    /** @var list<int> */
+    public array $deleteIds = [];
 
     public string $whose = 'all';
 
@@ -37,6 +41,11 @@ new #[Layout('layouts.app')] class extends Component
     }
 
     public function updatedYear(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedSearch(): void
     {
         $this->resetPage();
     }
@@ -128,6 +137,22 @@ new #[Layout('layouts.app')] class extends Component
         $this->reset(['editingId', 'name', 'note']);
     }
 
+    public function prepareDelete(array $ids): void
+    {
+        $this->deleteIds = Holiday::whereIn('id', array_map('intval', $ids))->pluck('id')->all();
+        $this->showDelete = $this->deleteIds !== [];
+    }
+
+    public function deleteSelected(): void
+    {
+        Holiday::whereIn('id', $this->deleteIds)->delete();
+        $count = count($this->deleteIds);
+        $this->deleteIds = [];
+        $this->showDelete = false;
+        $this->statusMessage = $count . ' holiday(s) removed. Finalized payroll runs keep their existing figures.';
+        $this->dispatch('holidays-deleted');
+    }
+
     public function delete(int $id): void
     {
         Holiday::findOrFail($id)->delete();
@@ -152,6 +177,12 @@ new #[Layout('layouts.app')] class extends Component
             'years' => $years,
             'holidays' => Holiday::forYear($this->year)
                 ->when($this->whose !== 'all', fn ($q) => $q->observance($this->whose))
+                ->when($this->search !== '', function ($query) {
+                    $query->where(function ($query) {
+                        $query->where('name', 'like', '%' . $this->search . '%')
+                            ->orWhere('note', 'like', '%' . $this->search . '%');
+                    });
+                })
                 ->ordered()
                 ->paginate($this->perPage()),
             // Counted per calendar rather than per type. "How many days off do
@@ -169,33 +200,24 @@ new #[Layout('layouts.app')] class extends Component
 ?>
 
 <div class="space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-            <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Holidays</h1>
-            <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">
-                Philippine and US holidays the company observes. Payroll reads this list — a day that is not
-                here is treated as an ordinary workday, and staying home on it is counted as an absence.
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="max-w-4xl">
+            <h1 class="text-xl font-bold text-ink-950 dark:text-white">Holidays</h1>
+            <p class="mt-1 text-sm font-medium leading-6 text-ink-500 dark:text-ink-400">
+                Manage the Philippine, US, and company holidays observed by PHREMS and used during payroll computation.
             </p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-            <x-select wire:model.live="year" class="w-32">
-                @foreach ($years as $y)
-                    <option value="{{ $y }}">{{ $y }}</option>
-                @endforeach
-            </x-select>
-
-            <x-button wire:click="create" @click="$wire.showForm = true" pill>
-                <x-icon name="plus" class="h-4 w-4" /> Add Holiday
-            </x-button>
-        </div>
+        <x-button type="button" wire:click="create" @click="$dispatch('open-phrems-modal', 'showForm')">
+            <x-icon name="plus" class="h-4 w-4" /> Add Holiday
+        </x-button>
     </div>
 
     @if ($statusMessage)
         <div class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{{ $statusMessage }}</div>
     @endif
 
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         @foreach (\App\Models\Holiday::OBSERVANCES as $key => $label)
             <x-card>
                 <p class="text-xs font-medium uppercase tracking-wide text-[#778599]">{{ $label }}</p>
@@ -217,49 +239,114 @@ new #[Layout('layouts.app')] class extends Component
         </x-card>
     </div>
 
-    <x-card :padding="false">
-        <div class="flex flex-wrap items-center gap-2 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800"
-             x-data="{ pending: null }">
-            @foreach (['all' => 'All calendars'] + \App\Models\Holiday::OBSERVANCES as $key => $label)
-                <x-button wire:click="showOnly('{{ $key }}')"
-                          wire:loading.attr="disabled"
-                          wire:target="showOnly"
-                          @click="pending = '{{ $key }}'"
-                          x-bind:class="pending === '{{ $key }}' || (pending === null && {{ $whose === $key ? 'true' : 'false' }})
-                              ? 'bg-brand-700 text-white shadow-sm shadow-brand-900/15 hover:bg-brand-800'
-                              : ''"
-                          variant="secondary"
-                          class="h-9 px-3 text-xs">{{ $label }}</x-button>
+    <x-card
+        :padding="false"
+        class="directory-panel"
+        x-data="{ selected: [] }"
+        @holidays-deleted.window="selected = []"
+    >
+        <div class="directory-toolbar">
+            <div>
+                <h2 class="directory-title">Holiday Directory</h2>
+                <p x-show="selected.length > 0" x-cloak class="mt-1 text-xs font-semibold text-amber-600" x-text="`${selected.length} selected`"></p>
+            </div>
+
+            <div class="directory-toolbar-actions">
+                <div class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        x-on:click="if (selected.length === 1) { $dispatch('open-phrems-modal', 'showForm'); $wire.edit(selected[0]); }"
+                        x-bind:disabled="selected.length !== 1"
+                        x-bind:title="selected.length === 1 ? 'Edit selected holiday' : 'Select one holiday to edit'"
+                        x-bind:class="selected.length === 1 ? 'text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10' : 'pointer-events-none text-ink-400 opacity-40 dark:text-ink-500'"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white shadow-sm transition dark:border-white/10 dark:bg-ink-900"
+                    >
+                        <x-icon name="pencil" class="h-4 w-4" />
+                    </button>
+                    <button
+                        type="button"
+                        x-on:click="if (selected.length > 0) { $dispatch('open-phrems-modal', 'showDelete'); $wire.prepareDelete(selected); }"
+                        x-bind:disabled="selected.length === 0"
+                        x-bind:title="selected.length > 0 ? 'Delete selected holidays' : 'Select holidays to delete'"
+                        x-bind:class="selected.length > 0 ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300' : 'pointer-events-none text-ink-400 opacity-40 dark:text-ink-500'"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white shadow-sm transition dark:border-white/10 dark:bg-ink-900"
+                    >
+                        <x-icon name="trash" class="h-4 w-4" />
+                    </button>
+                </div>
+
+                <x-select wire:model.live="year" @change="selected = []" class="h-10 !w-28 text-sm" title="Calendar year">
+                    @foreach ($years as $y)
+                        <option value="{{ $y }}">{{ $y }}</option>
+                    @endforeach
+                </x-select>
+
+                <label class="directory-search">
+                    <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                    <input
+                        type="text"
+                        wire:model.live.debounce.300ms="search"
+                        @input="selected = []"
+                        placeholder="Search holidays..."
+                        class="block h-10 w-full rounded-lg border border-ink-200 bg-white pl-9 pr-3.5 text-sm font-medium text-ink-700 shadow-sm placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-900 dark:text-white"
+                    >
+                </label>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 border-b border-ink-200 px-6 py-3 dark:border-white/10">
+            @foreach (['all' => 'All Calendars'] + \App\Models\Holiday::OBSERVANCES as $key => $label)
+                <button
+                    type="button"
+                    wire:click="showOnly('{{ $key }}')"
+                    wire:loading.attr="disabled"
+                    wire:target="showOnly"
+                    @click="selected = []"
+                    class="rounded-lg border px-3 py-2 text-xs font-bold transition {{ $whose === $key ? 'border-brand-700 bg-brand-700 text-white shadow-sm' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50 dark:border-white/10 dark:bg-ink-900 dark:text-ink-300 dark:hover:bg-white/10' }}"
+                >
+                    {{ $label }}
+                </button>
             @endforeach
         </div>
 
         <div class="overflow-x-auto transition-opacity duration-150"
              wire:loading.class="opacity-40"
-             wire:target="showOnly, year, gotoPage, nextPage, previousPage">
-            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-                <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
+             wire:target="showOnly, year, search, gotoPage, nextPage, previousPage">
+            <table class="directory-table">
+                <thead class="directory-table-head">
                     <tr>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Date</th>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Day</th>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Holiday</th>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Whose</th>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Type</th>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Note</th>
-                        <th class="px-4 py-4"></th>
+                        <th class="w-14 px-6 py-4 text-left">
+                            <input
+                                type="checkbox"
+                                class="directory-checkbox"
+                                x-bind:checked="selected.length === {{ $holidays->count() }} && {{ $holidays->count() }} > 0"
+                                @click="selected = (selected.length === {{ $holidays->count() }}) ? [] : [{{ $holidays->getCollection()->pluck('id')->implode(',') }}].map(String)"
+                            >
+                        </th>
+                        <th class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Date</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Day</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Holiday</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Calendar</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Type</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Note</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                <tbody class="directory-table-body">
                     @forelse ($holidays as $holiday)
-                        <tr wire:key="hol-{{ $holiday->id }}">
-                            <td class="px-4 py-3 font-bold tabular-nums text-[#0f172a] dark:text-white">
-                                {{ $holiday->date->format('M j, Y') }}
+                        <tr
+                            wire:key="hol-{{ $holiday->id }}"
+                            @click="selected = selected.includes('{{ $holiday->id }}') ? selected.filter(id => id !== '{{ $holiday->id }}') : [...selected, '{{ $holiday->id }}']"
+                            class="directory-row cursor-pointer"
+                            x-bind:class="selected.includes('{{ $holiday->id }}') ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''"
+                        >
+                            <td class="px-6 py-4" @click.stop>
+                                <input type="checkbox" value="{{ $holiday->id }}" x-model="selected" class="directory-checkbox">
                             </td>
-                            <td class="px-4 py-3 font-medium text-[#778599]">{{ $holiday->date->format('l') }}</td>
-                            <td class="px-4 py-3 font-medium text-[#0f172a] dark:text-white">{{ $holiday->name }}</td>
-                            <td class="px-4 py-3 font-medium text-[#778599]">{{ $holiday->observanceLabel() }}</td>
-                            <td class="px-4 py-3">
-                                {{-- Green for anything that protects the day's
-                                     pay, grey for the one that does not. --}}
+                            <td class="whitespace-nowrap px-6 py-4 font-bold text-ink-800 tabular-nums dark:text-white">{{ $holiday->date->format('M j, Y') }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $holiday->date->format('l') }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 font-semibold text-ink-800 dark:text-white">{{ $holiday->name }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $holiday->observanceLabel() }}</td>
+                            <td class="whitespace-nowrap px-4 py-4">
                                 <x-badge :color="match ($holiday->type) {
                                     'regular' => 'green',
                                     'special_non_working' => 'blue',
@@ -267,28 +354,25 @@ new #[Layout('layouts.app')] class extends Component
                                     default => 'neutral',
                                 }">{{ $holiday->typeLabel() }}</x-badge>
                             </td>
-                            <td class="px-4 py-3 font-medium text-[#778599]">{{ $holiday->note ?: '—' }}</td>
-                            <td class="px-4 py-3 text-right">
-                                <div class="flex flex-wrap justify-end gap-2">
-                                    <x-button wire:click="edit({{ $holiday->id }})" @click="$wire.showForm = true"
-                                              variant="secondary" class="h-9 px-3 text-xs">Edit</x-button>
-                                    <x-button wire:click="delete({{ $holiday->id }})"
-                                              wire:confirm="Remove {{ $holiday->name }} from the list? Payroll will treat that date as an ordinary workday."
-                                              variant="secondary" class="h-9 px-3 text-xs">Delete</x-button>
-                                </div>
-                            </td>
+                            <td class="min-w-48 px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $holiday->note ?: '—' }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="px-4 py-10 text-center font-medium text-[#778599]">
-                            No {{ $whose === 'all' ? '' : \App\Models\Holiday::OBSERVANCES[$whose] . ' ' }}holidays on file for {{ $year }} yet.
-                        </td></tr>
+                        <tr>
+                            <td colspan="7" class="px-6 py-16 text-center">
+                                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                                    <x-icon name="calendar" class="h-7 w-7" />
+                                </div>
+                                <p class="mt-4 text-base font-bold text-ink-950 dark:text-white">No holidays found</p>
+                                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">No {{ $whose === 'all' ? '' : \App\Models\Holiday::OBSERVANCES[$whose] . ' ' }}holidays are recorded for {{ $year }}.</p>
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
         @if ($holidays->hasPages())
-            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <div class="directory-pagination" @click="selected = []">
                 {{ $holidays->links('components.pagination', ['noun' => 'holidays']) }}
             </div>
         @endif
@@ -389,6 +473,28 @@ new #[Layout('layouts.app')] class extends Component
         <div class="mt-6 flex flex-wrap gap-2">
             <x-button wire:click="save">{{ $editingId ? 'Save Changes' : 'Add Holiday' }}</x-button>
             <x-button wire:click="$set('showForm', false)" @click="modalOpen = false" variant="secondary">Cancel</x-button>
+        </div>
+    </x-modal>
+    <x-modal wire="showDelete" onClose="$set('showDelete', false)" maxWidth="lg">
+        <div class="flex items-start gap-4">
+            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-red-200 bg-red-50 text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+                <x-icon name="trash" class="h-5 w-5" />
+            </div>
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-red-600 dark:text-red-300">Delete Confirmation</p>
+                <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Delete selected holidays?</h2>
+                <p class="mt-2 text-sm font-medium leading-6 text-ink-600 dark:text-ink-300">
+                    {{ count($deleteIds) }} holiday(s) will be removed. Payroll will treat those dates as ordinary workdays in future computations.
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2 border-t border-ink-100 pt-4 dark:border-white/10">
+            <x-button type="button" variant="secondary" wire:click="$set('showDelete', false)">Cancel</x-button>
+            <x-button wire:click="deleteSelected" wire:loading.attr="disabled" wire:target="deleteSelected" variant="danger" class="min-w-32">
+                <span wire:loading.remove wire:target="deleteSelected">Delete Holidays</span>
+                <span wire:loading wire:target="deleteSelected">Deleting...</span>
+            </x-button>
         </div>
     </x-modal>
 </div>

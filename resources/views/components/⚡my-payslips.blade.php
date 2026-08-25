@@ -127,7 +127,7 @@ new #[Layout('layouts.app')] class extends Component
     @else
         <x-card
             :padding="false"
-            class="relative overflow-hidden rounded-2xl"
+            class="directory-panel"
             x-data="{ selected: [] }"
         >
             <div
@@ -138,12 +138,12 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="h-full w-1/3 animate-[payslip-loader_0.9s_ease-in-out_infinite] rounded-r-full bg-brand-700 dark:bg-brand-300"></div>
             </div>
 
-            <div class="flex flex-col gap-4 border-b border-ink-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+            <div class="directory-toolbar">
                 <div>
-                    <h2 class="text-lg font-bold text-ink-950 dark:text-white">My Payslips Directory</h2>
+                    <h2 class="directory-title">My Payslips Directory</h2>
                 </div>
 
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="directory-toolbar-actions">
                     <div class="flex items-center gap-2">
                         <button
                             type="button"
@@ -167,7 +167,7 @@ new #[Layout('layouts.app')] class extends Component
                     </div>
 
 
-                    <label class="relative block sm:w-80">
+                    <label class="directory-search">
                         <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
                         <input
                             type="text"
@@ -180,13 +180,13 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-ink-200 text-sm dark:divide-white/10">
-                    <thead class="bg-ink-50/80 dark:bg-white/[0.03]">
+                <table class="directory-table">
+                    <thead class="directory-table-head">
                         <tr>
                             <th class="w-14 px-6 py-4 text-left">
                                 <input
                                     type="checkbox"
-                                    class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
+                                    class="directory-checkbox"
                                     x-bind:checked="selected.length === {{ $payslips->count() }} && {{ $payslips->count() }} > 0"
                                     @click="selected = (selected.length === {{ $payslips->count() }}) ? [] : [{{ $payslips->getCollection()->pluck('id')->implode(',') }}].map(String)"
                                 >
@@ -198,14 +198,14 @@ new #[Layout('layouts.app')] class extends Component
                             <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Net Pay</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
+                    <tbody class="directory-table-body">
                         @forelse ($payslips as $payslip)
                             <tr
                                 wire:key="mine-{{ $payslip->id }}"
                                 wire:click="open({{ $payslip->id }})"
                                 wire:loading.class="opacity-70"
                                 wire:target="open({{ $payslip->id }})"
-                                class="cursor-pointer transition duration-200 hover:bg-brand-50/50 dark:hover:bg-white/[0.03]"
+                                class="directory-row cursor-pointer"
                                 x-bind:class="selected.includes('{{ $payslip->id }}') ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''"
                             >
                                 <td class="px-6 py-4" onclick="event.stopPropagation()">
@@ -213,7 +213,7 @@ new #[Layout('layouts.app')] class extends Component
                                         type="checkbox"
                                         value="{{ $payslip->id }}"
                                         x-model="selected"
-                                        class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
+                                        class="directory-checkbox"
                                     >
                                 </td>
                                 <td class="whitespace-nowrap px-6 py-4 font-bold text-ink-800 dark:text-white">{{ $payslip->payrollRun->periodLabel() }}</td>
@@ -238,7 +238,7 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             @if ($payslips->hasPages())
-                <div class="border-t border-ink-200 px-6 py-4 dark:border-white/10">
+                <div class="directory-pagination" @click="selected = []">
                     {{ $payslips->links('components.pagination', ['noun' => 'payslips']) }}
                 </div>
             @endif

@@ -29,6 +29,8 @@ new #[Layout('layouts.app')] class extends Component
     public string $search = '';
 
     public bool $showUnlock = false;
+    public bool $showFinalize = false;
+    public bool $showSend = false;
     public string $unlockReason = '';
 
     public ?int $viewingSlipId = null;
@@ -118,6 +120,7 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
+        $this->showFinalize = false;
         $this->statusMessage = 'Figures locked. The slips are ready to send.';
     }
 
@@ -135,6 +138,7 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
+        $this->showSend = false;
         $this->statusMessage = $result['sent'] . ' slip(s) sent.'
             . ($result['skipped'] ? ' ' . $result['skipped'] . ' skipped — no login linked.' : '')
             . ($result['failed'] ? ' ' . $result['failed'] . ' failed to send.' : '');
@@ -244,20 +248,20 @@ new #[Layout('layouts.app')] class extends Component
             @endif
 
             @if ($run->status === 'computed' && $canFinalize)
-                <x-button wire:click="finalize"
-                          wire:confirm="Lock these figures? Nothing is sent yet — you send the slips as a separate step."
-                          wire:loading.attr="disabled" wire:target="finalize" variant="secondary">
-                    <span wire:loading.remove wire:target="finalize">Finalize</span>
-                    <span wire:loading wire:target="finalize">Locking…</span>
+                <x-button type="button"
+                          wire:click="$set('showFinalize', true)"
+                          @click="$dispatch('open-phrems-modal', 'showFinalize')"
+                          variant="secondary">
+                    Finalize
                 </x-button>
             @endif
 
             @if ($run->isFinalized() && $canFinalize && $pendingSends > 0)
-                <x-button wire:click="send"
-                          wire:confirm="Send {{ $pendingSends }} commission slip(s) to the agents? They will be able to see them straight away."
-                          wire:loading.attr="disabled" wire:target="send" variant="success">
-                    <span wire:loading.remove wire:target="send">Send {{ $pendingSends }} Commission Slip(s)</span>
-                    <span wire:loading wire:target="send">Sending…</span>
+                <x-button type="button"
+                          wire:click="$set('showSend', true)"
+                          @click="$dispatch('open-phrems-modal', 'showSend')"
+                          variant="success">
+                    Send {{ $pendingSends }} Commission Slip(s)
                 </x-button>
             @endif
 
@@ -432,6 +436,77 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </x-card>
 
+    <x-modal wire="showFinalize" onClose="$set('showFinalize', false)" maxWidth="lg">
+        <div class="flex items-start gap-4">
+            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300">
+                <x-icon name="lock" class="h-5 w-5" />
+            </div>
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Final Confirmation</p>
+                <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Finalize this commission run?</h2>
+                <p class="mt-2 text-sm font-medium leading-6 text-ink-600 dark:text-ink-300">
+                    Finalizing locks the current commission figures. Nothing will be sent yet; commission slips are issued in a separate step.
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-5 rounded-lg border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
+            <dl class="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                    <dt class="font-semibold text-ink-500 dark:text-ink-400">Commission Period</dt>
+                    <dd class="mt-1 font-bold text-ink-950 dark:text-white">{{ $run->period_start->format('M j') }}–{{ $run->period_end->format('M j, Y') }}</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-ink-500 dark:text-ink-400">Agents Included</dt>
+                    <dd class="mt-1 font-bold text-ink-950 dark:text-white">{{ $run->agent_count }}</dd>
+                </div>
+            </dl>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2 border-t border-ink-100 pt-4 dark:border-white/10">
+            <x-button type="button" variant="secondary" wire:click="$set('showFinalize', false)">Cancel</x-button>
+            <x-button wire:click="finalize" wire:loading.attr="disabled" wire:target="finalize" class="min-w-32">
+                <span wire:loading.remove wire:target="finalize">Finalize Run</span>
+                <span wire:loading wire:target="finalize">Finalizing...</span>
+            </x-button>
+        </div>
+    </x-modal>
+
+    <x-modal wire="showSend" onClose="$set('showSend', false)" maxWidth="lg">
+        <div class="flex items-start gap-4">
+            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-400/20 dark:bg-brand-400/10 dark:text-brand-300">
+                <x-icon name="mail" class="h-5 w-5" />
+            </div>
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Send Confirmation</p>
+                <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Send commission slips now?</h2>
+                <p class="mt-2 text-sm font-medium leading-6 text-ink-600 dark:text-ink-300">
+                    The selected agents will be notified and can view their commission slips immediately after they are sent.
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-5 rounded-lg border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
+            <dl class="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                    <dt class="font-semibold text-ink-500 dark:text-ink-400">Commission Period</dt>
+                    <dd class="mt-1 font-bold text-ink-950 dark:text-white">{{ $run->period_start->format('M j') }}–{{ $run->period_end->format('M j, Y') }}</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-ink-500 dark:text-ink-400">Slips To Send</dt>
+                    <dd class="mt-1 font-bold text-ink-950 dark:text-white">{{ $pendingSends }}</dd>
+                </div>
+            </dl>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2 border-t border-ink-100 pt-4 dark:border-white/10">
+            <x-button type="button" variant="secondary" wire:click="$set('showSend', false)">Cancel</x-button>
+            <x-button wire:click="send" wire:loading.attr="disabled" wire:target="send" variant="success" class="min-w-32">
+                <span wire:loading.remove wire:target="send">Send Slips</span>
+                <span wire:loading wire:target="send">Sending...</span>
+            </x-button>
+        </div>
+    </x-modal>
     {{-- The whole slip, exactly as the agent will see it. --}}
     <x-modal wire="viewingSlipId" onClose="closeSlip" maxWidth="4xl">
         @if ($viewingSlip)

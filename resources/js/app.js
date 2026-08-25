@@ -141,7 +141,7 @@ let actionLoaderTimer;
 let actionLoaderHideTimer;
 let actionLoaderShownAt = 0;
 
-const processingActionPattern = /^(?:login|logout|save|submit|send|approve|decline|delete|remove|withdraw|cancel|decide|amend|compute|finalize|unlock|generate|issue|revoke|assign|grant|revert|mark|timeIn|timeOut|startBreak|endBreak|toggleActive|toggleHold|toggleEligibility|refreshSlip|refreshSuggestion|openRun|addAdjustment|setSelectedAccess|next)/;
+const processingActionPattern = /^(?:logout|save|submit|send|approve|decline|delete|remove|withdraw|cancel|decide|amend|compute|finalize|unlock|generate|issue|revoke|assign|grant|revert|mark|timeIn|timeOut|startBreak|endBreak|toggleActive|toggleHold|toggleEligibility|refreshSlip|refreshSuggestion|openRun|addAdjustment|setSelectedAccess|next)/;
 
 function isProcessingAction(call) {
     return typeof call.method === 'string' && processingActionPattern.test(call.method);

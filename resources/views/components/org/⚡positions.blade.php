@@ -94,7 +94,7 @@ new #[Layout('layouts.app')] class extends Component
 };
 ?>
 
-<div class="space-y-7" x-data="{ selected: [], formOpen: $wire.entangle('showForm').live }">
+<div class="space-y-7" x-data="{ selected: [], formOpen: $wire.entangle('showForm').live, deleteOpen: false }">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
             <h1 class="text-3xl font-bold tracking-tight text-ink-950 dark:text-white">Positions</h1>
@@ -114,68 +114,68 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </div>
 
-    <x-card :padding="false" class="overflow-hidden rounded-2xl">
-        <div class="flex flex-wrap items-center justify-between gap-4 border-b border-ink-200 px-6 py-5 dark:border-white/10">
+    <x-card :padding="false" class="directory-panel">
+        <div class="directory-toolbar">
             <div>
-                <h2 class="text-xl font-bold text-ink-950 dark:text-white">Position Directory</h2>
-                <p class="mt-1 h-4 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                <h2 class="directory-title">Position Directory</h2>
+                <p class="directory-selection">
                     <span x-show="selected.length > 0" x-text="selected.length + ' selected'"></span>
                 </p>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2.5">
+            <div class="directory-toolbar-actions">
                 <x-icon-button icon="pencil" variant="brand" wire:click="editSelected(selected)"
                     @click="if (selected.length === 1) formOpen = true"
-                    class="h-10 w-10 rounded-xl border-ink-200 bg-ink-50 text-[#8094ad] shadow-sm hover:bg-ink-100 hover:text-[#526783] dark:border-white/10 dark:bg-white/5 dark:text-ink-300 dark:hover:bg-white/10 [&_svg]:h-4 [&_svg]:w-4"
+
                     x-bind:disabled="selected.length !== 1"
                     x-bind:class="selected.length !== 1 ? 'opacity-40 pointer-events-none' : ''"
                     title="Edit" />
 
-                <x-icon-button icon="trash" variant="danger" wire:click="deleteSelected(selected)" wire:confirm="Delete the selected position(s)?"
-                    class="h-10 w-10 rounded-xl border-red-200 bg-red-50 text-red-600 shadow-sm hover:bg-red-100 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300 [&_svg]:h-4 [&_svg]:w-4"
+                <x-icon-button icon="trash" variant="danger"
+                    @click="if (selected.length > 0) deleteOpen = true"
                     x-bind:disabled="selected.length === 0"
                     x-bind:class="selected.length === 0 ? 'opacity-40 pointer-events-none' : ''"
                     title="Delete" />
 
-                <div class="relative">
-                    <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-ink-500">
-                        <x-icon name="search" class="h-5 w-5" />
+                <label class="directory-search">
+                    <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-ink-400">
+                        <x-icon name="search" class="h-4 w-4" />
                     </span>
                     <input type="text" wire:model.live.debounce.300ms="search" @input="selected = []" placeholder="Search positions..."
-                        class="h-10 w-72 rounded-xl border border-ink-200 bg-white py-2 pl-11 pr-4 text-sm font-medium text-ink-700 shadow-sm placeholder:text-ink-500 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-900 dark:text-white">
-                </div>
+                        class="block h-10 w-full rounded-lg border border-ink-200 bg-white pl-9 pr-3.5 text-sm font-medium text-ink-700 shadow-sm placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-900 dark:text-white">
+                </label>
             </div>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-ink-200 dark:divide-white/10">
-                <thead class="bg-ink-50 dark:bg-white/5">
+            <table class="directory-table">
+                <thead class="directory-table-head">
                     <tr>
-                        <th class="w-14 px-5 py-4">
+                        <th class="w-14 px-6 py-4 text-left">
                             <input type="checkbox"
                                 x-bind:checked="selected.length === {{ $positions->count() }} && {{ $positions->count() }} > 0"
                                 @click="selected = (selected.length === {{ $positions->count() }}) ? [] : [{{ $positions->getCollection()->pluck('id')->implode(',') }}].map(String)"
-                                class="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500 dark:border-white/20 dark:bg-ink-800">
+                                class="directory-checkbox">
                         </th>
-                        <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Title</th>
-                        <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Description</th>
-                        <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Supervisory</th>
-                        <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-300">Access</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Title</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Description</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Supervisory</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Access</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
+                <tbody class="directory-table-body">
                     @forelse ($positions as $position)
-                        <tr wire:key="pos-{{ $position->id }}" class="transition hover:bg-ink-50 dark:hover:bg-white/5" x-bind:class="selected.includes('{{ $position->id }}') ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''">
-                            <td class="px-5 py-4">
+                        <tr wire:key="pos-{{ $position->id }}" class="directory-row cursor-pointer" @click="selected.includes('{{ $position->id }}') ? selected = selected.filter((id) => id !== '{{ $position->id }}') : selected.push('{{ $position->id }}')" x-bind:class="selected.includes('{{ $position->id }}') ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''">
+                            <td class="px-6 py-4" @click.stop>
                                 <input type="checkbox" x-model="selected" value="{{ $position->id }}"
-                                    class="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500 dark:border-white/20 dark:bg-ink-800">
+                                    class="directory-checkbox">
                             </td>
-                            <td class="px-5 py-4 text-sm font-medium text-[#526783] dark:text-white">{{ $position->title }}</td>
-                            <td class="px-5 py-4 text-sm font-medium text-[#64748b] dark:text-ink-400">{{ $position->description }}</td>
-                            <td class="px-5 py-4 text-sm">
+                            <td class="px-4 py-4 font-bold text-ink-800 dark:text-white">{{ $position->title }}</td>
+                            <td class="px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $position->description }}</td>
+                            <td class="px-4 py-4">
                                 <x-badge :color="$position->is_supervisory ? 'brand' : 'neutral'">{{ $position->is_supervisory ? 'Yes' : 'No' }}</x-badge>
                             </td>
-                            <td class="px-5 py-4 text-sm">
+                            <td class="px-4 py-4">
                                 @if ($position->permissions->isEmpty())
                                     <span class="text-sm font-medium text-ink-500">Self-service only</span>
                                 @else
@@ -184,14 +184,22 @@ new #[Layout('layouts.app')] class extends Component
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-5 py-10 text-center text-sm font-medium text-ink-500">No positions yet.</td></tr>
+                        <tr>
+                            <td colspan="5" class="px-6 py-16 text-center">
+                                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                                    <x-icon name="tag" class="h-7 w-7" />
+                                </div>
+                                <p class="mt-4 text-base font-bold text-ink-950 dark:text-white">No positions found</p>
+                                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Add the first position or adjust your search.</p>
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
         @if ($positions->hasPages())
-            <div class="border-t border-ink-200 bg-white px-5 py-4 dark:border-white/10 dark:bg-ink-900/40" @click="selected = []">
+            <div class="directory-pagination" @click="selected = []">
                 {{ $positions->links('components.pagination', ['noun' => 'positions']) }}
             </div>
         @endif
@@ -288,4 +296,38 @@ new #[Layout('layouts.app')] class extends Component
             </form>
         </section>
     </div>
-</div>
+
+    <div x-cloak x-show="deleteOpen" @keydown.escape.window="deleteOpen = false"
+        class="fixed inset-0 z-[110] flex h-[100dvh] w-screen items-center justify-center overflow-hidden p-4">
+        <div class="absolute inset-0 bg-ink-950/55 backdrop-blur-sm" @click="deleteOpen = false"></div>
+
+        <section x-show="deleteOpen"
+            x-transition:enter="ease-out duration-150"
+            x-transition:enter-start="opacity-0 translate-y-2 scale-95"
+            x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+            x-transition:leave="ease-in duration-100"
+            x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+            x-transition:leave-end="opacity-0 translate-y-2 scale-95"
+            class="professional-panel relative z-10 w-full max-w-md overflow-hidden rounded-xl shadow-2xl shadow-ink-950/20">
+            <div class="p-6">
+                <div class="flex items-start gap-4">
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-red-200 bg-red-50 text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+                        <x-icon name="trash" class="h-5 w-5" />
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-red-600 dark:text-red-300">Confirm deletion</p>
+                        <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Delete selected positions?</h2>
+                        <p class="mt-2 text-sm font-medium leading-6 text-ink-500 dark:text-ink-400"
+                            x-text="selected.length === 1 ? 'This position will be permanently removed.' : selected.length + ' positions will be permanently removed.'"></p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 border-t border-ink-200 bg-ink-50 px-6 py-4 dark:border-white/10 dark:bg-white/5">
+                <x-button type="button" variant="secondary" @click="deleteOpen = false">Cancel</x-button>
+                <x-button type="button" variant="danger"
+                    @click="deleteOpen = false; $wire.deleteSelected(selected); selected = []">
+                    Delete
+                </x-button>
+            </div>
+        </section>
+    </div></div>

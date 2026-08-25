@@ -303,7 +303,7 @@ new #[Layout('layouts.app')] class extends Component
             <h2 class="text-3xl font-bold tracking-tight text-ink-950 dark:text-white">Users</h2>
             <p class="mt-1 text-base font-medium text-ink-600 dark:text-ink-300">Manage PHREMS login accounts, access tiers, and account availability.</p>
         </div>
-        <x-button wire:click="create" class="h-10 px-4">
+        <x-button wire:click="create" @click="$dispatch('open-phrems-modal', 'showForm')" class="h-10 px-4">
             <x-icon name="plus" class="h-4 w-4" />
             Add User
         </x-button>
@@ -338,42 +338,42 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </div>
 
-    <x-card :padding="false" class="overflow-hidden rounded-2xl">
-        <div class="flex flex-col gap-4 border-b border-ink-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+    <x-card :padding="false" class="directory-panel">
+        <div class="directory-toolbar">
             <div>
-                <h3 class="text-xl font-bold text-ink-950 dark:text-white">User Directory</h3>
-                <p class="mt-1 h-4 text-sm font-semibold text-amber-600 dark:text-amber-300" x-text="selected.length ? selected.length + ' selected' : ''"></p>
+                <h3 class="directory-title">User Directory</h3>
+                <p class="directory-selection" x-text="selected.length ? selected.length + ' selected' : ''"></p>
             </div>
-            <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+            <div class="directory-toolbar-actions">
                 <div class="flex items-center gap-2">
                     <button type="button"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-ink-300"
-                        :disabled="selected.length !== 1" @click="if (selected.length === 1) $wire.editSelected(selected)"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-ink-300"
+                        :disabled="selected.length !== 1" @click="if (selected.length === 1) { $dispatch('open-phrems-modal', 'showAccess'); $wire.editSelected(selected); }"
                         title="Edit selected user's access">
                         <x-icon name="pencil" class="h-4 w-4" />
                     </button>
                     <button type="button"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
                         :disabled="selected.length === 0" @click="if (selected.length) { $wire.setSelectedAccess(selected, true); selected = []; }"
                         title="Enable selected account access">
                         <x-icon name="shield-check" class="h-4 w-4" />
                     </button>
                     <button type="button"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 shadow-sm transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 shadow-sm transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
                         :disabled="selected.length === 0"
                         @click="if (selected.length) confirmation = 'disable'"
                         title="Disable selected account access">
                         <x-icon name="user-minus" class="h-4 w-4" />
                     </button>
                     <button type="button"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
                         :disabled="selected.length === 0"
                         @click="if (selected.length) confirmation = 'remove'"
                         title="Remove selected user account">
                         <x-icon name="trash" class="h-4 w-4" />
                     </button>
                 </div>
-                <label class="relative block sm:w-80">
+                <label class="directory-search">
                     <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
                     <x-input wire:model.live.debounce.250ms="search" @input="selected = []" placeholder="Search users..." class="h-10 pl-9" />
                 </label>
@@ -381,12 +381,12 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-ink-200 dark:divide-white/10">
-                <thead class="bg-ink-50/80 dark:bg-white/[0.03]">
+            <table class="directory-table">
+                <thead class="directory-table-head">
                     <tr>
                         <th class="w-14 px-6 py-4 text-left">
                             <input type="checkbox"
-                                class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900"
+                                class="directory-checkbox"
                                 @change="selected = $event.target.checked ? @js($users->getCollection()->pluck('id')->values()) : []"
                                 :checked="selected.length === @js($users->count()) && @js($users->count()) > 0">
                         </th>
@@ -400,15 +400,15 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Password</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-ink-100 bg-white dark:divide-white/10 dark:bg-ink-900/40">
+                <tbody class="directory-table-body">
                     @forelse ($users as $user)
                         <tr wire:key="user-{{ $user->id }}"
-                            class="cursor-pointer transition hover:bg-brand-50/50 dark:hover:bg-white/[0.03]"
+                            class="directory-row cursor-pointer"
                             :class="selected.includes({{ $user->id }}) ? 'bg-brand-50/60 dark:bg-brand-500/10' : ''"
                             @click="selected.includes({{ $user->id }}) ? selected = selected.filter((id) => id !== {{ $user->id }}) : selected.push({{ $user->id }})">
                             <td class="px-6 py-4" @click.stop>
                                 <input type="checkbox" value="{{ $user->id }}" x-model.number="selected"
-                                    class="h-5 w-5 rounded border-ink-300 text-brand-700 focus:ring-brand-600 dark:border-white/20 dark:bg-ink-900">
+                                    class="directory-checkbox">
                             </td>
                             <td class="whitespace-nowrap px-4 py-4 text-sm font-bold text-ink-800 dark:text-ink-100">{{ $user->user_code }}</td>
                             <td class="min-w-52 px-4 py-4">
@@ -446,7 +446,7 @@ new #[Layout('layouts.app')] class extends Component
             </table>
         </div>
         @if ($users->hasPages())
-            <div class="border-t border-ink-200 px-5 py-4 dark:border-white/10">
+            <div class="directory-pagination" @click="selected = []">
                 {{ $users->links('components.pagination', ['noun' => 'users']) }}
             </div>
         @endif
@@ -500,7 +500,14 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </template>
 
-    <x-modal :show="$showForm" onClose="closeForm">
+    <x-modal wire="showForm" onClose="closeForm">
+        <div wire:loading.flex wire:target="create" class="min-h-64 flex-col justify-center gap-4" aria-label="Loading user form">
+            <div class="h-6 w-32 animate-pulse rounded bg-ink-200 dark:bg-white/10"></div>
+            <div class="h-12 w-full animate-pulse rounded-lg bg-ink-100 dark:bg-white/5"></div>
+            <div class="h-12 w-full animate-pulse rounded-lg bg-ink-100 dark:bg-white/5"></div>
+            <div class="h-12 w-full animate-pulse rounded-lg bg-ink-100 dark:bg-white/5"></div>
+        </div>
+        <div wire:loading.remove wire:target="create">
         <h2 class="mb-4 text-lg font-bold text-[#0f172a] dark:text-white">Add User</h2>
 
         @if ($availableEmployees->isEmpty())
@@ -555,9 +562,20 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </form>
         @endif
+        </div>
     </x-modal>
 
-    <x-modal :show="$showAccess" onClose="closeAccess" maxWidth="lg">
+    <x-modal wire="showAccess" onClose="closeAccess" maxWidth="lg">
+        <div wire:loading.flex wire:target="editSelected" class="min-h-72 flex-col justify-center gap-4" aria-label="Loading access form">
+            <div class="h-6 w-48 animate-pulse rounded bg-ink-200 dark:bg-white/10"></div>
+            <div class="h-4 w-64 animate-pulse rounded bg-ink-100 dark:bg-white/5"></div>
+            <div class="h-12 w-full animate-pulse rounded-lg bg-ink-100 dark:bg-white/5"></div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="h-20 animate-pulse rounded-lg bg-ink-100 dark:bg-white/5"></div>
+                <div class="h-20 animate-pulse rounded-lg bg-ink-100 dark:bg-white/5"></div>
+            </div>
+        </div>
+        <div wire:loading.remove wire:target="editSelected">
         @if ($accessUser)
             <h2 class="mb-1 text-lg font-bold text-[#0f172a] dark:text-white">Access — {{ $accessUser->name }}</h2>
             <p class="mb-5 text-sm font-medium text-[#778599]">
@@ -648,9 +666,10 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </div>
         @endif
+        </div>
     </x-modal>
 
-    <x-modal :show="$showConfirmation" onClose="acknowledge" maxWidth="sm">
+    <x-modal wire="showConfirmation" onClose="acknowledge" maxWidth="sm">
         <div class="text-center">
             <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
                 <x-icon name="check" class="h-6 w-6" />

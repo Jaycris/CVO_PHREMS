@@ -20,7 +20,15 @@ new #[Layout('layouts.app')] class extends Component
     /** 'auto' defers to whether the shift overlaps the 22:00-06:00 window. */
     public string $night_differential = 'auto';
     public ?int $editingId = null;
+    public string $search = '';
+    public bool $showDelete = false;
+    /** @var list<int> */
+    public array $deleteIds = [];
 
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
     public function create(): void
     {
         $this->resetForm();
@@ -89,6 +97,20 @@ new #[Layout('layouts.app')] class extends Component
         $this->night_differential = 'auto';
     }
 
+    public function prepareDelete(array $ids): void
+    {
+        $this->deleteIds = WorkSchedule::whereIn('id', array_map('intval', $ids))->pluck('id')->all();
+        $this->showDelete = $this->deleteIds !== [];
+    }
+
+    public function deleteSelected(): void
+    {
+        WorkSchedule::whereIn('id', $this->deleteIds)->delete();
+        $this->deleteIds = [];
+        $this->showDelete = false;
+        $this->dispatch('schedules-deleted');
+    }
+
     public function delete(int $id): void
     {
         WorkSchedule::findOrFail($id)->delete();
@@ -96,73 +118,145 @@ new #[Layout('layouts.app')] class extends Component
 
     public function with(): array
     {
+        $query = WorkSchedule::query()
+            ->when($this->search !== '', fn ($query) => $query->where('name', 'like', '%' . $this->search . '%'))
+            ->orderBy('name');
+
         return [
-            'schedules' => WorkSchedule::orderBy('name')->paginate($this->perPage()),
+            'schedules' => $query->paginate($this->perPage()),
         ];
     }
 };
 ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
-        <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Work Schedules</h1>
-        <x-button wire:click="create">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <h1 class="text-xl font-bold text-ink-950 dark:text-white">Work Schedules</h1>
+            <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Manage standard shifts, break allowances, workdays, and night differential eligibility.</p>
+        </div>
+        <x-button type="button" wire:click="create" @click="$dispatch('open-phrems-modal', 'showForm')">
             <x-icon name="plus" class="h-4 w-4" /> Add Schedule
         </x-button>
     </div>
 
-    <x-card :padding="false">
+    <x-card
+        :padding="false"
+        class="directory-panel"
+        x-data="{ selected: [] }"
+        @schedules-deleted.window="selected = []"
+    >
+        <div class="directory-toolbar">
+            <div>
+                <h2 class="directory-title">Work Schedule Directory</h2>
+                <p x-show="selected.length > 0" x-cloak class="mt-1 text-xs font-semibold text-amber-600" x-text="`${selected.length} selected`"></p>
+            </div>
+
+            <div class="directory-toolbar-actions">
+                <div class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        x-on:click="if (selected.length === 1) { $dispatch('open-phrems-modal', 'showForm'); $wire.edit(selected[0]); }"
+                        x-bind:disabled="selected.length !== 1"
+                        x-bind:title="selected.length === 1 ? 'Edit selected schedule' : 'Select one schedule to edit'"
+                        x-bind:class="selected.length === 1 ? 'text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10' : 'pointer-events-none text-ink-400 opacity-40 dark:text-ink-500'"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white shadow-sm transition dark:border-white/10 dark:bg-ink-900"
+                    >
+                        <x-icon name="pencil" class="h-4 w-4" />
+                    </button>
+                    <button
+                        type="button"
+                        x-on:click="if (selected.length > 0) { $dispatch('open-phrems-modal', 'showDelete'); $wire.prepareDelete(selected); }"
+                        x-bind:disabled="selected.length === 0"
+                        x-bind:title="selected.length > 0 ? 'Delete selected schedules' : 'Select schedules to delete'"
+                        x-bind:class="selected.length > 0 ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300' : 'pointer-events-none text-ink-400 opacity-40 dark:text-ink-500'"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white shadow-sm transition dark:border-white/10 dark:bg-ink-900"
+                    >
+                        <x-icon name="trash" class="h-4 w-4" />
+                    </button>
+                </div>
+
+                <label class="directory-search">
+                    <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                    <input
+                        type="text"
+                        wire:model.live.debounce.300ms="search"
+                        @input="selected = []"
+                        placeholder="Search schedules..."
+                        class="block h-10 w-full rounded-lg border border-ink-200 bg-white pl-9 pr-3.5 text-sm font-medium text-ink-700 shadow-sm placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-500 dark:border-white/10 dark:bg-ink-900 dark:text-white"
+                    >
+                </label>
+            </div>
+        </div>
+
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-neutral-200 dark:divide-neutral-800">
-                <thead class="bg-neutral-50 dark:bg-neutral-800/50">
+            <table class="directory-table">
+                <thead class="directory-table-head">
                     <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Name</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Hours</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Lunch</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Coffee</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Work Days</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Night Diff</th>
-                        <th class="px-4 py-3"></th>
+                        <th class="w-14 px-6 py-4 text-left">
+                            <input
+                                type="checkbox"
+                                class="directory-checkbox"
+                                x-bind:checked="selected.length === {{ $schedules->count() }} && {{ $schedules->count() }} > 0"
+                                @click="selected = (selected.length === {{ $schedules->count() }}) ? [] : [{{ $schedules->getCollection()->pluck('id')->implode(',') }}].map(String)"
+                            >
+                        </th>
+                        <th class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Name</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Hours</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Lunch</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Coffee</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Work Days</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Night Diff</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                <tbody class="directory-table-body">
                     @forelse ($schedules as $schedule)
-                        <tr wire:key="sched-{{ $schedule->id }}">
-                            <td class="px-4 py-3 text-sm font-medium text-[#65758c] dark:text-white">{{ $schedule->name }}</td>
-                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $schedule->start_time->format('g:i A') }} – {{ $schedule->end_time->format('g:i A') }}</td>
-                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $schedule->lunch_break_minutes }} min</td>
-                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">{{ $schedule->coffee_break_minutes }} min</td>
-                            <td class="px-4 py-3 text-sm font-medium text-[#778599] dark:text-neutral-400">
+                        <tr
+                            wire:key="sched-{{ $schedule->id }}"
+                            @click="selected = selected.includes('{{ $schedule->id }}') ? selected.filter(id => id !== '{{ $schedule->id }}') : [...selected, '{{ $schedule->id }}']"
+                            class="directory-row cursor-pointer"
+                            x-bind:class="selected.includes('{{ $schedule->id }}') ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''"
+                        >
+                            <td class="px-6 py-4" @click.stop>
+                                <input type="checkbox" value="{{ $schedule->id }}" x-model="selected" class="directory-checkbox">
+                            </td>
+                            <td class="whitespace-nowrap px-6 py-4 font-bold text-ink-800 dark:text-white">{{ $schedule->name }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $schedule->start_time->format('g:i A') }} – {{ $schedule->end_time->format('g:i A') }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $schedule->lunch_break_minutes }} min</td>
+                            <td class="whitespace-nowrap px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $schedule->coffee_break_minutes }} min</td>
+                            <td class="whitespace-nowrap px-4 py-4 font-medium text-ink-600 dark:text-ink-300">
                                 @php $dayLabels = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 7 => 'Sun']; @endphp
                                 {{ collect($schedule->workDays())->map(fn ($d) => $dayLabels[$d] ?? $d)->join(', ') }}
                             </td>
-                            <td class="px-4 py-3 text-sm">
+                            <td class="whitespace-nowrap px-4 py-4">
                                 <x-badge :color="$schedule->qualifiesForNightDifferential() ? 'blue' : 'neutral'">
                                     {{ $schedule->qualifiesForNightDifferential() ? 'Yes' : 'No' }}{{ $schedule->night_differential_eligible === null ? ' (auto)' : '' }}
                                 </x-badge>
                             </td>
-                            <td class="px-4 py-3 text-right">
-                                <div class="flex justify-end gap-1">
-                                    <x-icon-button icon="pencil" variant="brand" wire:click="edit({{ $schedule->id }})" title="Edit" />
-                                    <x-icon-button icon="trash" variant="danger" wire:click="delete({{ $schedule->id }})" wire:confirm="Delete this schedule?" title="Delete" />
-                                </div>
-                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="px-4 py-8 text-center text-sm font-medium text-[#778599]">No schedules yet.</td></tr>
+                        <tr>
+                            <td colspan="7" class="px-6 py-16 text-center">
+                                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                                    <x-icon name="calendar" class="h-7 w-7" />
+                                </div>
+                                <p class="mt-4 text-base font-bold text-ink-950 dark:text-white">No schedules yet</p>
+                                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Add the first schedule to define standard working hours.</p>
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
         @if ($schedules->hasPages())
-            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <div class="directory-pagination" @click="selected = []">
                 {{ $schedules->links('components.pagination', ['noun' => 'schedules']) }}
             </div>
         @endif
     </x-card>
 
-    <x-modal :show="$showForm" onClose="closeForm">
+    <x-modal wire="showForm" onClose="closeForm">
         <h2 class="mb-4 text-lg font-bold text-[#0f172a] dark:text-white">{{ $editingId ? 'Edit Schedule' : 'Add Schedule' }}</h2>
         <form wire:submit="save" class="space-y-4">
             <div>
@@ -223,5 +317,27 @@ new #[Layout('layouts.app')] class extends Component
                 <x-button type="button" variant="secondary" wire:click="closeForm">Cancel</x-button>
             </div>
         </form>
+    </x-modal>
+    <x-modal wire="showDelete" onClose="$set('showDelete', false)" maxWidth="lg">
+        <div class="flex items-start gap-4">
+            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-red-200 bg-red-50 text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+                <x-icon name="trash" class="h-5 w-5" />
+            </div>
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-red-600 dark:text-red-300">Delete Confirmation</p>
+                <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Delete selected schedules?</h2>
+                <p class="mt-2 text-sm font-medium leading-6 text-ink-600 dark:text-ink-300">
+                    {{ count($deleteIds) }} schedule(s) will be permanently removed. This action cannot be undone.
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2 border-t border-ink-100 pt-4 dark:border-white/10">
+            <x-button type="button" variant="secondary" wire:click="$set('showDelete', false)">Cancel</x-button>
+            <x-button wire:click="deleteSelected" wire:loading.attr="disabled" wire:target="deleteSelected" variant="danger" class="min-w-32">
+                <span wire:loading.remove wire:target="deleteSelected">Delete Schedules</span>
+                <span wire:loading wire:target="deleteSelected">Deleting...</span>
+            </x-button>
+        </div>
     </x-modal>
 </div>

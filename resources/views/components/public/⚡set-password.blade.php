@@ -51,11 +51,11 @@ new #[Layout('layouts.guest')] class extends Component
         <x-card class="p-8">
             @if ($activated)
                 <h1 class="mb-2 text-lg font-semibold text-[#0f172a] dark:text-white">Account activated!</h1>
-                <p class="mb-6 text-sm font-medium text-[#778599] dark:text-neutral-400">Your password has been set.</p>
+                <p class="mb-6 text-sm font-medium text-[#778599] dark:text-neutral-400">Your PHREMS account password has been set.</p>
                 <x-button as="a" href="{{ route('login') }}" class="w-full">Go to Login</x-button>
             @else
                 <h1 class="mb-1 text-xl font-semibold text-[#0f172a] dark:text-white">Set Your Password</h1>
-                <p class="mb-6 text-sm font-medium text-[#778599] dark:text-neutral-400">Welcome, {{ $user->name }}. Choose a password to activate your account.</p>
+                <p class="mb-6 text-sm font-medium text-[#778599] dark:text-neutral-400">Welcome, {{ $user->name }}. Choose a password to activate your PHREMS account.</p>
 
                 <form wire:submit="submit" class="space-y-4">
                     <div>

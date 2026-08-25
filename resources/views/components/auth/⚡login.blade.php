@@ -47,19 +47,21 @@ new #[Layout('layouts.guest')] class extends Component
                 </div>
 
                 <div class="relative z-10">
-                    {{-- The one place with room to say what the initials stand
-                         for. Everywhere else it is just the mark. --}}
                     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-200">
-                        PHREMS <span class="font-normal normal-case tracking-normal text-brand-200/70">· Payroll, HR, and Employee Management System</span>
+                        CreatiVision Outsourcing
                     </p>
-                    <h1 class="mt-4 text-3xl font-bold leading-tight text-white">Professional HR operations for your BPO team.</h1>
-                    <p class="mt-4 text-sm leading-6 text-ink-300">
+                    <p class="mt-5 text-xl font-semibold text-white">Welcome to</p>
+                    <h1 class="mt-1 text-5xl font-bold leading-none text-brand-300">PHREMS</h1>
+                    <p class="mt-3 text-sm font-semibold leading-5 text-brand-100/80">
+                        Payroll, HR, and Employee Management System
+                    </p>
+                    <p class="mt-5 text-sm leading-6 text-ink-300">
                         Manage attendance, leave, employee records, and payroll readiness from one secure workspace.
                     </p>
                 </div>
 
                 <div class="relative z-10 rounded-lg border border-white/10 bg-white/10 p-4 text-sm text-ink-300 backdrop-blur">
-                    Built for Philippine HR workflows, approvals, and night-shift operations.
+                    Built for CreatiVision Outsourcing HR Workflows, and Employee Managements.
                 </div>
             </div>
 
@@ -113,8 +115,18 @@ new #[Layout('layouts.guest')] class extends Component
                             Remember me
                         </label>
 
-                        <button type="submit" class="w-full rounded-lg bg-brand-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-brand-900/20 transition hover:bg-brand-800">
-                            Login
+                        <button type="submit"
+                            wire:loading.attr="disabled"
+                            wire:target="login"
+                            class="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-brand-900/20 transition hover:bg-brand-800 disabled:cursor-wait disabled:opacity-75">
+                            <span wire:loading.remove wire:target="login">Login</span>
+                            <span wire:loading.flex wire:target="login" class="items-center gap-2">
+                                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <circle class="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3"></circle>
+                                    <path class="opacity-90" fill="currentColor" d="M21 12a9 9 0 0 0-9-9v3a6 6 0 0 1 6 6h3Z"></path>
+                                </svg>
+                                Signing in...
+                            </span>
                         </button>
                     </form>
                 </div>

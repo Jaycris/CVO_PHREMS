@@ -56,7 +56,7 @@
                                 </tr>
                             </table>
 
-                            <p style="margin:0; color:#475569; font-size:15px; line-height:1.7;">Thanks,<br><strong style="color:#0f172a;">{{ config('app.name') }}</strong></p>
+                            <p style="margin:0; color:#475569; font-size:15px; line-height:1.7;">Thanks,<br><strong style="color:#0f172a;">{{ ucfirst(strtolower(config('app.name'))) }}</strong></p>
                         </td>
                     </tr>
                     <tr>

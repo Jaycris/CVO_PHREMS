@@ -105,46 +105,122 @@ new #[Layout('layouts.app')] class extends Component
         </p>
     </div>
 
-    <x-card :padding="false">
+    <x-card
+        :padding="false"
+        class="directory-panel"
+        x-data="{ selected: [] }"
+    >
+        <div
+            wire:loading.flex
+            wire:target="open"
+            class="absolute inset-x-0 top-0 z-10 h-1 overflow-hidden bg-brand-50 dark:bg-brand-950/40"
+        >
+            <div class="h-full w-1/3 animate-[payslip-loader_0.9s_ease-in-out_infinite] rounded-r-full bg-brand-700 dark:bg-brand-300"></div>
+        </div>
+
+        <div class="directory-toolbar">
+            <div>
+                <h2 class="directory-title">My Commission Directory</h2>
+            </div>
+
+            <div class="directory-toolbar-actions">
+                <div class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        x-on:click="if (selected.length === 1) { $dispatch('open-phrems-modal', 'showSlip'); $wire.open(selected[0]); }"
+                        x-bind:disabled="selected.length !== 1"
+                        x-bind:title="selected.length === 1 ? 'View selected commission slip' : 'Select one commission slip to view'"
+                        x-bind:class="selected.length === 1 ? 'text-ink-500 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-400 dark:hover:bg-white/10 dark:hover:text-white' : 'pointer-events-none text-ink-400 opacity-40 dark:text-ink-500'"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white shadow-sm transition dark:border-white/10 dark:bg-ink-900"
+                    >
+                        <x-icon name="eye" class="h-4 w-4" />
+                    </button>
+                    <a
+                        x-bind:href="selected.length === 1 ? @js(url('/my-commission')) + '/' + selected[0] + '/download' : '#'"
+                        x-bind:title="selected.length === 1 ? 'Download selected commission slip PDF' : 'Select one commission slip to download'"
+                        x-bind:class="selected.length === 1 ? 'text-ink-500 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-400 dark:hover:bg-white/10 dark:hover:text-white' : 'pointer-events-none text-ink-400 opacity-40 dark:text-ink-500'"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink-200 bg-white shadow-sm transition dark:border-white/10 dark:bg-ink-900"
+                    >
+                        <x-icon name="download" class="h-4 w-4" />
+                    </a>
+                </div>
+
+                <label class="directory-search">
+                    <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                    <input
+                        type="text"
+                        placeholder="Search commission slips..."
+                        disabled
+                        class="block h-10 w-full rounded-lg border border-ink-200 bg-white pl-9 pr-3.5 text-sm font-medium text-ink-700 shadow-sm placeholder:text-ink-400 disabled:opacity-100 dark:border-white/10 dark:bg-ink-900 dark:text-white"
+                    >
+                </label>
+            </div>
+        </div>
+
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-                <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
+            <table class="directory-table">
+                <thead class="directory-table-head">
                     <tr>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Month</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">MTD</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">USD Total</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">PHP Total</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Card Hold</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Net Commission</th>
-                        <th class="px-4 py-4"></th>
+                        <th class="w-14 px-6 py-4 text-left">
+                            <input
+                                type="checkbox"
+                                class="directory-checkbox"
+                                x-bind:checked="selected.length === {{ $slips->count() }} && {{ $slips->count() }} > 0"
+                                @click="selected = (selected.length === {{ $slips->count() }}) ? [] : [{{ $slips->getCollection()->pluck('id')->implode(',') }}].map(String)"
+                            >
+                        </th>
+                        <th class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Month</th>
+                        <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">MTD</th>
+                        <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">USD Total</th>
+                        <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">PHP Total</th>
+                        <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Card Hold</th>
+                        <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Net Commission</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
+                <tbody class="directory-table-body">
                     @php($money = fn ($v, $p = '') => $v === null ? '—' : $p . number_format((float) $v, 2))
                     @forelse ($slips as $slip)
-                        <tr wire:key="mine-{{ $slip->id }}" class="transition hover:bg-ink-50 dark:hover:bg-white/5">
-                            <td class="px-4 py-3 font-bold text-[#0f172a] dark:text-white">{{ $slip->monthLabel() }}</td>
-                            <td class="px-4 py-3 text-right font-medium tabular-nums text-[#778599]">{{ $money($slip->mtd, '$') }}</td>
-                            <td class="px-4 py-3 text-right font-medium tabular-nums text-[#778599]">{{ $money($slip->usd_total, '$') }}</td>
-                            <td class="px-4 py-3 text-right font-medium tabular-nums text-[#778599]">{{ $money($slip->php_total, '₱') }}</td>
-                            <td class="px-4 py-3 text-right font-medium tabular-nums text-[#778599]">{{ $money($slip->card_hold_amount, '₱') }}</td>
-                            <td class="px-4 py-3 text-right font-bold tabular-nums text-[#0f172a] dark:text-white">{{ $money($slip->net_commission, '₱') }}</td>
-                            <td class="px-4 py-3 text-right">
-                                <button wire:click="open({{ $slip->id }})" @click="$wire.showSlip = true"
-                                        class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View</button>
+                        <tr
+                            wire:key="mine-{{ $slip->id }}"
+                            wire:click="open({{ $slip->id }})"
+                            @click="$dispatch('open-phrems-modal', 'showSlip')"
+                            wire:loading.class="opacity-70"
+                            wire:target="open({{ $slip->id }})"
+                            class="directory-row cursor-pointer"
+                            x-bind:class="selected.includes('{{ $slip->id }}') ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''"
+                        >
+                            <td class="px-6 py-4" onclick="event.stopPropagation()">
+                                <input
+                                    type="checkbox"
+                                    value="{{ $slip->id }}"
+                                    x-model="selected"
+                                    class="directory-checkbox"
+                                >
                             </td>
+                            <td class="whitespace-nowrap px-6 py-4 font-bold text-ink-800 dark:text-white">{{ $slip->monthLabel() }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-medium text-ink-600 tabular-nums dark:text-ink-300">{{ $money($slip->mtd, '$') }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-medium text-ink-600 tabular-nums dark:text-ink-300">{{ $money($slip->usd_total, '$') }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-medium text-ink-600 tabular-nums dark:text-ink-300">{{ $money($slip->php_total, '₱') }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-medium text-ink-600 tabular-nums dark:text-ink-300">{{ $money($slip->card_hold_amount, '₱') }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-bold text-ink-950 tabular-nums dark:text-white">{{ $money($slip->net_commission, '₱') }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="px-4 py-10 text-center font-medium text-[#778599]">
-                            No commission slips yet. They appear here once HR sends them.
-                        </td></tr>
+                        <tr>
+                            <td colspan="7" class="px-6 py-16 text-center">
+                                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                                    <x-icon name="chart" class="h-7 w-7" />
+                                </div>
+                                <p class="mt-4 text-base font-bold text-ink-950 dark:text-white">No commission slips yet</p>
+                                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Released commission slips will appear here after HR sends them.</p>
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
         @if ($slips->hasPages())
-            <div class="border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <div class="directory-pagination" @click="selected = []">
                 {{ $slips->links('components.pagination', ['noun' => 'slips']) }}
             </div>
         @endif
