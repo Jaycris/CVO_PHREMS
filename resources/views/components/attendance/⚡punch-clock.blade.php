@@ -4,6 +4,7 @@ use App\Livewire\Concerns\WithTablePagination;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
 use App\Services\Attendance\PunchLocationPolicy;
+use App\Services\Attendance\ShiftDateResolver;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -130,16 +131,25 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $now = now('Asia/Manila');
-        $today = $now->toDateString();
 
-        if ($this->employee->attendanceDays()->where('work_date', $today)->whereNotNull('time_out')->exists()) {
+        /*
+         * The shift this punch belongs to, which is not always today.
+         *
+         * A night shift crosses midnight, so somebody coming in at 1 AM is late
+         * for last night's shift rather than early for tonight's. Filing it
+         * under today used to close today before it began, and the punch at
+         * 10 PM that same evening was refused.
+         */
+        $shiftDate = app(ShiftDateResolver::class)->forPunch($this->employee, $now);
+
+        if ($this->employee->attendanceDays()->where('work_date', $shiftDate)->whereNotNull('time_out')->exists()) {
             $this->errorMessage = 'You have already completed your shift for today.';
 
             return;
         }
 
         $this->employee->attendanceDays()->create([
-            'work_date' => $today,
+            'work_date' => $shiftDate,
             'time_in' => $now,
         ]);
 
