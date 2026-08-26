@@ -42,6 +42,7 @@ new #[Layout('layouts.app')] class extends Component
 
         $this->reset('photo');
         $this->statusMessage = 'Profile photo updated.';
+        $this->dispatch('profile-photo-updated', url: $employee->fresh()->photoUrl());
     }
 
     public function save(): void
@@ -70,6 +71,7 @@ new #[Layout('layouts.app')] class extends Component
 
         $this->reset('photo');
         $this->statusMessage = 'Profile photo removed.';
+        $this->dispatch('profile-photo-updated', url: null);
     }
 
     public function openBankForm(): void

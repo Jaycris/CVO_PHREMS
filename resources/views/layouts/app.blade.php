@@ -15,6 +15,36 @@
                 }
                 applyTheme();
                 document.addEventListener('livewire:navigated', applyTheme);
+
+                const sidebarScrollKey = 'phrems-sidebar-scroll';
+
+                function saveSidebarScroll() {
+                    const sidebar = document.querySelector('.sidebar-nav');
+                    if (sidebar) {
+                        sessionStorage.setItem(sidebarScrollKey, String(sidebar.scrollTop));
+                    }
+                }
+
+                function restoreSidebarScroll() {
+                    requestAnimationFrame(() => {
+                        const sidebar = document.querySelector('.sidebar-nav');
+                        const savedPosition = Number(sessionStorage.getItem(sidebarScrollKey) || 0);
+
+                        if (sidebar && Number.isFinite(savedPosition)) {
+                            sidebar.scrollTop = savedPosition;
+                        }
+                    });
+                }
+
+                document.addEventListener('click', (event) => {
+                    if (event.target.closest('.sidebar-nav a')) {
+                        saveSidebarScroll();
+                    }
+                }, true);
+                document.addEventListener('livewire:navigate', saveSidebarScroll);
+                document.addEventListener('livewire:navigated', restoreSidebarScroll);
+                document.addEventListener('DOMContentLoaded', restoreSidebarScroll);
+                window.addEventListener('beforeunload', saveSidebarScroll);
             })();
         </script>
 
@@ -225,7 +255,11 @@
                                     $refs.userMenuPanel.classList.toggle('opacity-100', willOpen);
                                     $refs.userMenuPanel.classList.toggle('scale-100', willOpen);
                                 " class="flex h-12 items-center gap-3 rounded-2xl border border-transparent py-1 pl-1.5 pr-3 transition hover:border-ink-200 hover:bg-white hover:shadow-sm dark:hover:border-white/10 dark:hover:bg-white/10">
-                                <img src="{{ asset('images/logo-mark.png') }}" alt="" class="h-10 w-10 rounded-full border border-ink-200 bg-white object-contain p-1 dark:border-white/10">
+                                @if (auth()->user()->employee)
+                                    <x-avatar :employee="auth()->user()->employee" size="md" reactive />
+                                @else
+                                    <img src="{{ asset('images/logo-mark.png') }}" alt="" class="h-10 w-10 rounded-full border border-ink-200 bg-white object-contain p-1 dark:border-white/10">
+                                @endif
                                 {{-- The signed-in person, not the app. This
                                      showed config('app.name') sitting above
                                      their role, which read as somebody called
@@ -241,7 +275,11 @@
                             <div x-ref="userMenuPanel"
                                  class="pointer-events-none absolute right-0 z-20 mt-2 w-64 origin-top-right scale-95 rounded-lg border border-ink-200 bg-white p-2 opacity-0 shadow-xl shadow-ink-200/50 transition duration-150 ease-out dark:border-white/10 dark:bg-ink-900 dark:shadow-black/30">
                                 <div class="flex items-center gap-3 rounded-lg p-2">
-                                    <img src="{{ asset('images/logo-mark.png') }}" alt="" class="h-10 w-10 rounded-full border border-ink-200 bg-white object-contain p-1.5 dark:border-white/10">
+                                    @if (auth()->user()->employee)
+                                        <x-avatar :employee="auth()->user()->employee" size="md" reactive />
+                                    @else
+                                        <img src="{{ asset('images/logo-mark.png') }}" alt="" class="h-10 w-10 rounded-full border border-ink-200 bg-white object-contain p-1.5 dark:border-white/10">
+                                    @endif
                                     <div class="min-w-0 text-sm leading-tight">
                                         <p class="truncate font-bold text-ink-950 dark:text-white">{{ auth()->user()->name }}</p>
                                         <p class="truncate text-xs font-medium text-ink-500 dark:text-ink-400">{{ auth()->user()->email }}</p>

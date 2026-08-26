@@ -1,6 +1,7 @@
 @props([
     'employee' => null,
     'size' => 'md',
+    'reactive' => false,
 ])
 
 @php
@@ -41,10 +42,20 @@
 --}}
 <span role="img"
       aria-label="{{ $employee?->fullName() ?: 'Employee' }}"
+      @if ($reactive)
+          x-data="{ photoUrl: @js($url) }"
+          @profile-photo-updated.window="photoUrl = $event.detail.url"
+      @endif
       {{ $attributes->merge(['class' => "$sizeClasses $tone relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold ring-1 ring-black/5 dark:ring-white/10"]) }}>
     <span aria-hidden="true">{{ $initials }}</span>
 
-    @if ($url)
+    @if ($reactive)
+        <img x-cloak
+             x-show="photoUrl"
+             :src="photoUrl || ''"
+             alt=""
+             class="absolute inset-0 h-full w-full object-cover">
+    @elseif ($url)
         <img src="{{ $url }}" alt="" class="absolute inset-0 h-full w-full object-cover">
     @endif
 </span>
