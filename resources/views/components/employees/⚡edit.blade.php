@@ -22,7 +22,31 @@ new #[Layout('layouts.app')] class extends Component
     public string $middle_name = '';
     public string $last_name = '';
     public string $gender = '';
+    public string $birthdate = '';
     public string $phone_name = '';
+
+    /*
+     * What the employee filled in at onboarding.
+     *
+     * They cannot change any of it afterwards — the onboarding form refuses a
+     * second submission — so this screen is the only place a wrong birthdate or
+     * a new address can be put right.
+     *
+     * Until they have submitted that form, though, none of it is editable here
+     * either. These are the employee's own answers, and HR filling them in from
+     * memory ahead of time produces a record that looks complete and answered
+     * while nobody has actually been asked. Send them the onboarding link
+     * instead; corrections come afterwards.
+     */
+    public string $civil_status = '';
+    public string $address = '';
+    public string $personal_contact_number = '';
+    public string $emergency_contact_name = '';
+    public string $emergency_contact_number = '';
+    public string $tin_number = '';
+    public string $sss_number = '';
+    public string $philhealth_number = '';
+    public string $pagibig_number = '';
     public string $workplace_type = '';
     public bool $tracks_attendance = true;
     public string $employment_type = '';
@@ -55,7 +79,17 @@ new #[Layout('layouts.app')] class extends Component
         $this->middle_name = (string) $employee->middle_name;
         $this->last_name = (string) $employee->last_name;
         $this->gender = (string) $employee->gender;
+        $this->birthdate = $employee->birthdate?->format('Y-m-d') ?? '';
         $this->phone_name = (string) $employee->phone_name;
+        $this->civil_status = (string) $employee->civil_status;
+        $this->address = (string) $employee->address;
+        $this->personal_contact_number = (string) $employee->personal_contact_number;
+        $this->emergency_contact_name = (string) $employee->emergency_contact_name;
+        $this->emergency_contact_number = (string) $employee->emergency_contact_number;
+        $this->tin_number = (string) $employee->tin_number;
+        $this->sss_number = (string) $employee->sss_number;
+        $this->philhealth_number = (string) $employee->philhealth_number;
+        $this->pagibig_number = (string) $employee->pagibig_number;
         $this->workplace_type = (string) $employee->workplace_type;
         $this->tracks_attendance = (bool) $employee->tracks_attendance;
         $this->employment_type = (string) $employee->employment_type;
@@ -87,6 +121,25 @@ new #[Layout('layouts.app')] class extends Component
         return $this->commission_frequency !== 'none';
     }
 
+    /**
+     * The employee's own onboarding answers, editable only once they exist.
+     *
+     * @return list<string>
+     */
+    public function onboardingFields(): array
+    {
+        return [
+            'birthdate', 'civil_status', 'address', 'personal_contact_number',
+            'emergency_contact_name', 'emergency_contact_number',
+            'tin_number', 'sss_number', 'philhealth_number', 'pagibig_number',
+        ];
+    }
+
+    public function onboardingDone(): bool
+    {
+        return $this->employee->onboarding_completed_at !== null;
+    }
+
     public function save(): void
     {
         $rules = [
@@ -96,7 +149,32 @@ new #[Layout('layouts.app')] class extends Component
             // Nullable here even though onboarding requires it: HR may not know
             // at the point of creating the record, and the employee fills it in.
             'gender' => ['nullable', 'in:Male,Female'],
+            /*
+             * Nullable for the same reason as gender — HR often creates the
+             * record before the employee has filled anything in.
+             *
+             * before:today rules out a birthdate in the future, which is always
+             * a typo. There is no lower bound: a wrong century is obvious on
+             * screen, and a rule guessing at a maximum age would eventually
+             * refuse somebody real.
+             */
+            'birthdate' => ['nullable', 'date', 'before:today'],
             'phone_name' => ['nullable', 'string', 'max:255'],
+            /*
+             * Onboarding requires most of these; here they are all optional.
+             * HR often has a record open before the employee has filled
+             * anything in, and a form that refuses to save until nine unknown
+             * fields are supplied is a form nobody can use.
+             */
+            'civil_status' => ['nullable', 'in:Single,Married,Widowed,Separated,Divorced'],
+            'address' => ['nullable', 'string'],
+            'personal_contact_number' => ['nullable', 'string', 'max:50'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:255'],
+            'emergency_contact_number' => ['nullable', 'string', 'max:50'],
+            'tin_number' => ['nullable', 'string', 'max:50'],
+            'sss_number' => ['nullable', 'string', 'max:50'],
+            'philhealth_number' => ['nullable', 'string', 'max:50'],
+            'pagibig_number' => ['nullable', 'string', 'max:50'],
             'tracks_attendance' => ['boolean'],
             'workplace_type' => ['nullable', 'in:Onsite,Hybrid,Remote'],
             'employment_type' => ['nullable', 'in:Full-time,Part-time'],
@@ -127,11 +205,23 @@ new #[Layout('layouts.app')] class extends Component
          * An untouched dropdown submits an empty string, and gender is an ENUM
          * in MySQL — writing '' to it fails outright with "Data truncated"
          * rather than storing a blank. Empty means not set, so store null.
+         *
+         * An empty date field is the same trap for a different reason: '' in a
+         * DATE column is not a blank, it is an invalid date.
          */
-        foreach (['gender', 'workplace_type', 'employment_type'] as $optional) {
+        foreach (['gender', 'birthdate', 'civil_status', 'workplace_type', 'employment_type'] as $optional) {
             if (($data[$optional] ?? null) === '') {
                 $data[$optional] = null;
             }
+        }
+
+        /*
+         * Dropped rather than merely hidden. The inputs are not rendered before
+         * onboarding is submitted, but a crafted request could still post them,
+         * and this is where somebody's TIN would land.
+         */
+        if (! $this->onboardingDone()) {
+            $data = collect($data)->except($this->onboardingFields())->all();
         }
 
         if (! $this->earnsCommission()) {
@@ -240,6 +330,104 @@ new #[Layout('layouts.app')] class extends Component
                     </div>
                     </div>
                 </div>
+            </section>
+
+            <section class="professional-panel overflow-hidden rounded-2xl">
+                <div class="border-b border-ink-200 bg-ink-50 px-6 py-5 dark:border-white/10 dark:bg-white/5">
+                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">Personal</p>
+                    <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Details And Government Numbers</h2>
+                    <p class="mt-1 text-sm font-medium text-ink-600 dark:text-ink-300">
+                        Filled in by the employee at onboarding. They cannot change any of it afterwards, so this is where a correction is made.
+                    </p>
+                </div>
+
+                @if (! $this->onboardingDone())
+                    {{--
+                        Nothing to correct yet. These are the employee's own
+                        answers, and filling them in for them would leave a
+                        record that reads as answered when nobody was asked.
+                    --}}
+                    <div class="p-6">
+                        <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-400/20 dark:bg-amber-400/10">
+                            <p class="text-sm font-bold text-amber-900 dark:text-amber-200">Waiting on {{ $first_name ?: 'the employee' }}</p>
+                            <p class="mt-1 text-sm font-medium text-amber-800 dark:text-amber-300">
+                                These details are filled in by the employee on their onboarding form, which has not been submitted yet.
+                                They become editable here once it is, so a wrong birthdate or a change of address can be corrected.
+                            </p>
+                            <a href="{{ route('employees.show', $employee) }}" wire:navigate
+                               class="mt-3 inline-block text-sm font-bold text-amber-900 underline dark:text-amber-200">
+                                Send the onboarding link
+                            </a>
+                        </div>
+                    </div>
+                @else
+                <div class="space-y-5 p-6">
+                    <div class="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+                    <div class="min-w-0">
+                        <x-label>Birthdate <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-input wire:model="birthdate" type="date" max="{{ now()->toDateString() }}" />
+                        @error('birthdate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                    <div class="min-w-0">
+                        <x-label>Civil Status <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-select wire:model="civil_status">
+                            <option value="">Not set</option>
+                            @foreach (['Single', 'Married', 'Widowed', 'Separated', 'Divorced'] as $status)
+                                <option value="{{ $status }}">{{ $status }}</option>
+                            @endforeach
+                        </x-select>
+                        @error('civil_status') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                    <div class="min-w-0">
+                        <x-label>Personal Contact Number <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-input wire:model="personal_contact_number" type="text" />
+                        @error('personal_contact_number') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                    </div>
+
+                    <div class="min-w-0">
+                        <x-label>Address <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-input wire:model="address" type="text" />
+                        @error('address') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+
+                    <div class="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+                    <div class="min-w-0">
+                        <x-label>Emergency Contact Name <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-input wire:model="emergency_contact_name" type="text" />
+                        @error('emergency_contact_name') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                    <div class="min-w-0">
+                        <x-label>Emergency Contact Number <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                        <x-input wire:model="emergency_contact_number" type="text" />
+                        @error('emergency_contact_number') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 items-start gap-5 sm:grid-cols-4">
+                    @foreach ([
+                        'tin_number' => 'TIN',
+                        'sss_number' => 'SSS',
+                        'philhealth_number' => 'PhilHealth',
+                        'pagibig_number' => 'Pag-IBIG',
+                    ] as $field => $label)
+                        <div class="min-w-0">
+                            <x-label>{{ $label }} <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                            <x-input wire:model="{{ $field }}" type="text" />
+                            @error($field) <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                        </div>
+                    @endforeach
+                    </div>
+
+                    {{--
+                        Deliberately not here: the payroll bank account. An
+                        employee changes that themselves from My Profile and it
+                        goes to the CEO or COO for approval, which is the whole
+                        point — letting it be edited quietly here would walk
+                        straight around that.
+                    --}}
+                </div>
+                @endif
             </section>
 
             <section class="professional-panel overflow-hidden rounded-2xl">
