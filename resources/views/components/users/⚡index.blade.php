@@ -118,6 +118,76 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetPage();
     }
 
+    /**
+     * Sends a fresh invitation to accounts that still have no password.
+     *
+     * The link inside an invitation is signed for three days, so one that was
+     * missed — or that sat in a queue nobody was draining — cannot be used
+     * again afterwards. Until this existed the only way back was to delete the
+     * account and build it a second time, which meant a new user code for
+     * somebody who had done nothing wrong.
+     *
+     * @param list<int|string> $ids
+     */
+    public function resendSelected(array $ids): void
+    {
+        $users = User::with('employee')->whereKey(array_map('intval', $ids))->get();
+
+        $sent = 0;
+        $alreadySet = 0;
+        $ineligible = 0;
+        $failed = [];
+
+        foreach ($users as $user) {
+            if ($user->password_set_at) {
+                $alreadySet++;
+                continue;
+            }
+
+            // A disabled account cannot sign in even with a password, and the
+            // invitation itself is written around an employee record.
+            if (! $user->is_active || ! $user->employee) {
+                $ineligible++;
+                continue;
+            }
+
+            $url = URL::temporarySignedRoute('password.setup', now()->addDays(3), ['user' => $user->id]);
+
+            try {
+                Mail::to($user->email)->queue(new AccountInviteMail($user->employee, $url));
+                $sent++;
+            } catch (\Throwable $e) {
+                // One unreachable address must not stop the rest of the batch.
+                // Named in the message, because silence here is the whole
+                // reason these invitations went missing in the first place.
+                report($e);
+                $failed[] = $user->email;
+            }
+        }
+
+        $parts = [];
+
+        if ($sent > 0) {
+            $parts[] = $sent . ' ' . Str::plural('invitation', $sent) . ' sent again.';
+        }
+
+        if ($alreadySet > 0) {
+            $parts[] = $alreadySet . ' skipped: that password is already set.';
+        }
+
+        if ($ineligible > 0) {
+            $parts[] = $ineligible . ' skipped: the account is disabled or has no employee linked.';
+        }
+
+        if ($failed !== []) {
+            $parts[] = 'Could not send to ' . implode(', ', $failed) . '.';
+        }
+
+        $this->statusMessage = $parts === []
+            ? 'No invitation was sent.'
+            : implode(' ', $parts);
+    }
+
     public function create(): void
     {
         $this->reset(['employeeId', 'email']);
@@ -351,6 +421,12 @@ new #[Layout('layouts.app')] class extends Component
                         :disabled="selected.length !== 1" @click="if (selected.length === 1) { $dispatch('open-phrems-modal', 'showAccess'); $wire.editSelected(selected); }"
                         title="Edit selected user's access">
                         <x-icon name="pencil" class="h-4 w-4" />
+                    </button>
+                    <button type="button"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-700 shadow-sm transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300"
+                        :disabled="selected.length === 0" @click="if (selected.length) { $wire.resendSelected(selected); selected = []; }"
+                        title="Send the invitation again">
+                        <x-icon name="mail" class="h-4 w-4" />
                     </button>
                     <button type="button"
                         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"

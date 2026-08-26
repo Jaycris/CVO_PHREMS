@@ -24,6 +24,13 @@ Schedule::command('payroll:notify-payslips')
 // Shared hosting has no persistent queue worker, so the scheduler drains the
 // queue instead. --stop-when-empty keeps each run short; withoutOverlapping
 // stops a slow batch from stacking workers on top of each other.
-Schedule::command('queue:work --stop-when-empty --max-time=55 --tries=3')
+//
+// The connection is named rather than left to QUEUE_CONNECTION on purpose.
+// Three onboarding emails were once queued while that setting said "database",
+// then it was changed to "sync" — which sends immediately but never looks in
+// the jobs table again. The three already sitting there were stranded, and
+// PHREMS had reported all three as sent. Naming the connection means anything
+// that reaches that table gets delivered, whichever way the setting is left.
+Schedule::command('queue:work database --stop-when-empty --max-time=55 --tries=3')
     ->everyMinute()
     ->withoutOverlapping();
