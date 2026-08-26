@@ -25,7 +25,7 @@
     <body class="h-full font-sans antialiased">
         <div class="app-surface flex min-h-screen" x-data="{ sidebarOpen: false }">
             {{-- Sidebar --}}
-            <aside class="fixed inset-y-0 left-0 z-30 flex w-[17rem] -translate-x-full transform flex-col border-r border-ink-200/80 bg-white/95 shadow-xl shadow-ink-200/40 backdrop-blur transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:shadow-none dark:border-white/10 dark:bg-ink-950/95 dark:shadow-black/30"
+            <aside class="fixed inset-y-0 left-0 z-30 flex w-[17rem] shrink-0 -translate-x-full transform flex-col border-r border-ink-200/80 bg-white/95 shadow-xl shadow-ink-200/40 backdrop-blur transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:shadow-none dark:border-white/10 dark:bg-ink-950/95 dark:shadow-black/30"
                    :class="{ 'translate-x-0': sidebarOpen }">
                 <div class="border-b border-ink-200/80 px-4 py-5 dark:border-white/10">
                     <img src="{{ asset('images/logo.png') }}" alt="CreatiVision" class="h-auto w-full object-contain">
@@ -160,7 +160,7 @@
             <div class="fixed inset-0 z-20 bg-ink-950/40 backdrop-blur-sm lg:hidden" x-show="sidebarOpen" x-cloak @click="sidebarOpen = false"></div>
 
             {{-- Main --}}
-            <div class="flex min-h-screen flex-1 flex-col lg:pl-0">
+            <div class="flex min-h-screen min-w-0 flex-1 flex-col lg:pl-0">
                 @php
                     $pageTitle = match (true) {
                         request()->routeIs('dashboard') => 'Dashboard',
