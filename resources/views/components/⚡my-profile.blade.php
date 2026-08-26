@@ -202,7 +202,13 @@ new #[Layout('layouts.app')] class extends Component
     ];
 @endphp
 
-<div class="space-y-6" x-data="{ activeTab: 'personal' }">
+{{--
+    photoPreview holds a just-chosen photo as a link to the file already sitting
+    in the browser, so the picture can be shown without asking the server for it.
+    It lives on the outer element because both the avatar and the enlarged
+    preview modal need to read it.
+--}}
+<div class="space-y-6" x-data="{ activeTab: 'personal', photoPreview: null }">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
             <h1 class="text-3xl font-bold tracking-tight text-ink-950 dark:text-white">My Profile</h1>
@@ -253,16 +259,23 @@ new #[Layout('layouts.app')] class extends Component
                                 @click="open = ! open"
                                 class="group relative block rounded-full focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-300/40"
                                 title="Profile photo options">
-                            @if ($photo)
-                                <img src="{{ $photo->temporaryUrl() }}" alt="Selected photo preview"
+                            <template x-if="photoPreview">
+                                <img :src="photoPreview" alt=""
                                      class="h-32 w-32 rounded-full object-cover ring-4 ring-ink-100 transition group-hover:ring-brand-300/60 dark:ring-white/10">
-                            @else
-                                <x-avatar :employee="$employee" size="xl" class="!h-32 !w-32 !rounded-full !text-4xl ring-4 ring-ink-100 transition group-hover:ring-brand-300/60 dark:ring-white/10" />
-                            @endif
+                            </template>
+
+                            <x-avatar :employee="$employee" size="xl" x-show="! photoPreview" class="!h-32 !w-32 !rounded-full !text-4xl ring-4 ring-ink-100 transition group-hover:ring-brand-300/60 dark:ring-white/10" />
                             <span class="absolute inset-x-0 bottom-0 rounded-b-full bg-ink-950/75 py-2 text-center text-xs font-bold text-white opacity-0 backdrop-blur transition group-hover:opacity-100">Change</span>
                         </button>
 
-                        <input x-ref="photoInput" type="file" wire:model.live="photo" accept="image/jpeg,image/png,image/webp" class="hidden">
+                        <input x-ref="photoInput" type="file" wire:model.live="photo" accept="image/jpeg,image/png,image/webp"
+                               x-on:change="
+                                   if (photoPreview) URL.revokeObjectURL(photoPreview);
+                                   photoPreview = $event.target.files[0]
+                                       ? URL.createObjectURL($event.target.files[0])
+                                       : null;
+                               "
+                               class="hidden">
 
                         <div x-cloak
                              x-show="open"
@@ -286,7 +299,8 @@ new #[Layout('layouts.app')] class extends Component
                                 <button type="button"
                                         wire:click="removePhoto"
                                         wire:confirm="Remove your profile photo?"
-                                        @click="open = false"
+                                        {{-- Drop the unsaved preview too, or removing the photo would appear to do nothing. --}}
+                                        @click="open = false; photoPreview = null"
                                         class="flex w-full items-center gap-2 rounded-lg px-3 py-2 font-semibold text-red-600 transition hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10">
                                     <x-icon name="trash" class="h-4 w-4" />
                                     Remove photo
@@ -694,12 +708,14 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="mt-6 flex justify-center rounded-2xl bg-ink-50 p-6 dark:bg-white/5">
-            @if ($photo)
-                <img src="{{ $photo->temporaryUrl() }}" alt="Selected photo preview" class="max-h-[60vh] rounded-2xl object-contain">
-            @elseif ($photoUrl)
-                <img src="{{ $photoUrl }}" alt="{{ $fullName }} profile photo" class="max-h-[60vh] rounded-2xl object-contain">
+            <template x-if="photoPreview">
+                <img :src="photoPreview" alt="" class="max-h-[60vh] rounded-2xl object-contain">
+            </template>
+
+            @if ($photoUrl)
+                <img x-show="! photoPreview" src="{{ $photoUrl }}" alt="{{ $fullName }} profile photo" class="max-h-[60vh] rounded-2xl object-contain">
             @else
-                <x-avatar :employee="$employee" size="xl" class="!h-48 !w-48 !text-5xl" />
+                <x-avatar :employee="$employee" size="xl" x-show="! photoPreview" class="!h-48 !w-48 !text-5xl" />
             @endif
         </div>
     </x-modal>
