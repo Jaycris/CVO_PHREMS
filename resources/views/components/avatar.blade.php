@@ -31,31 +31,42 @@
 @endphp
 
 {{--
-    The initials are always drawn, and the photo sits on top of them.
+    Initials remain underneath as a broken-image fallback, but disappear only
+    after the photo has loaded successfully. This matters for transparent PNGs:
+    without the loaded state, the initials show through the image itself.
 
-    The photo used to be an <img> on its own, carrying the person's name as its
-    alt text. When the file did not load — a missing storage symlink on the
-    server was enough — the browser painted that alt text instead, so "Jane Rose
-    Ledesma" appeared wrapped across the little circle. Layering means a photo
-    that fails to load simply reveals the initials underneath, with no script
-    and nothing to go wrong.
+    Alpine's listeners are written x-on: rather than with the @ shorthand.
+    @error is a Blade directive of its own, so @error="photoLoaded = false"
+    compiled as the opening of an error block that never closed, and the whole
+    app died with "unexpected end of file, expecting elseif or else or endif".
 --}}
 <span role="img"
       aria-label="{{ $employee?->fullName() ?: 'Employee' }}"
+      x-data="{ photoUrl: @js($url), photoLoaded: false }"
+      x-init="$nextTick(() => {
+          if ($refs.photo?.complete && $refs.photo.naturalWidth > 0) photoLoaded = true;
+      })"
       @if ($reactive)
-          x-data="{ photoUrl: @js($url) }"
-          @profile-photo-updated.window="photoUrl = $event.detail.url"
+          x-on:profile-photo-updated.window="photoLoaded = false; photoUrl = $event.detail.url"
       @endif
       {{ $attributes->merge(['class' => "$sizeClasses $tone relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold ring-1 ring-black/5 dark:ring-white/10"]) }}>
-    <span aria-hidden="true">{{ $initials }}</span>
+    <span aria-hidden="true" :class="photoLoaded ? 'opacity-0' : 'opacity-100'">{{ $initials }}</span>
 
     @if ($reactive)
         <img x-cloak
+             x-ref="photo"
              x-show="photoUrl"
              :src="photoUrl || ''"
+             x-on:load="photoLoaded = true"
+             x-on:error="photoLoaded = false"
              alt=""
-             class="absolute inset-0 h-full w-full object-cover">
+             class="absolute inset-0 h-full w-full bg-white object-cover">
     @elseif ($url)
-        <img src="{{ $url }}" alt="" class="absolute inset-0 h-full w-full object-cover">
+        <img x-ref="photo"
+             src="{{ $url }}"
+             x-on:load="photoLoaded = true"
+             x-on:error="photoLoaded = false"
+             alt=""
+             class="absolute inset-0 h-full w-full bg-white object-cover">
     @endif
 </span>
