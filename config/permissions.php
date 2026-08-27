@@ -60,6 +60,11 @@ return [
             'leave.types.manage' => 'Leave Types — configure entitlements and accrual',
             'leave.view_all' => 'Leave — view all requests across the company',
             'leave.approve' => 'Leave — give final approval',
+            // Meant for the CEO or COO, like bank_details.approve, and kept
+            // apart from leave.types.manage on purpose: setting a starting
+            // balance decides how many days somebody arrives with, and
+            // vacation leave turns into cash at year end.
+            'leave.opening_balance.manage' => 'Leave — set an employee\'s starting balance from before PHREMS (CEO/COO)',
         ],
 
         'Cash Advance' => [

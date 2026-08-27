@@ -41,6 +41,12 @@ new #[Layout('layouts.app')] class extends Component
     public string $eventGrantDays = '';
     public string $eventGrantNote = '';
 
+    // Starting balance carried in from before PHREMS. CEO/COO only.
+    public bool $showOpeningBalance = false;
+    public ?int $openingLeaveTypeId = null;
+    public string $openingDays = '';
+    public string $openingNote = '';
+
     public function openScheduleModal(): void
     {
         $this->newScheduleId = null;
@@ -196,6 +202,94 @@ new #[Layout('layouts.app')] class extends Component
         ]);
 
         $this->statusMessage = "Granted {$leaveType->default_annual_credits} {$leaveType->code} credits.";
+    }
+
+    /**
+     * The balance somebody arrived with, from before PHREMS was counting.
+     *
+     * Back-filling accrual covers anyone whose whole history is in this system.
+     * It cannot know about days taken, or granted, or carried over on paper
+     * before PHREMS existed, so somebody has to be able to say what a person
+     * actually starts with.
+     *
+     * Restricted to the CEO or COO rather than HR, on the same reasoning as
+     * approving a bank change: the person who maintains an employee record is
+     * not also the person who decides how many days that record begins with,
+     * and vacation leave becomes cash at the end of the year.
+     */
+    public function canSetOpeningBalance(): bool
+    {
+        return auth()->user()?->can('leave.opening_balance.manage') ?? false;
+    }
+
+    public function openOpeningBalance(int $leaveTypeId): void
+    {
+        abort_unless($this->canSetOpeningBalance(), 403);
+
+        $leaveType = LeaveType::findOrFail($leaveTypeId);
+
+        $this->openingLeaveTypeId = $leaveType->id;
+        $this->openingDays = (string) $this->employee->leaveBalance($leaveType);
+        $this->openingNote = '';
+
+        $this->resetValidation();
+        $this->showOpeningBalance = true;
+    }
+
+    public function closeOpeningBalance(): void
+    {
+        $this->reset(['openingLeaveTypeId', 'openingDays', 'openingNote']);
+        $this->resetValidation();
+        $this->showOpeningBalance = false;
+    }
+
+    public function saveOpeningBalance(): void
+    {
+        abort_unless($this->canSetOpeningBalance(), 403);
+
+        $data = $this->validate([
+            'openingDays' => ['required', 'numeric', 'min:0', 'max:999'],
+            'openingNote' => ['required', 'string', 'max:200'],
+        ], attributes: [
+            'openingDays' => 'starting balance',
+            'openingNote' => 'reason',
+        ]);
+
+        $leaveType = LeaveType::findOrFail($this->openingLeaveTypeId);
+
+        abort_unless($this->employee->isEligibleFor($leaveType), 403, "This employee is not entitled to {$leaveType->name}.");
+
+        /*
+         * Written as the difference, not as a replacement.
+         *
+         * The ledger is the balance — every accrual, every day taken. Setting
+         * the balance to nine days means adding whatever gets it there, so the
+         * accruals and the leave already recorded stay legible instead of
+         * being silently overwritten by one number.
+         */
+        $current = (float) $this->employee->leaveBalance($leaveType);
+        $target = (float) $data['openingDays'];
+        $difference = round($target - $current, 2);
+
+        if ($difference == 0.0) {
+            $this->closeOpeningBalance();
+            $this->statusMessage = "{$leaveType->code} is already at {$target} days.";
+
+            return;
+        }
+
+        LeaveCreditTransaction::create([
+            'employee_id' => $this->employee->id,
+            'leave_type_id' => $leaveType->id,
+            'transaction_date' => now()->toDateString(),
+            'amount' => $difference,
+            'reason' => 'initial_grant',
+            'note' => $data['openingNote'],
+            'created_by_user_id' => auth()->id(),
+        ]);
+
+        $this->closeOpeningBalance();
+        $this->statusMessage = "{$leaveType->code} starting balance set to {$target} days.";
     }
 
     /**
@@ -741,6 +835,9 @@ new #[Layout('layouts.app')] class extends Component
                                 <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Eligibility</th>
                                 <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Balance</th>
                                 <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Year-End</th>
+                                @if ($this->canSetOpeningBalance())
+                                    <th class="px-5 py-3 text-right text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Starting Balance</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-ink-100 dark:divide-white/10">
@@ -766,6 +863,18 @@ new #[Layout('layouts.app')] class extends Component
                                             —
                                         @endif
                                     </td>
+                                    @if ($this->canSetOpeningBalance())
+                                        <td class="px-5 py-4 text-right">
+                                            @if ($eligible)
+                                                <button type="button" wire:click="openOpeningBalance({{ $type->id }})"
+                                                        class="inline-flex h-8 items-center rounded-lg border border-ink-200 bg-white px-3 text-xs font-bold text-ink-700 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 dark:border-white/10 dark:bg-white/5 dark:text-ink-200">
+                                                    Set
+                                                </button>
+                                            @else
+                                                <span class="text-xs font-medium text-ink-400">—</span>
+                                            @endif
+                                        </td>
+                                    @endif
                                 </tr>
                             @endforeach
                         </tbody>
@@ -851,6 +960,49 @@ new #[Layout('layouts.app')] class extends Component
                 <x-button type="button" variant="secondary" wire:click="closeModals">Cancel</x-button>
             </div>
         </form>
+    </x-modal>
+
+    <x-modal :show="$showOpeningBalance" onClose="closeOpeningBalance" maxWidth="lg">
+        @php $openingType = $openingLeaveTypeId ? \App\Models\LeaveType::find($openingLeaveTypeId) : null; @endphp
+
+        <div>
+            <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">Starting balance</p>
+            <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">{{ $openingType?->name }}</h2>
+            <p class="mt-1 text-sm font-medium text-ink-600 dark:text-ink-300">
+                {{ $employee->fullName() ?: $employee->employee_id }}
+            </p>
+        </div>
+
+        <div class="mt-5 rounded-xl border border-ink-200 bg-ink-50 p-4 text-sm font-medium text-ink-700 dark:border-white/10 dark:bg-white/5 dark:text-ink-200">
+            PHREMS works out its own accruals from the hire date. Use this only for days carried in
+            from before PHREMS — leave taken, granted or carried over on paper, which the system has
+            no way of knowing about.
+        </div>
+
+        <div class="mt-5">
+            <x-label>Balance should be</x-label>
+            <x-input wire:model.blur="openingDays" type="number" step="0.01" min="0" />
+            @error('openingDays') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            <p class="mt-1.5 text-xs font-medium text-ink-500 dark:text-ink-400">
+                Currently {{ $openingType ? $employee->leaveBalance($openingType) : 0 }} days.
+                The difference is recorded, so the accruals and leave already on file stay readable.
+            </p>
+        </div>
+
+        <div class="mt-5">
+            <x-label>Reason</x-label>
+            <x-input wire:model.blur="openingNote" type="text" placeholder="e.g. Carried over from the 2025 spreadsheet" />
+            @error('openingNote') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            <p class="mt-1.5 text-xs font-medium text-ink-500 dark:text-ink-400">Recorded against your name.</p>
+        </div>
+
+        <div class="mt-7 flex items-center justify-end gap-3">
+            <x-button type="button" wire:click="closeOpeningBalance" variant="secondary">Cancel</x-button>
+            <x-button type="button" wire:click="saveOpeningBalance">
+                <span wire:loading.remove wire:target="saveOpeningBalance">Save</span>
+                <span wire:loading wire:target="saveOpeningBalance">Saving…</span>
+            </x-button>
+        </div>
     </x-modal>
 
     <x-modal :show="$showLeaveModal" onClose="closeModals" maxWidth="4xl">

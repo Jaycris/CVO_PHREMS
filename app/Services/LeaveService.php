@@ -186,28 +186,137 @@ class LeaveService
             ->where('is_active', true)
             ->get()
             ->each(function (LeaveType $leaveType) use ($date, &$count) {
-                // Credits accrue from Probationary onward. Employees who are not yet
-                // Regular simply cannot spend them — LeaveService::submit() flags any
-                // non-Regular request as LWOP — so by the time they regularize the
-                // balance is already waiting for them.
-                Employee::with('leaveEligibilities')->get()->each(function (Employee $employee) use ($leaveType, $date, &$count) {
-                    // HR can switch an individual off a leave type entirely.
-                    if (! $employee->isEligibleFor($leaveType)) {
-                        return;
-                    }
-
-                    LeaveCreditTransaction::create([
-                        'employee_id' => $employee->id,
-                        'leave_type_id' => $leaveType->id,
-                        'transaction_date' => $date->toDateString(),
-                        'amount' => $leaveType->monthly_accrual_rate,
-                        'reason' => 'monthly_accrual',
-                    ]);
-                    $count++;
-                });
+                Employee::with('leaveEligibilities')->get()
+                    ->each(function (Employee $employee) use ($leaveType, $date, &$count) {
+                        $count += $this->accrueOnce($employee, $leaveType, $date) ? 1 : 0;
+                    });
             });
 
         return $count;
+    }
+
+    /**
+     * Grants one month's credit to one person, if it is theirs to have.
+     *
+     * Credits accrue from Probationary onward. Somebody who is not yet Regular
+     * simply cannot spend them — submit() flags any non-Regular request as
+     * LWOP — so by the time they regularize the balance is already waiting.
+     *
+     * Returns false when nothing was written, which is the normal answer for
+     * most employees on most dates.
+     */
+    protected function accrueOnce(Employee $employee, LeaveType $leaveType, Carbon $date): bool
+    {
+        // HR can switch an individual off a leave type entirely.
+        if (! $employee->isEligibleFor($leaveType)) {
+            return false;
+        }
+
+        // Nothing accrues for a month somebody had not joined yet. Without
+        // this, being hired on the 9th earned a full month's leave on the 10th.
+        if ($employee->hire_date && $date->lt($employee->hire_date->startOfDay())) {
+            return false;
+        }
+
+        // Nor after they have left. Leave was accruing for former staff, and
+        // vacation leave turns into cash at year end.
+        if ($employee->separation_date && $date->gt($employee->separation_date->startOfDay())) {
+            return false;
+        }
+
+        /*
+         * One credit per person, per type, per date — no matter how many times
+         * this runs. The accrual had no such guard, so running it twice on the
+         * 10th granted twice, and the back-fill would have re-granted every
+         * month it had already covered.
+         */
+        $exists = LeaveCreditTransaction::where('employee_id', $employee->id)
+            ->where('leave_type_id', $leaveType->id)
+            ->whereDate('transaction_date', $date->toDateString())
+            ->where('reason', 'monthly_accrual')
+            ->exists();
+
+        if ($exists) {
+            return false;
+        }
+
+        LeaveCreditTransaction::create([
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'transaction_date' => $date->toDateString(),
+            'amount' => $leaveType->monthly_accrual_rate,
+            'reason' => 'monthly_accrual',
+        ]);
+
+        return true;
+    }
+
+    /**
+     * Grants every accrual an employee has already earned but never received.
+     *
+     * PHREMS started accruing the day its scheduler first ran, so somebody
+     * hired in May had nothing to show for May, June and July. This walks each
+     * person from their hire date to today and grants the accrual days that
+     * have passed — which is what everybody assumed was happening all along.
+     *
+     * Safe to run more than once: accrueOnce refuses a date it has already
+     * credited, so a second run grants nothing.
+     */
+    public function backfillAccruals(?Carbon $upTo = null): int
+    {
+        $upTo = ($upTo ?? Carbon::today())->startOfDay();
+        $count = 0;
+
+        $types = LeaveType::where('accrual_mode', 'monthly_accrual')
+            ->where('is_active', true)
+            ->get();
+
+        if ($types->isEmpty()) {
+            return 0;
+        }
+
+        Employee::with('leaveEligibilities')->get()->each(function (Employee $employee) use ($types, $upTo, &$count) {
+            if (! $employee->hire_date) {
+                return;
+            }
+
+            foreach ($types as $leaveType) {
+                foreach ($this->accrualDatesBetween($leaveType, $employee->hire_date, $upTo) as $date) {
+                    $count += $this->accrueOnce($employee, $leaveType, $date) ? 1 : 0;
+                }
+            }
+        });
+
+        return $count;
+    }
+
+    /**
+     * Every accrual day for this leave type from a hire date up to a cut-off.
+     *
+     * A type set to the 31st still accrues in February: the day is clamped to
+     * the end of a short month rather than skipped, so nobody quietly loses
+     * four or five days a year to the calendar.
+     *
+     * @return list<Carbon>
+     */
+    protected function accrualDatesBetween(LeaveType $leaveType, Carbon $from, Carbon $to): array
+    {
+        $day = (int) ($leaveType->accrual_day_of_month ?: 1);
+        $dates = [];
+
+        $cursor = $from->copy()->startOfMonth();
+
+        while ($cursor->lessThanOrEqualTo($to)) {
+            $accrualDate = $cursor->copy()->day(min($day, $cursor->daysInMonth));
+
+            if ($accrualDate->betweenIncluded($from->copy()->startOfDay(), $to)) {
+                $dates[] = $accrualDate;
+            }
+
+            $cursor->addMonthNoOverflow();
+        }
+
+        return $dates;
     }
 
     /**

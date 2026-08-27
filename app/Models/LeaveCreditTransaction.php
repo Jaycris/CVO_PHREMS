@@ -17,6 +17,7 @@ class LeaveCreditTransaction extends Model
         'reason',
         'leave_request_id',
         'note',
+        'created_by_user_id',
     ];
 
     protected function casts(): array
