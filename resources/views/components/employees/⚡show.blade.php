@@ -178,6 +178,30 @@ new #[Layout('layouts.app')] class extends Component
         $this->statusMessage = "Onboarding link sent to {$recipient}.";
     }
 
+    /**
+     * Whether this year's entitlement is still to be given.
+     *
+     * Asked about the year, not about the balance. A balance of nought does
+     * not mean somebody is owed five more sick days — it far more often means
+     * they have used the five they had, and granting again on that basis would
+     * quietly hand them ten days for the year.
+     *
+     * A starting balance set by the CEO or COO counts as this year's, which is
+     * the point of setting one: nobody tops it up afterwards.
+     */
+    public function canGrantInitialCredits(LeaveType $leaveType): bool
+    {
+        if ($this->employee->leaveBalance($leaveType) > 0) {
+            return false;
+        }
+
+        return ! LeaveCreditTransaction::where('employee_id', $this->employee->id)
+            ->where('leave_type_id', $leaveType->id)
+            ->whereIn('reason', ['initial_grant', 'annual_reset'])
+            ->whereYear('transaction_date', now()->year)
+            ->exists();
+    }
+
     public function grantInitialCredits(int $leaveTypeId): void
     {
         $leaveType = LeaveType::findOrFail($leaveTypeId);
@@ -191,7 +215,11 @@ new #[Layout('layouts.app')] class extends Component
 
         abort_unless($this->employee->isEligibleFor($leaveType), 403, "This employee is not entitled to {$leaveType->name}.");
 
-        abort_if($this->employee->leaveBalance($leaveType) > 0, 403, "{$leaveType->code} credits have already been granted.");
+        abort_unless(
+            $this->canGrantInitialCredits($leaveType),
+            403,
+            "{$leaveType->code} has already been given for " . now()->year . '.'
+        );
 
         LeaveCreditTransaction::create([
             'employee_id' => $this->employee->id,
@@ -305,9 +333,18 @@ new #[Layout('layouts.app')] class extends Component
     {
         $leaveType = LeaveType::findOrFail($leaveTypeId);
 
+        /*
+         * Only a grant this screen made, never a starting balance.
+         *
+         * Both are written as initial_grant, so matching on the reason alone
+         * let HR delete a balance the CEO or COO had deliberately set — which
+         * would have made restricting that decision pointless. A starting
+         * balance is the only one of the two that carries a name against it.
+         */
         $grant = LeaveCreditTransaction::where('employee_id', $this->employee->id)
             ->where('leave_type_id', $leaveType->id)
             ->where('reason', 'initial_grant')
+            ->whereNull('created_by_user_id')
             ->latest('id')
             ->first();
 
@@ -1024,9 +1061,12 @@ new #[Layout('layouts.app')] class extends Component
                     @foreach ($leaveTypes as $type)
                         @php
                             $eligible = $employee->isEligibleFor($type);
+                            // Matches revertGrant: a starting balance set by the
+                            // CEO or COO is not HR's to undo from here.
                             $hasManualGrant = $employee->leaveCreditTransactions()
                                 ->where('leave_type_id', $type->id)
                                 ->where('reason', 'initial_grant')
+                                ->whereNull('created_by_user_id')
                                 ->exists();
                         @endphp
                         <tr wire:key="lt-edit-{{ $type->id }}" @class(['opacity-60' => ! $eligible])>
@@ -1055,10 +1095,12 @@ new #[Layout('layouts.app')] class extends Component
                                     @elseif ($type->accrual_mode === 'event_based')
                                         <button type="button" wire:click="openEventGrant({{ $type->id }})"
                                                 class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Grant for an Event</button>
-                                    @elseif ($employee->leaveBalance($type) <= 0)
+                                    @elseif ($this->canGrantInitialCredits($type))
                                         <button type="button" wire:click="grantInitialCredits({{ $type->id }})"
                                                 wire:confirm="Grant {{ $type->default_annual_credits }} {{ $type->code }} credits to {{ $employee->fullName() ?: $employee->employee_id }}?"
                                                 class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Grant Initial Credits</button>
+                                    @else
+                                        <span class="text-xs font-medium text-[#778599]">Given for {{ now()->year }}</span>
                                     @endif
 
                                     @if ($hasManualGrant)

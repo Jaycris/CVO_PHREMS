@@ -170,6 +170,116 @@ class LeaveOpeningBalanceTest extends TestCase
     }
 
     #[Test]
+    public function hr_cannot_revert_a_balance_the_chief_set(): void
+    {
+        /*
+         * Both are written as initial_grant, so Revert Grant would happily have
+         * deleted the CEO's decision — which would have made restricting that
+         * decision to the CEO pointless.
+         */
+        $sick = LeaveType::where('code', 'SL')->sole();
+
+        $this->actingAs($this->chief());
+
+        $this->page()
+            ->call('openOpeningBalance', $sick->id)
+            ->set('openingDays', '5')
+            ->set('openingNote', 'Agreed at hiring')
+            ->call('saveOpeningBalance')
+            ->assertHasNoErrors();
+
+        $this->actingAs($this->hrOfficer());
+
+        Livewire::test('employees.show', ['employee' => $this->employee])
+            ->call('revertGrant', $sick->id)
+            ->assertNotFound();
+
+        $this->assertEqualsWithDelta(5.0, (float) $this->employee->leaveBalance($sick), 0.01);
+    }
+
+    #[Test]
+    public function hr_cannot_grant_on_top_of_a_balance_the_chief_set(): void
+    {
+        // Otherwise the employee would end up with ten sick days instead of
+        // the five they were given.
+        $sick = LeaveType::where('code', 'SL')->sole();
+
+        $this->actingAs($this->chief());
+
+        $this->page()
+            ->call('openOpeningBalance', $sick->id)
+            ->set('openingDays', '5')
+            ->set('openingNote', 'Agreed at hiring')
+            ->call('saveOpeningBalance');
+
+        $this->actingAs($this->hrOfficer());
+
+        Livewire::test('employees.show', ['employee' => $this->employee])
+            ->call('grantInitialCredits', $sick->id)
+            ->assertForbidden();
+
+        $this->assertEqualsWithDelta(5.0, (float) $this->employee->leaveBalance($sick), 0.01);
+    }
+
+    #[Test]
+    public function hr_cannot_grant_again_once_the_year_is_spent(): void
+    {
+        /*
+         * The hole the balance check left. Somebody given five sick days who
+         * then uses all five is back to nought, and a guard reading "balance
+         * is nought, so grant" hands them five more — ten days for the year.
+         */
+        $sick = LeaveType::where('code', 'SL')->sole();
+
+        $this->actingAs($this->chief());
+
+        $this->page()
+            ->call('openOpeningBalance', $sick->id)
+            ->set('openingDays', '5')
+            ->set('openingNote', 'Agreed at hiring')
+            ->call('saveOpeningBalance');
+
+        // They take all five.
+        LeaveCreditTransaction::create([
+            'employee_id' => $this->employee->id,
+            'leave_type_id' => $sick->id,
+            'transaction_date' => now()->toDateString(),
+            'amount' => -5,
+            'reason' => 'leave_taken',
+        ]);
+
+        $this->assertSame(0.0, (float) $this->employee->leaveBalance($sick));
+
+        $this->actingAs($this->hrOfficer());
+
+        Livewire::test('employees.show', ['employee' => $this->employee])
+            ->call('grantInitialCredits', $sick->id)
+            ->assertForbidden();
+
+        $this->assertSame(0.0, (float) $this->employee->leaveBalance($sick));
+    }
+
+    #[Test]
+    public function hr_can_still_revert_its_own_grant(): void
+    {
+        // The guard must not break the button's actual purpose: undoing an
+        // accidental click.
+        $sick = LeaveType::where('code', 'SL')->sole();
+
+        $this->actingAs($this->hrOfficer());
+
+        Livewire::test('employees.show', ['employee' => $this->employee])
+            ->call('grantInitialCredits', $sick->id);
+
+        $this->assertEqualsWithDelta(5.0, (float) $this->employee->leaveBalance($sick), 0.01);
+
+        Livewire::test('employees.show', ['employee' => $this->employee])
+            ->call('revertGrant', $sick->id);
+
+        $this->assertSame(0.0, (float) $this->employee->leaveBalance($sick));
+    }
+
+    #[Test]
     public function setting_it_to_what_it_already_is_writes_nothing(): void
     {
         $this->actingAs($this->chief());
