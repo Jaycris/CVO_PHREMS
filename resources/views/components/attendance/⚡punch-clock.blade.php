@@ -124,12 +124,6 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
-        if ($this->openDay()) {
-            $this->errorMessage = 'You are already timed in.';
-
-            return;
-        }
-
         $now = now('Asia/Manila');
 
         /*
@@ -142,7 +136,31 @@ new #[Layout('layouts.app')] class extends Component
          */
         $shiftDate = app(ShiftDateResolver::class)->forPunch($this->employee, $now);
 
-        if ($this->employee->attendanceDays()->where('work_date', $shiftDate)->whereNotNull('time_out')->exists()) {
+        $open = $this->openDay();
+
+        /*
+         * Only the shift being started can block it.
+         *
+         * This used to refuse whenever any day anywhere was left open, and a
+         * forgotten time out is common — somebody clocks in at 2:39 AM, goes
+         * home without clocking out, and from then on every punch is met with
+         * "You are already timed in". Forever, because the only thing that
+         * closes a day is the person who can no longer reach the button.
+         *
+         * The stale day is deliberately left alone rather than closed here.
+         * Inventing an end time would put hours nobody worked into somebody's
+         * pay; it stays open, shows on the DTR, and HR corrects it.
+         */
+        if ($open && $open->work_date->toDateString() === $shiftDate) {
+            $this->errorMessage = 'You are already timed in.';
+
+            return;
+        }
+
+        // whereDate, not where: a date column compared against a plain string
+        // matches on MySQL and misses on other drivers, and a missed match here
+        // means trying to start a shift that is already finished.
+        if ($this->employee->attendanceDays()->whereDate('work_date', $shiftDate)->whereNotNull('time_out')->exists()) {
             $this->errorMessage = 'You have already completed your shift for today.';
 
             return;
