@@ -57,9 +57,10 @@ class PayslipCalculator
 
         $overtimePay = $this->overtimePay($hourlyRate, $counters);
         $nightDifferentialPay = $this->nightDifferentialPay($employee, $counters);
+        $holidayPremiumPay = $this->holidayPremium($dailyRate, $counters);
         $allowance = $this->allowance($employee);
 
-        $grossPay = round($basicEarned + $overtimePay + $nightDifferentialPay + $allowance, 2);
+        $grossPay = round($basicEarned + $overtimePay + $nightDifferentialPay + $holidayPremiumPay + $allowance, 2);
 
         // --- statutory ------------------------------------------------------
 
@@ -72,7 +73,7 @@ class PayslipCalculator
 
         // Government contributions are deducted from taxable income before tax
         // is worked out — that is what makes them tax-exempt.
-        $taxableIncome = $this->taxableIncome($basicEarned, $overtimePay, $nightDifferentialPay, $allowance, $employee, $contributions, $lateDeduction, $undertimeDeduction, $overBreakDeduction);
+        $taxableIncome = $this->taxableIncome($basicEarned, $overtimePay, $nightDifferentialPay, $holidayPremiumPay, $allowance, $employee, $contributions, $lateDeduction, $undertimeDeduction, $overBreakDeduction);
         $withholdingTax = $this->statutory->withholdingTax($employee, $taxableIncome);
 
         // --- net ------------------------------------------------------------
@@ -95,6 +96,7 @@ class PayslipCalculator
             'basic_earned' => $basicEarned,
             'overtime_pay' => $overtimePay,
             'night_differential_pay' => $nightDifferentialPay,
+            'holiday_premium_pay' => $holidayPremiumPay,
             'allowance' => $allowance,
             'gross_pay' => $grossPay,
 
@@ -207,6 +209,25 @@ class PayslipCalculator
         return round(((float) $employee->basic_salary / $divisor) * $rate * $days, 2);
     }
 
+    /**
+     * The extra earned for turning up on a holiday.
+     *
+     * Only the extra. A monthly-paid employee is already being paid for the
+     * day inside their fixed half, so a holiday marked double pay adds one more
+     * day's pay rather than two, and one marked 30% adds three tenths.
+     *
+     * The units are counted by the aggregator from each holiday's own setting,
+     * so a date nobody put on the list pays nothing extra whatever the national
+     * calendar says about it, and two holidays in one cutoff at different rates
+     * add up correctly without this needing to know either rate.
+     *
+     * @param  array<string, mixed>  $counters
+     */
+    protected function holidayPremium(float $dailyRate, array $counters): float
+    {
+        return round($dailyRate * (float) ($counters['holiday_premium_units'] ?? 0), 2);
+    }
+
     /** Allowance is paid in full each cutoff and is not reduced by absences. */
     protected function allowance(Employee $employee): float
     {
@@ -225,6 +246,7 @@ class PayslipCalculator
         float $basicEarned,
         float $overtimePay,
         float $nightDifferentialPay,
+        float $holidayPremiumPay,
         float $allowance,
         Employee $employee,
         float $contributions,
@@ -232,7 +254,9 @@ class PayslipCalculator
         float $undertimeDeduction,
         float $overBreakDeduction,
     ): float {
-        $taxable = $basicEarned + $overtimePay + $nightDifferentialPay;
+        // Holiday premium is ordinary taxable earnings, like overtime and night
+        // differential. It is not one of the de minimis benefits.
+        $taxable = $basicEarned + $overtimePay + $nightDifferentialPay + $holidayPremiumPay;
 
         if ($employee->allowance_taxable) {
             $taxable += $allowance;

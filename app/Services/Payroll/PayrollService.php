@@ -382,6 +382,7 @@ class PayrollService
             'basic_earned' => $figures['basic_earned'],
             'overtime_pay' => $figures['overtime_pay'],
             'night_differential_pay' => $figures['night_differential_pay'],
+            'holiday_premium_pay' => $figures['holiday_premium_pay'],
             'allowance' => $figures['allowance'],
             'gross_pay' => $figures['gross_pay'],
 
@@ -620,6 +621,8 @@ class PayrollService
             ($payslip->days_absent + $payslip->days_lwop) . ' day(s)');
         $add('earning', 'Overtime', (float) $payslip->overtime_pay, $payslip->overtime_hours . ' hour(s)');
         $add('earning', 'Night differential', (float) $payslip->night_differential_pay, $payslip->night_diff_days . ' day(s)');
+        $add('earning', 'Holiday premium', (float) $payslip->holiday_premium_pay,
+            $payslip->days_holiday_worked . ' holiday(s) worked');
         $add('earning', 'Allowance', (float) $payslip->allowance);
         $add('earning', 'Expenses reimbursed', (float) $payslip->reimbursement_pay, 'Not taxed — your own money back');
         $add('earning', 'Unused leave paid out', (float) $payslip->leave_conversion_pay,

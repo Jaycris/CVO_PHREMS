@@ -91,6 +91,9 @@ class AttendanceAggregator
             'days_rest' => 0,
             'days_holiday' => 0,
             'days_holiday_worked' => 0,
+            // Days' worth of holiday premium earned, summed from each holiday's
+            // own setting. 0.3 for a special non-working day, 1.0 for a double.
+            'holiday_premium_units' => 0.0,
             'days_expected' => 0,
             'late_minutes' => 0,
             'undertime_minutes' => 0,
@@ -190,6 +193,20 @@ class AttendanceAggregator
 
                 if ($row) {
                     $counters['days_holiday_worked']++;
+
+                    /*
+                     * Added up as days' worth of premium, taken from each
+                     * holiday's own setting rather than from its Labor Code
+                     * type. Working two special non-working days is 0.6 of a
+                     * day's pay; working a regular holiday is a whole one.
+                     *
+                     * Per holiday because that is where the company's own
+                     * decision lives. Their list has no Regular Holidays on it
+                     * at all — Christmas Day is entered as an American paid day
+                     * off — so a rule keyed off the type would have paid
+                     * nothing for working it.
+                     */
+                    $counters['holiday_premium_units'] += $holiday->premiumFraction();
                 }
             }
 

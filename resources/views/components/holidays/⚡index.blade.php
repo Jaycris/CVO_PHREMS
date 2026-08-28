@@ -35,6 +35,20 @@ new #[Layout('layouts.app')] class extends Component
     public string $observance = Holiday::PHILIPPINES;
     public string $note = '';
 
+    /*
+     * What working this day is worth, on top of the day's own pay.
+     *
+     * Set here rather than derived from the Labor Code type, because the
+     * company follows some Philippine holidays and some American ones and
+     * enters each under whichever calendar it treats the day by. Christmas Day
+     * is on their list as an American paid day off, so a rule keyed off the
+     * type would have paid nothing for working it.
+     *
+     * Only visible on this screen, which needs holidays.manage. Employees see
+     * the holiday on their dashboard with its name and type, never this.
+     */
+    public int $workedPremiumPercent = 100;
+
     public function mount(): void
     {
         $this->year = (int) now()->year;
@@ -77,6 +91,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->reset(['editingId', 'name', 'note']);
         $this->observance = $this->whose === 'all' ? Holiday::PHILIPPINES : $this->whose;
         $this->type = array_key_first(Holiday::typesFor($this->observance));
+        $this->workedPremiumPercent = Holiday::defaultPremiumFor($this->type);
 
         // Starts on the year being viewed rather than today, so adding next
         // year's proclamation does not mean retyping the year sixteen times.
@@ -98,9 +113,20 @@ new #[Layout('layouts.app')] class extends Component
         $this->type = $holiday->type;
         $this->observance = $holiday->observance;
         $this->note = (string) $holiday->note;
+        $this->workedPremiumPercent = (int) $holiday->worked_premium_percent;
 
         $this->resetValidation();
         $this->showForm = true;
+    }
+
+    /**
+     * Changing the type re-suggests its usual premium, and no more than
+     * suggests it — the whole reason this is a field is that the company's
+     * answer is not always the Labor Code's.
+     */
+    public function updatedType(): void
+    {
+        $this->workedPremiumPercent = Holiday::defaultPremiumFor($this->type);
     }
 
     public function save(): void
@@ -113,7 +139,17 @@ new #[Layout('layouts.app')] class extends Component
             // not be storable as a Philippine Labor Code category.
             'type' => ['required', 'in:' . implode(',', array_keys(Holiday::typesFor($this->observance)))],
             'note' => ['nullable', 'string', 'max:200'],
-        ], [], ['date' => 'date', 'name' => 'holiday name', 'observance' => 'whose holiday']);
+            'workedPremiumPercent' => ['required', 'integer', 'in:' . implode(',', array_keys(Holiday::WORKED_PREMIUMS))],
+        ], [], [
+            'date' => 'date',
+            'name' => 'holiday name',
+            'observance' => 'whose holiday',
+            'workedPremiumPercent' => 'pay for working this day',
+        ]);
+
+        // The form names it in camel case; the column does not.
+        $data['worked_premium_percent'] = $data['workedPremiumPercent'];
+        unset($data['workedPremiumPercent']);
 
         $clash = Holiday::where('date', $data['date'])
             ->where('name', $data['name'])
@@ -438,12 +474,26 @@ new #[Layout('layouts.app')] class extends Component
                 <x-label>Type</x-label>
                 {{-- The options change with the calendar above. Only Philippine
                      holidays carry Labor Code categories. --}}
-                <x-select wire:model="type">
+                <x-select wire:model.live="type">
                     @foreach (\App\Models\Holiday::typesFor($observance) as $key => $label)
                         <option value="{{ $key }}">{{ $label }}</option>
                     @endforeach
                 </x-select>
                 @error('type') <p class="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <x-label>Pay for working this day</x-label>
+                <x-select wire:model="workedPremiumPercent">
+                    @foreach (\App\Models\Holiday::WORKED_PREMIUMS as $percent => $label)
+                        <option value="{{ $percent }}">{{ $label }}</option>
+                    @endforeach
+                </x-select>
+                <p class="mt-1 text-xs font-medium text-[#778599]">
+                    Paid on top of the day's own pay, and only to people who actually clocked in.
+                    Nobody loses pay for staying home either way. Employees never see this setting.
+                </p>
+                @error('workedPremiumPercent') <p class="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
             </div>
 
             <div>

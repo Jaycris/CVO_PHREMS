@@ -78,7 +78,47 @@ class Holiday extends Model
         self::COMPANY => [self::PAID_DAY_OFF, self::SPECIAL_WORKING],
     ];
 
-    protected $fillable = ['date', 'name', 'type', 'observance', 'note'];
+    protected $fillable = ['date', 'name', 'type', 'observance', 'note', 'worked_premium_percent'];
+
+    /**
+     * What working this holiday is worth, on top of the day's own pay.
+     *
+     * @var array<int, string>
+     */
+    public const WORKED_PREMIUMS = [
+        0 => 'No extra pay',
+        30 => 'Extra 30% (special non-working)',
+        100 => 'Double pay (regular holiday)',
+    ];
+
+    /**
+     * The premium usually wanted for a type, offered when adding a holiday.
+     *
+     * Only a starting point. The company follows some Philippine holidays and
+     * some American ones, and enters days under whichever calendar it treats
+     * them by, so the type is a hint about the premium and never the answer.
+     */
+    public static function defaultPremiumFor(string $type): int
+    {
+        return match ($type) {
+            self::REGULAR => 100,
+            self::SPECIAL_NON_WORKING => 30,
+            default => 0,
+        };
+    }
+
+    /** The premium as a multiplier of one day's pay. */
+    public function premiumFraction(): float
+    {
+        return (int) $this->worked_premium_percent / 100;
+    }
+
+    public function premiumLabel(): string
+    {
+        $percent = (int) $this->worked_premium_percent;
+
+        return self::WORKED_PREMIUMS[$percent] ?? ($percent . '% extra');
+    }
 
     protected function casts(): array
     {
