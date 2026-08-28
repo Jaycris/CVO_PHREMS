@@ -29,6 +29,7 @@ new #[Layout('layouts.app')] class extends Component
     public bool $birWithholdingEnrolled = true;
     public bool $allowanceTaxable = false;
     public ?string $separationDate = null;
+    public string $separationType = '';
     public ?string $separationReason = null;
 
     // The profile is read-only; each section opens its own editor.
@@ -107,6 +108,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->birWithholdingEnrolled = (bool) $employee->bir_withholding_enrolled;
         $this->allowanceTaxable = (bool) $employee->allowance_taxable;
         $this->separationDate = $employee->separation_date?->toDateString();
+        $this->separationType = (string) $employee->separation_type;
         $this->separationReason = $employee->separation_reason;
     }
 
@@ -114,7 +116,19 @@ new #[Layout('layouts.app')] class extends Component
     {
         $data = $this->validate([
             'separationDate' => ['nullable', 'date', 'after_or_equal:' . $this->employee->hire_date->toDateString()],
+            // Required once a date is set, because "they left" without saying
+            // whether they resigned or were dismissed is the one thing anybody
+            // asks afterwards.
+            'separationType' => [
+                $this->separationDate ? 'required' : 'nullable',
+                'in:' . implode(',', array_keys(Employee::SEPARATION_TYPES)),
+            ],
             'separationReason' => ['nullable', 'string', 'max:255'],
+        ], [
+            'separationType.required' => 'Choose how they left.',
+        ], [
+            'separationDate' => 'last day',
+            'separationType' => 'how they left',
         ]);
 
         $this->employee->update([
@@ -125,6 +139,9 @@ new #[Layout('layouts.app')] class extends Component
             'bir_withholding_enrolled' => $this->birWithholdingEnrolled,
             'allowance_taxable' => $this->allowanceTaxable,
             'separation_date' => $data['separationDate'] ?: null,
+            // Clearing the date puts somebody back on the roster, so the type
+            // has to go with it rather than lingering as a contradiction.
+            'separation_type' => $data['separationDate'] ? ($data['separationType'] ?: null) : null,
             'separation_reason' => $data['separationReason'] ?: null,
         ]);
 
@@ -456,7 +473,16 @@ new #[Layout('layouts.app')] class extends Component
             <div class="flex items-center gap-3">
                 <x-avatar :employee="$employee" size="lg" />
                 <div class="min-w-0">
-                    <h1 class="truncate text-2xl font-bold text-ink-950 dark:text-white">{{ $employee->fullName() ?: $employee->employee_id }}</h1>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h1 class="truncate text-2xl font-bold text-ink-950 dark:text-white">{{ $employee->fullName() ?: $employee->employee_id }}</h1>
+                        {{-- Shown only once somebody has left or is leaving.
+                             A badge saying "Active" on every one of a hundred
+                             profiles is noise; one saying "Resigned" is the
+                             first thing anybody opening the page needs. --}}
+                        @if ($employee->separation_date)
+                            <x-badge :color="$employee->statusColor()">{{ $employee->statusLabel() }}</x-badge>
+                        @endif
+                    </div>
                     <p class="mt-0.5 text-sm font-medium text-ink-500 dark:text-ink-400">
                         {{ $employee->employee_id }}
                         <span class="mx-1.5 text-ink-300 dark:text-ink-600">·</span>
@@ -676,6 +702,11 @@ new #[Layout('layouts.app')] class extends Component
                         'Department' => $employee->department?->name ?? '—',
                         'Position' => $employee->position?->title ?? '—',
                         'Hire Date' => $employee->hire_date->format('M d, Y'),
+                        // Whether they still work here, which is a different
+                        // question from what kind of employee they are. A
+                        // separated employee keeps their Regular status.
+                        'Status' => $employee->statusLabel()
+                            . ($employee->separation_date ? ' · last day ' . $employee->separation_date->format('M d, Y') : ''),
                         'Employment Status' => $employee->employment_status,
                         'Employment Type' => $employee->employment_type ?: '—',
                         'Workplace Type' => $employee->workplace_type ?: '—',
@@ -980,16 +1011,29 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                    <x-label>Separation Date</x-label>
-                    <x-input wire:model="separationDate" type="date" />
-                    <p class="mt-1 text-xs font-medium text-[#778599]">Excludes the employee from payroll runs after they leave.</p>
+                    <x-label>Last Day</x-label>
+                    <x-input wire:model.live="separationDate" type="date" />
+                    <p class="mt-1 text-xs font-medium text-[#778599]">Leave blank while they are still with the company. Payroll, leave and commission all stop after this date.</p>
                     @error('separationDate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
                 <div>
-                    <x-label>Separation Reason</x-label>
-                    <x-input wire:model="separationReason" type="text" placeholder="e.g. Resigned" />
-                    @error('separationReason') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    <x-label>How They Left</x-label>
+                    <x-select wire:model="separationType">
+                        <option value="">Not set</option>
+                        @foreach (\App\Models\Employee::SEPARATION_TYPES as $key => $label)
+                            <option value="{{ $key }}">{{ $label }}</option>
+                        @endforeach
+                    </x-select>
+                    <p class="mt-1 text-xs font-medium text-[#778599]">Shown as their status on the directory.</p>
+                    @error('separationType') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
+            </div>
+
+            <div>
+                <x-label>Notes <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                <x-input wire:model="separationReason" type="text" placeholder="e.g. Moved to Cebu, end of project" />
+                <p class="mt-1 text-xs font-medium text-[#778599]">The detail behind the choice above. For your own records.</p>
+                @error('separationReason') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
             </div>
 
             <div class="flex gap-2 pt-2">

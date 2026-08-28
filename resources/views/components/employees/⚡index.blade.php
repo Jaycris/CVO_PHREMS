@@ -149,7 +149,7 @@ new #[Layout('layouts.app')] class extends Component
             </div>
         </div>
 
-        <div class="overflow-x-auto">
+        <x-directory-scroll>
             <table class="directory-table">
                 <thead class="directory-table-head">
                     <tr>
@@ -166,6 +166,7 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Department</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Position</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Status</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Employment</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Onboarding</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Login</th>
                     </tr>
@@ -198,6 +199,16 @@ new #[Layout('layouts.app')] class extends Component
                             </td>
                             <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-ink-700 dark:text-ink-200">{{ $employee->department?->name ?? '-' }}</td>
                             <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-ink-700 dark:text-ink-200">{{ $employee->position?->title ?? '-' }}</td>
+                            {{-- Two different facts, and they were being shown as
+                                 one. Regular says what kind of employee somebody
+                                 is; it stays Regular on the way out, so the
+                                 directory was showing a green badge for people
+                                 who left months ago. --}}
+                            <td class="whitespace-nowrap px-4 py-4">
+                                <x-badge :color="$employee->statusColor()">
+                                    {{ $employee->statusLabel() }}
+                                </x-badge>
+                            </td>
                             <td class="whitespace-nowrap px-4 py-4">
                                 <x-badge :color="$employee->employment_status === 'Regular' ? 'green' : 'amber'">
                                     {{ $employee->employment_status }}
@@ -236,7 +247,7 @@ new #[Layout('layouts.app')] class extends Component
                     @endforelse
                 </tbody>
             </table>
-        </div>
+        </x-directory-scroll>
 
         @if ($employees->hasPages())
             <div class="directory-pagination" @click="selected = []">

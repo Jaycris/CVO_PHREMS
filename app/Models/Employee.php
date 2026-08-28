@@ -71,6 +71,7 @@ class Employee extends Model
         'onboarding_completed_at',
         'user_id',
         'separation_date',
+        'separation_type',
         'separation_reason',
         'include_in_payroll',
         'sss_enrolled',
@@ -142,6 +143,45 @@ class Employee extends Model
         }
 
         return $this->separation_date->lte(Carbon::parse($asOf ?? Carbon::today()));
+    }
+
+    /** How somebody left. The reason field explains it; this classifies it. */
+    public const SEPARATION_TYPES = [
+        'resigned' => 'Resigned',
+        'terminated' => 'Terminated',
+        'end_of_contract' => 'End of Contract',
+        'retired' => 'Retired',
+    ];
+
+    /**
+     * Whether the person is still with the company, in one word.
+     *
+     * Separate from employment_status, which says Regular or Probationary —
+     * that is what kind of employee somebody is, not whether they still work
+     * here. A separated employee kept their Regular status on the way out, so
+     * the directory was showing a green "Regular" badge for people who had
+     * left months ago.
+     *
+     * A separation date in the future reads as Active until it arrives, which
+     * is what lets HR file a resignation in advance without cutting somebody
+     * off from the system on the day they hand in their notice.
+     */
+    public function statusLabel(Carbon|string|null $asOf = null): string
+    {
+        if (! $this->isSeparated($asOf)) {
+            return $this->separation_date ? 'Leaving' : 'Active';
+        }
+
+        return self::SEPARATION_TYPES[$this->separation_type] ?? 'Separated';
+    }
+
+    public function statusColor(Carbon|string|null $asOf = null): string
+    {
+        if (! $this->isSeparated($asOf)) {
+            return $this->separation_date ? 'amber' : 'green';
+        }
+
+        return $this->separation_type === 'terminated' ? 'red' : 'neutral';
     }
 
     /**
