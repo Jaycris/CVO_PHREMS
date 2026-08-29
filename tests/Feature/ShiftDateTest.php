@@ -108,6 +108,51 @@ class ShiftDateTest extends TestCase
         }
     }
 
+    /**
+     * A shift that starts just after midnight, which is where this first broke
+     * in production.
+     */
+    protected function afterMidnight(): Employee
+    {
+        return $this->employeeOn('00:30', '06:00');
+    }
+
+    #[Test]
+    public function an_evening_arrival_belongs_to_the_shift_starting_after_midnight(): void
+    {
+        /*
+         * John Paul works half past midnight to six. He worked the 29th and
+         * clocked out at six that morning. Coming in at ten that night he is an
+         * hour and a half early for the 30th — but the resolver only weighed
+         * yesterday and today, so it picked the 29th, which was finished, and
+         * he was told he had already completed his shift.
+         */
+        $this->assertSame(
+            '2026-08-30',
+            $this->resolver->forPunch($this->afterMidnight(), Carbon::parse('2026-08-29 22:00')),
+        );
+    }
+
+    #[Test]
+    public function an_arrival_just_after_midnight_belongs_to_that_same_day(): void
+    {
+        // The ordinary case for that shift, which must not move.
+        $this->assertSame(
+            '2026-08-29',
+            $this->resolver->forPunch($this->afterMidnight(), Carbon::parse('2026-08-29 00:57')),
+        );
+    }
+
+    #[Test]
+    public function somebody_late_for_an_after_midnight_shift_still_joins_it(): void
+    {
+        // Two hours late, not twenty-two hours early for tomorrow.
+        $this->assertSame(
+            '2026-08-29',
+            $this->resolver->forPunch($this->afterMidnight(), Carbon::parse('2026-08-29 02:30')),
+        );
+    }
+
     #[Test]
     public function somebody_with_no_schedule_falls_back_to_the_calendar_date(): void
     {

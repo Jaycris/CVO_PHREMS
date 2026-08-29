@@ -32,6 +32,10 @@ use Illuminate\Support\Carbon;
  *
  * Day shifts never move: 8 AM against a 9 AM start is an hour from today and
  * twenty-three from yesterday, so today wins, exactly as before.
+ *
+ * The nearest start may be tomorrow's. A shift running half past midnight to
+ * six belongs to the day it starts on, so somebody arriving at ten at night is
+ * early for tomorrow's shift, not late for one they finished that morning.
  */
 class ShiftDateResolver
 {
@@ -49,10 +53,21 @@ class ShiftDateResolver
         $best = null;
         $bestDistance = null;
 
-        // Yesterday first, so an exact tie goes to today rather than dragging a
-        // punch backwards. Ties only happen on a schedule change, and the newer
-        // shift is the likelier one.
-        foreach ([$today->copy()->subDay(), $today] as $date) {
+        /*
+         * Tomorrow is a candidate too, and leaving it out was a real fault.
+         *
+         * A shift starting at half past midnight belongs to the day it starts
+         * on. Somebody arriving at ten at night is an hour and a half early for
+         * tomorrow's — but with only yesterday and today to choose from, the
+         * nearest start was this morning's, which they had already worked and
+         * clocked out of. They were told "You have already completed your shift
+         * for today" and could not start the shift they had come in for.
+         *
+         * Ordered earliest to latest with <= below, so an exact tie — twelve
+         * hours from two starts — goes forward to the later shift rather than
+         * reopening one already finished.
+         */
+        foreach ([$today->copy()->subDay(), $today, $today->copy()->addDay()] as $date) {
             $assignment = $employee->scheduleAssignmentForDate($date);
 
             if (! $assignment) {
@@ -65,7 +80,7 @@ class ShiftDateResolver
 
             $distance = abs($start->diffInMinutes($at));
 
-            if ($bestDistance === null || $distance < $bestDistance) {
+            if ($bestDistance === null || $distance <= $bestDistance) {
                 $best = $date->toDateString();
                 $bestDistance = $distance;
             }

@@ -121,6 +121,42 @@ class PunchClockLockoutTest extends TestCase
     }
 
     #[Test]
+    public function finishing_an_after_midnight_shift_does_not_block_that_evening(): void
+    {
+        /*
+         * John Paul, live on the 29th. His shift runs half past midnight to
+         * six; he worked it and clocked out that morning. Coming in at ten that
+         * night for the shift that starts at half past midnight on the 30th, he
+         * was told he had already completed his shift for today.
+         */
+        $employee = Employee::factory()->create([
+            'user_id' => $this->employee->user_id,
+            'tracks_attendance' => true,
+        ]);
+        $this->employee->forceFill(['user_id' => null])->save();
+        $employee->assignSchedule(
+            WorkSchedule::factory()->create(['start_time' => '00:30', 'end_time' => '06:00']),
+            '2020-01-01',
+        );
+
+        AttendanceDay::create([
+            'employee_id' => $employee->id,
+            'work_date' => '2026-08-29',
+            'time_in' => '2026-08-29 00:57:00',
+            'time_out' => '2026-08-29 06:00:00',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-08-29 22:00:00'));
+
+        $this->clock()->call('timeIn')->assertSet('errorMessage', null);
+
+        $this->assertTrue(
+            AttendanceDay::whereDate('work_date', '2026-08-30')->where('employee_id', $employee->id)->exists(),
+            'The shift starting after midnight was never opened.',
+        );
+    }
+
+    #[Test]
     public function punching_in_twice_on_the_same_shift_is_still_refused(): void
     {
         // The guard still has to do its real job.
