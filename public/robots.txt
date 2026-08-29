@@ -1,2 +1,13 @@
+# PHREMS is a payroll system. Nothing here belongs in a search result, and
+# every page says so through a noindex header and meta tag.
+#
+# Crawling is deliberately still allowed. A Disallow here would stop a search
+# engine fetching the page at all, and a page it cannot fetch is a page whose
+# noindex it never reads — which is how a site stays listed for years after
+# being "blocked". Let them in, and let them read the refusal.
+#
+# Once the site is gone from search results, this may be tightened to
+# "Disallow: /" if wanted. Not before.
+
 User-agent: *
 Disallow:
