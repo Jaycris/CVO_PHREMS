@@ -45,6 +45,22 @@ class PunchLocationPolicy
         return AppSetting::flag(self::SETTING, false);
     }
 
+    /**
+     * Whether this employee works on-site.
+     *
+     * Compared case-insensitively and without punctuation: the value is free
+     * text on the employee record, and "onsite", "On-site" and "On Site" are
+     * the same answer.
+     */
+    public function isOnsite(?Employee $employee): bool
+    {
+        if (! $employee) {
+            return false;
+        }
+
+        return strtolower(str_replace(['-', ' ', '_'], '', (string) $employee->workplace_type)) === 'onsite';
+    }
+
     /** Whether this employee is one the rule applies to. */
     public function appliesTo(Employee $employee): bool
     {
@@ -52,11 +68,7 @@ class PunchLocationPolicy
             return false;
         }
 
-        // Compared case-insensitively: the value is free text on the employee
-        // record, and "onsite" and "On-site" are the same answer.
-        $type = strtolower(str_replace(['-', ' ', '_'], '', (string) $employee->workplace_type));
-
-        if ($type !== 'onsite') {
+        if (! $this->isOnsite($employee)) {
             return false;
         }
 

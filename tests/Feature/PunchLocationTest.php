@@ -47,6 +47,70 @@ class PunchLocationTest extends TestCase
         return OfficeNetwork::create(['label' => 'Main office', 'ip_address' => $range]);
     }
 
+    /**
+     * Switching the check on, from wherever the administrator happens to be.
+     *
+     * It used to refuse anybody whose own address was not already on the list,
+     * to stop them locking themselves out. Neither half of that held: this
+     * screen is not itself address-checked, so whoever turns it on can come
+     * straight back and turn it off, and somebody who is not on-site is never
+     * checked at all. What it did do was stop an administrator working from
+     * home ever switching it on — which is most of them.
+     */
+    protected function actAsAdmin(?string $workplaceType): \App\Models\User
+    {
+        $user = \App\Models\User::factory()->create(['is_super_admin' => true]);
+        $user->assignRole('Admin');
+        Employee::factory()->create(['user_id' => $user->id, 'workplace_type' => $workplaceType]);
+
+        $this->actingAs($user);
+
+        return $user;
+    }
+
+    #[Test]
+    public function an_administrator_who_is_not_onsite_can_switch_it_on_from_anywhere(): void
+    {
+        $this->office('132.1.2.21');
+        $this->actAsAdmin(null);
+
+        \Livewire\Livewire::test('attendance.office-networks')
+            ->call('toggleEnforcement')
+            ->assertSet('errorMessage', null)
+            ->assertSet('enforced', true);
+
+        AppSetting::flushCache();
+        $this->assertTrue($this->policy->isEnforced());
+    }
+
+    #[Test]
+    public function an_onsite_administrator_outside_the_office_is_still_stopped(): void
+    {
+        // The protection that was worth keeping: they would be the first one
+        // unable to clock in.
+        $this->office('132.1.2.21');
+        $this->actAsAdmin('Onsite');
+
+        \Livewire\Livewire::test('attendance.office-networks')
+            ->call('toggleEnforcement')
+            ->assertSet('enforced', false);
+
+        AppSetting::flushCache();
+        $this->assertFalse($this->policy->isEnforced());
+    }
+
+    #[Test]
+    public function switching_it_on_with_no_addresses_is_still_refused(): void
+    {
+        // It would apply to nobody, and believing the office is locked down
+        // when it is not is worse than being told.
+        $this->actAsAdmin(null);
+
+        \Livewire\Livewire::test('attendance.office-networks')
+            ->call('toggleEnforcement')
+            ->assertSet('enforced', false);
+    }
+
     #[Test]
     public function an_onsite_employee_may_clock_in_from_the_office(): void
     {

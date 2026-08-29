@@ -53,13 +53,28 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
-        // Refusing to switch on from outside the office is the whole safety
-        // net here: otherwise the person doing it is the first one locked out,
-        // and the only way back in is the database.
-        if (! $this->enforced && ! OfficeNetwork::contains(request()->ip())) {
+        /*
+         * Only the person who would actually be shut out is stopped.
+         *
+         * This used to refuse anybody whose address was not on the list, on the
+         * grounds that they would lock themselves out with no way back. Neither
+         * half held. This screen is not itself address-checked, so whoever
+         * turns it on can always come straight back and turn it off; and
+         * somebody who is not on-site is never checked at all, so they could
+         * not be locked out by it in the first place.
+         *
+         * What it did do was stop an administrator working from home ever
+         * switching this on — which is most of them, and exactly when they
+         * would want to.
+         */
+        $actor = auth()->user()?->employee;
+
+        if (! $this->enforced
+            && app(PunchLocationPolicy::class)->isOnsite($actor)
+            && ! OfficeNetwork::contains(request()->ip())) {
             $this->errorMessage = 'You are on ' . request()->ip()
-                . ', which is not on the list. Add it first — otherwise turning this on '
-                . 'locks you out of your own attendance page along with everyone else.';
+                . ', which is not on the list, and you are set to on-site. Add it first — '
+                . 'otherwise turning this on stops you clocking in along with everyone else.';
 
             return;
         }
