@@ -266,13 +266,49 @@ class PunchLocationTest extends TestCase
     }
 
     #[Test]
-    public function the_refusal_names_the_address_so_it_can_be_added(): void
+    public function the_refusal_tells_the_employee_nothing_they_could_use(): void
     {
+        /*
+         * It used to name the address and invite them to pass it to HR to be
+         * added, which reads as helpful and is the opposite: the rule exists to
+         * stop people clocking in from home, and that message coached somebody
+         * at home through getting their own connection approved.
+         */
         $message = $this->policy->refusalMessage('112.198.1.50');
 
-        // The employee is the only one who can read this number off a screen,
-        // so the message has to hand it to them.
-        $this->assertStringContainsString('112.198.1.50', $message);
+        $this->assertStringNotContainsString('112.198.1.50', $message);
+        $this->assertStringNotContainsString('add', strtolower($message));
+        $this->assertStringContainsString('contact HR', $message);
+    }
+
+    #[Test]
+    public function a_refused_punch_is_logged_with_the_address(): void
+    {
+        // The number is not lost, it just goes somewhere the person being
+        // refused cannot read it.
+        $this->enforce();
+        $this->office('203.0.113.0/24');
+
+        $user = \App\Models\User::factory()->create();
+        $user->assignRole('Employee');
+        $employee = Employee::factory()->create([
+            'user_id' => $user->id,
+            'workplace_type' => 'Onsite',
+            'tracks_attendance' => true,
+        ]);
+        $employee->assignSchedule(\App\Models\WorkSchedule::factory()->create(), '2020-01-01');
+
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')
+            ->once()
+            ->withArgs(fn (string $message, array $context) => str_contains($message, 'outside the office')
+                && $context['employee_id'] === $employee->employee_id
+                && $context['ip'] === '127.0.0.1');
+
+        $this->actingAs($user);
+
+        \Livewire\Livewire::test('attendance.punch-clock')->call('timeIn');
+
+        $this->assertSame(0, \App\Models\AttendanceDay::count());
     }
 
     #[Test]

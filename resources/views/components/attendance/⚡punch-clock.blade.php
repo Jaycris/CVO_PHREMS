@@ -113,7 +113,20 @@ new #[Layout('layouts.app')] class extends Component
             return true;
         }
 
-        $this->errorMessage = $policy->refusalMessage($ip);
+        /*
+         * The address goes to the log, not to the person being refused.
+         *
+         * Whoever fixes a changed office line still needs the number, and this
+         * is where they should find it. Telling the employee instead was
+         * handing somebody at home the exact value to ask HR to approve.
+         */
+        \Illuminate\Support\Facades\Log::warning('Punch refused: outside the office network.', [
+            'employee_id' => $this->employee->employee_id,
+            'name' => $this->employee->fullName(),
+            'ip' => $ip,
+        ]);
+
+        $this->errorMessage = $policy->refusalMessage();
 
         return false;
     }

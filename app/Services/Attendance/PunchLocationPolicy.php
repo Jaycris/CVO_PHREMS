@@ -88,14 +88,23 @@ class PunchLocationPolicy
     /**
      * What to tell someone who is turned away.
      *
-     * Names the address they came from, because the first thing whoever fixes
-     * this needs is the number to add to the list — and the employee is the
-     * only one who can read it off their own screen.
+     * Deliberately says nothing more than that.
+     *
+     * It used to name the address and invite the employee to pass it to HR so
+     * it could be added, which reads as helpful and is the opposite. The rule
+     * exists to stop people clocking in from home; handing somebody at home the
+     * exact number and telling them how to get it approved is coaching them
+     * through it. Anybody genuinely sitting in the office has a colleague
+     * beside them clocking in fine, which is the only evidence HR needs.
+     *
+     * The address is not lost — every refusal is written to the log with the
+     * employee and the address, which is where whoever is fixing a changed
+     * office line should look, and it is on the Office Networks screen for
+     * anybody who can reach it.
      */
-    public function refusalMessage(?string $ip): string
+    public function refusalMessage(?string $ip = null): string
     {
-        return 'You can only clock in and out from the office network. '
-            . 'This device is on ' . ($ip ?: 'an unknown address')
-            . '. If you are in the office, give that number to HR so they can add it.';
+        return 'You can only clock in and out from the office. '
+            . 'If you are in the office and seeing this, contact HR.';
     }
 }

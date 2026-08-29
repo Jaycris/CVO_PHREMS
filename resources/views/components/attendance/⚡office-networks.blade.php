@@ -292,18 +292,33 @@ new #[Layout('layouts.app')] class extends Component
                                 @endif
                             </td>
                             <td class="px-4 py-3 font-medium text-[#778599]">{{ $network->note ?: '—' }}</td>
+                            {{--
+                                Two switches sit on this page and they used to
+                                read as one. An address said "In use" with a
+                                "Turn off" beside it while checking itself was
+                                off, which looked as though the office was
+                                already locked down. An address is only in use
+                                when both are on, and the badge now says so.
+                            --}}
                             <td class="px-4 py-3">
-                                <x-badge :color="$network->is_active ? 'green' : 'neutral'">
-                                    {{ $network->is_active ? 'In use' : 'Off' }}
-                                </x-badge>
+                                @if (! $enforced)
+                                    <x-badge color="neutral">Checking is off</x-badge>
+                                @else
+                                    <x-badge :color="$network->is_active ? 'green' : 'neutral'">
+                                        {{ $network->is_active ? 'In use' : 'Skipped' }}
+                                    </x-badge>
+                                @endif
                             </td>
                             <td class="px-4 py-3 text-right">
                                 <div class="flex flex-wrap justify-end gap-2">
                                     <x-button wire:click="edit({{ $network->id }})" @click="$wire.showForm = true"
                                               variant="secondary" class="h-9 px-3 text-xs">Edit</x-button>
+                                    {{-- Named for what it does to this one
+                                         address, so it cannot be read as the
+                                         switch that governs the whole check. --}}
                                     <x-button wire:click="toggleActive({{ $network->id }})"
                                               variant="secondary" class="h-9 px-3 text-xs">
-                                        {{ $network->is_active ? 'Turn off' : 'Turn on' }}
+                                        {{ $network->is_active ? 'Skip this' : 'Use this' }}
                                     </x-button>
                                     <x-button wire:click="delete({{ $network->id }})"
                                               wire:confirm="Remove {{ $network->label }}? On-site staff on that connection will no longer be able to clock in."
