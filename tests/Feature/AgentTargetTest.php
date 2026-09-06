@@ -81,16 +81,34 @@ class AgentTargetTest extends TestCase
     }
 
     #[Test]
-    public function both_employee_forms_say_where_the_target_comes_from(): void
+    public function the_create_form_says_where_the_target_comes_from(): void
     {
-        foreach (['create', 'edit'] as $form) {
-            $source = file_get_contents(resource_path("views/components/employees/⚡{$form}.blade.php"));
+        // Still typed on create, because an employee may be added before the
+        // CRM has ever heard of them.
+        $source = file_get_contents(resource_path('views/components/employees/⚡create.blade.php'));
 
-            $this->assertStringContainsString('<x-label>Agent Target</x-label>', $source,
-                "{$form} still calls it Quota, which is not what the CRM calls it");
-            $this->assertStringContainsString('In US dollars.', $source,
-                "{$form} does not say the target is in dollars");
-        }
+        $this->assertStringContainsString('<x-label>Agent Target</x-label>', $source,
+            'create still calls it Quota, which is not what the CRM calls it');
+        $this->assertStringContainsString('In US dollars.', $source,
+            'create does not say the target is in dollars');
+    }
+
+    #[Test]
+    public function the_edit_form_shows_the_target_without_letting_anybody_change_it(): void
+    {
+        /*
+         * The CRM owns it and PHREMS mirrors it on every page open, so a figure
+         * typed here was overwritten on the next visit — silently, with no
+         * error. Showing it and refusing the edit is the honest version.
+         */
+        $source = file_get_contents(resource_path('views/components/employees/⚡edit.blade.php'));
+
+        $this->assertStringContainsString('<x-label>Agent Target</x-label>', $source,
+            'edit no longer shows the agent target at all');
+        $this->assertStringNotContainsString('wire:model="quota"', $source,
+            'edit still lets somebody type over the CRM\'s agent target');
+        $this->assertStringContainsString("USD ' . number_format", $source,
+            'edit does not say which currency the target is in');
     }
 
     #[Test]

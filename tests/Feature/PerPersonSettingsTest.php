@@ -209,9 +209,15 @@ class PerPersonSettingsTest extends PayrollTestCase
 
             $this->assertStringNotContainsString("name === 'Sales'", $source,
                 "{$form} still decides commission from the department name");
-            $this->assertStringContainsString('earnsCommission', $source,
-                "{$form} does not use the per-person check");
         }
+
+        // Only create asks the question. Edit shows whatever the CRM said and
+        // has nothing to decide, so it has no per-person check to make.
+        $this->assertStringContainsString(
+            'earnsCommission',
+            file_get_contents(resource_path('views/components/employees/⚡create.blade.php')),
+            'create does not use the per-person check',
+        );
     }
     #[Test]
     public function a_run_covers_only_the_people_marked_as_earning_commission(): void

@@ -93,8 +93,8 @@ class CommissionSchemeTest extends TestCase
     {
         // "Tier 1/2/3" was written into both forms and matched nothing in the
         // CRM, so changing it to the CRM's real names needed a release. The
-        // dropdown is only rendered for Sales-department employees, which is
-        // why this reads the source rather than scraping the page.
+        // dropdown is not always rendered, which is why this reads the source
+        // rather than scraping the page.
         foreach (['create', 'edit'] as $form) {
             $source = file_get_contents(resource_path("views/components/employees/⚡{$form}.blade.php"));
 
@@ -102,9 +102,28 @@ class CommissionSchemeTest extends TestCase
                 "{$form} still validates against the hard-coded tier list");
             $this->assertStringNotContainsString('<option value="Tier 1">', $source,
                 "{$form} still offers the hard-coded tiers");
-            $this->assertStringContainsString('CommissionScheme::options()', $source,
-                "{$form} does not read the schemes table");
         }
+
+        // Only create still offers a choice. Edit shows the CRM's answer and
+        // has no dropdown to fill, so it has no schemes list to read.
+        $this->assertStringContainsString(
+            'CommissionScheme::options()',
+            file_get_contents(resource_path('views/components/employees/⚡create.blade.php')),
+            'create does not read the schemes table',
+        );
+    }
+
+    #[Test]
+    public function the_edit_form_does_not_let_anybody_choose_a_scheme(): void
+    {
+        // It is the CRM's to decide. A dropdown here would be overwritten on
+        // the next page open, which reads as the form losing the answer.
+        $source = file_get_contents(resource_path('views/components/employees/⚡edit.blade.php'));
+
+        $this->assertStringNotContainsString('wire:model="commission_scheme"', $source,
+            'edit still lets somebody pick a scheme over the CRM\'s');
+        $this->assertStringContainsString('<x-label>Commission Scheme</x-label>', $source,
+            'edit no longer shows the scheme at all');
     }
 
     #[Test]

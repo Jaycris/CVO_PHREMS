@@ -1,11 +1,10 @@
 <?php
 
-use App\Models\CommissionScheme;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Position;
 use App\Services\Commission\CommissionProfileMirror;
-use Illuminate\Validation\Rule;
+use App\Services\Crm\CrmClient;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -63,14 +62,30 @@ new #[Layout('layouts.app')] class extends Component
     public string $employment_status = 'Probationary';
     public ?int $reports_to_id = null;
 
-    public function mount(Employee $employee, CommissionProfileMirror $mirror): void
+    /**
+     * Whether the CRM answered about this employee just now.
+     *
+     * False covers two different situations and the screen says which: the CRM
+     * has never heard of them, or the CRM could not be reached at all. Neither
+     * is a reason to let somebody type a figure here.
+     */
+    public bool $crmKnowsEmployee = false;
+
+    public bool $crmReachable = false;
+
+    public function mount(Employee $employee, CommissionProfileMirror $mirror, CrmClient $crm): void
     {
-        // Asked before the fields are filled in, for the same reason the
-        // profile does it: the CRM owns the commission setup. Without this the
-        // form shows whatever was last written down, and saving would push that
-        // stale answer back over the CRM's — which is how somebody ends up
-        // switched off in PHREMS while the CRM says they earn commission.
-        $mirror->refresh($employee);
+        /*
+         * The CRM owns the commission setup and this screen only shows it.
+         *
+         * Asked before the fields are filled in, because without it the form
+         * shows whatever was last written down — and these three used to be
+         * editable, so saving pushed that stale answer back over the CRM's.
+         * That is how somebody ended up switched off in PHREMS while the CRM
+         * said they earned commission.
+         */
+        $this->crmReachable = $crm->isConfigured();
+        $this->crmKnowsEmployee = $mirror->refresh($employee);
         $employee->refresh();
 
         $this->employee = $employee;
@@ -105,20 +120,6 @@ new #[Layout('layouts.app')] class extends Component
         $this->quota = $employee->quota !== null ? (string) $employee->quota : '';
         $this->employment_status = $employee->employment_status;
         $this->reports_to_id = $employee->reports_to_id;
-    }
-
-    /**
-     * Whether this person earns commission.
-     *
-     * Per person, not per department. Somebody in Admin may well sell,
-     * and somebody in Sales may not — this used to check that the
-     * department was literally named "Sales", which hid the whole
-     * section from the first and would have stripped every agent's setup
-     * the day that department was renamed.
-     */
-    public function earnsCommission(): bool
-    {
-        return $this->commission_frequency !== 'none';
     }
 
     /**
@@ -189,15 +190,7 @@ new #[Layout('layouts.app')] class extends Component
             'allowance' => ['nullable', 'numeric', 'min:0'],
             'employment_status' => ['required', 'in:Probationary,Regular,Contract,Training'],
             'reports_to_id' => ['nullable', 'exists:employees,id'],
-            // How often their commission is worked out. Drives which
-            // commission run pre-selects them.
-            'commission_frequency' => ['required', 'in:none,monthly,biweekly'],
         ];
-
-        if ($this->earnsCommission()) {
-            $rules['commission_scheme'] = ['required', Rule::in(array_keys(CommissionScheme::options()))];
-            $rules['quota'] = ['required', 'numeric', 'min:0'];
-        }
 
         $data = $this->validate($rules);
 
@@ -224,10 +217,14 @@ new #[Layout('layouts.app')] class extends Component
             $data = collect($data)->except($this->onboardingFields())->all();
         }
 
-        if (! $this->earnsCommission()) {
-            $data['commission_scheme'] = null;
-            $data['quota'] = null;
-        }
+        /*
+         * The three commission fields are never written from here.
+         *
+         * They are the CRM's, mirrored on every profile open, so anything this
+         * form sent would be overwritten the next time somebody looked at the
+         * page — silently, with no error, which is worse than refusing.
+         */
+        $data = collect($data)->except(['commission_frequency', 'commission_scheme', 'quota'])->all();
 
         // An employee reporting to themselves would loop the leave-approval chain.
         if ((int) $this->reports_to_id === $this->employee->id) {
@@ -545,36 +542,59 @@ new #[Layout('layouts.app')] class extends Component
                     <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">Sales Compensation</p>
                     <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">Commission Setup</h2>
                 </div>
-                <div class="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
-                    <div>
-                        <x-label>Earns commission?</x-label>
-                        <x-select wire:model.live="commission_frequency">
-                            <option value="none">No</option>
-                            <option value="monthly">Yes — monthly</option>
-                            <option value="biweekly">Yes — bi-weekly</option>
-                        </x-select>
-                        <p class="mt-1 text-xs font-medium text-[#778599]">Set per person, whatever their department. Pre-selects them on commission runs of that kind; they can still be added to any run by hand.</p>
-                        @error('commission_frequency') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                    </div>
+                {{--
+                    Shown, not edited. The CRM owns all three and PHREMS mirrors
+                    them every time this page opens, so anything typed here was
+                    overwritten on the next visit — silently, which is worse
+                    than not offering the field at all.
 
-                    @if ($this->earnsCommission())
-                        <div>
-                            <x-label>Commission Scheme</x-label>
-                            <x-select wire:model="commission_scheme">
-                                <option value="">Select scheme</option>
-                                @foreach (\App\Models\CommissionScheme::options() as $schemeName)
-                                    <option value="{{ $schemeName }}">{{ $schemeName }}</option>
-                                @endforeach
-                            </x-select>
-                            <p class="mt-1 text-xs font-medium text-[#778599]">Kept in step with the CRM whenever this profile is opened.</p>
-                            @error('commission_scheme') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    To change any of it, change it in the CRM.
+                --}}
+                <div class="p-6">
+                    @if (! $this->crmReachable)
+                        <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-400/20 dark:bg-amber-400/10">
+                            <p class="text-sm font-bold text-amber-900 dark:text-amber-200">The CRM is not set up</p>
+                            <p class="mt-1 text-sm font-medium text-amber-800 dark:text-amber-300">
+                                No CRM address or token is configured, so there is nothing to read commission setup from.
+                            </p>
                         </div>
-                        <div>
-                            <x-label>Agent Target</x-label>
-                            <x-input wire:model="quota" type="number" step="0.01" />
-                            <p class="mt-1 text-xs font-medium text-[#778599]">In US dollars. Must match Agent Target in the CRM commission profile &mdash; the CRM measures every agent against its own figure, not this one.</p>
-                            @error('quota') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    @elseif (! $this->crmKnowsEmployee)
+                        <div class="rounded-xl border border-ink-200 bg-ink-50 p-5 dark:border-white/10 dark:bg-white/5">
+                            <p class="text-sm font-bold text-ink-900 dark:text-white">Nothing from the CRM for this employee</p>
+                            <p class="mt-1 text-sm font-medium text-ink-600 dark:text-ink-300">
+                                The CRM has no commission profile against
+                                <span class="font-mono font-bold">{{ $employee_id }}</span>, or it could not be reached just now.
+                                Add them as an agent in the CRM and set their HRIS Employee ID there — this page will show it the next time it is opened.
+                            </p>
                         </div>
+                    @else
+                        <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
+                            <div>
+                                <x-label>Earns commission?</x-label>
+                                <p class="mt-1 text-sm font-bold text-ink-950 dark:text-white">
+                                    {{ match ($commission_frequency) {
+                                        'monthly' => 'Yes — monthly',
+                                        'biweekly' => 'Yes — bi-weekly',
+                                        default => 'No',
+                                    } }}
+                                </p>
+                            </div>
+                            <div>
+                                <x-label>Commission Scheme</x-label>
+                                <p class="mt-1 text-sm font-bold text-ink-950 dark:text-white">{{ $commission_scheme ?: '—' }}</p>
+                            </div>
+                            <div>
+                                <x-label>Agent Target</x-label>
+                                <p class="mt-1 text-sm font-bold text-ink-950 dark:text-white">
+                                    {{ $quota !== '' ? 'USD ' . number_format((float) $quota, 2) : '—' }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <p class="mt-5 text-xs font-medium text-[#778599]">
+                            Read from the CRM each time this page opens. To change any of it, change it in the CRM commission profile —
+                            an edit here would be overwritten on the next visit.
+                        </p>
                     @endif
                 </div>
             </section>
