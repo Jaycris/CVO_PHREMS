@@ -45,26 +45,14 @@ class OffsiteWorkScheduled extends Notification implements ShouldQueue
     {
         $assignment = $this->assignment;
 
-        $mail = (new MailMessage)
+        return (new MailMessage)
             ->subject($this->subject())
-            ->greeting('Hi ' . ($assignment->employee?->first_name ?: 'there') . ',');
-
-        if ($this->change === self::REMOVED) {
-            return $mail
-                ->line('You are no longer recorded as working away from the office on '
-                    . $assignment->rangeLabel() . '.')
-                ->line('**Please clock in and out as normal on those days.** Without a time in they will be treated as absences.')
-                ->line('If you think this is a mistake, speak to HR before those dates.');
-        }
-
-        return $mail
-            ->line($this->change === self::CHANGED
-                ? 'The dates for your off-site work have changed.'
-                : 'You have been recorded as working away from the office.')
-            ->line('**' . $assignment->rangeLabel() . '** — ' . $assignment->reason)
-            ->line('You do not need to clock in or out on those days. They are paid as normal working days and you will not be marked absent for them.')
-            ->line('Any rest day that falls inside those dates stays a rest day.')
-            ->line('If any of this looks wrong, tell HR before those dates rather than after.');
+            ->view('emails.offsite-work-scheduled', [
+                'assignment' => $assignment,
+                'change' => $this->change,
+                'employeeName' => $assignment->employee?->first_name ?: 'there',
+                'url' => url('/attendance'),
+            ]);
     }
 
     /** @return array<string, mixed> */

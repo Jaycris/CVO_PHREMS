@@ -98,6 +98,8 @@ class AttendanceAggregator
             // held separately so a payslip can say why a day with no time in
             // was paid.
             'days_offsite' => 0,
+            // Of those, the ones given off in lieu rather than worked.
+            'days_offsite_day_off' => 0,
             'days_holiday' => 0,
             'days_holiday_worked' => 0,
             // Days' worth of holiday premium earned, summed from each holiday's
@@ -198,6 +200,13 @@ class AttendanceAggregator
             if (isset($offsite[$date]) && $leaveKind === null) {
                 $counters['days_present']++;
                 $counters['days_offsite']++;
+
+                // Counted apart only so the payslip can say which it was. Both
+                // are paid days with no punch, and payroll does nothing
+                // different with them.
+                if ($offsite[$date] === OffsiteAssignment::DAY_OFF) {
+                    $counters['days_offsite_day_off']++;
+                }
 
                 continue;
             }
@@ -332,13 +341,13 @@ class AttendanceAggregator
      * Ranges expanded to dates in memory, the same way leave is, so the day
      * loop can answer with an array lookup rather than a query per day.
      *
-     * @return array<int, array<string, string>> employee id => date => reason
+     * @return array<int, array<string, string>> employee id => date => kind
      */
     protected function loadOffsiteDays(array $employeeIds, Carbon $start, Carbon $end): array
     {
         $assignments = OffsiteAssignment::whereIn('employee_id', $employeeIds)
             ->overlapping($start, $end)
-            ->get(['employee_id', 'start_date', 'end_date', 'reason']);
+            ->get(['employee_id', 'start_date', 'end_date', 'kind']);
 
         $map = [];
 
@@ -348,7 +357,7 @@ class AttendanceAggregator
 
             while ($cursor->lte($last)) {
                 if ($cursor->betweenIncluded($start->copy()->startOfDay(), $end->copy()->startOfDay())) {
-                    $map[$assignment->employee_id][$cursor->toDateString()] = $assignment->reason;
+                    $map[$assignment->employee_id][$cursor->toDateString()] = $assignment->kind;
                 }
 
                 $cursor->addDay();

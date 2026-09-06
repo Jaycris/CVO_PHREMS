@@ -36,14 +36,51 @@ class OffsiteAssignmentTest extends PayrollTestCase
     }
 
     /** @param list<string> $dates */
-    protected function assign(Employee $employee, array $dates, string $reason = 'Trade exhibit'): OffsiteAssignment
+    protected function assign(Employee $employee, array $dates, string $reason = 'Trade exhibit', ?string $kind = null): OffsiteAssignment
     {
         return OffsiteAssignment::create([
             'employee_id' => $employee->id,
             'start_date' => $dates[0],
             'end_date' => $dates[count($dates) - 1],
+            'kind' => $kind ?? OffsiteAssignment::WORKED,
             'reason' => $reason,
         ]);
+    }
+
+    #[Test]
+    public function a_day_given_off_in_lieu_is_paid_the_same_as_one_worked(): void
+    {
+        // The money is identical — the difference is only what the record says
+        // happened, so that a payslip does not call a rest day work.
+        $period = $this->period();
+        $employee = $this->makeEmployee(salary: 20000);
+        $days = $this->workingDays($employee, $period);
+
+        $this->fillAttendance($employee, $period, absentOn: [$days[0]]);
+        $this->assign($employee, [$days[0]], 'Rest day after the exhibit', OffsiteAssignment::DAY_OFF);
+
+        [$counters, $figures] = $this->payFor($employee);
+
+        $this->assertSame(0, $counters['days_absent']);
+        $this->assertSame(1, $counters['days_offsite']);
+        $this->assertSame(1, $counters['days_offsite_day_off']);
+        $this->assertSame(0.0, $figures['absence_deduction']);
+    }
+
+    #[Test]
+    public function a_day_worked_off_site_is_not_counted_as_a_day_off(): void
+    {
+        $period = $this->period();
+        $employee = $this->makeEmployee(salary: 20000);
+        $days = $this->workingDays($employee, $period);
+
+        $this->fillAttendance($employee, $period, absentOn: [$days[0]]);
+        $this->assign($employee, [$days[0]]);
+
+        [$counters] = $this->payFor($employee);
+
+        $this->assertSame(1, $counters['days_offsite']);
+        $this->assertSame(0, $counters['days_offsite_day_off']);
     }
 
     #[Test]

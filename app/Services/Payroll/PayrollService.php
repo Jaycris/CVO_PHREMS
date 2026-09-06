@@ -370,6 +370,7 @@ class PayrollService
             'days_lwop' => $counters['days_lwop'] ?? 0,
             'days_rest' => $counters['days_rest'] ?? 0,
             'days_offsite' => $counters['days_offsite'] ?? 0,
+            'days_offsite_day_off' => $counters['days_offsite_day_off'] ?? 0,
             'days_holiday' => $counters['days_holiday'] ?? 0,
             'days_holiday_worked' => $counters['days_holiday_worked'] ?? 0,
             'night_diff_days' => $counters['night_diff_days'] ?? 0,
@@ -617,13 +618,7 @@ class PayrollService
             ];
         };
 
-        // Zero-value line, shown only when it applies: the basic pay above
-        // already covers these days, and the point is to say why days with no
-        // time in were paid rather than deducted.
-        $add('earning', 'Basic pay', (float) $payslip->basic_pay,
-            $payslip->days_offsite > 0
-                ? 'Half of monthly salary · includes ' . $payslip->days_offsite . ' day(s) worked off-site'
-                : 'Half of monthly salary');
+        $add('earning', 'Basic pay', (float) $payslip->basic_pay, $this->basicPayNote($payslip));
         $add('earning', 'Absences', -(float) $payslip->absence_deduction,
             ($payslip->days_absent + $payslip->days_lwop) . ' day(s)');
         $add('earning', 'Overtime', (float) $payslip->overtime_pay, $payslip->overtime_hours . ' hour(s)');
@@ -665,6 +660,34 @@ class PayrollService
     protected function name(Employee $employee): string
     {
         return $employee->fullName() ?: $employee->employee_id;
+    }
+
+    /**
+     * Why a cutoff with days nobody clocked in for was still paid in full.
+     *
+     * Named apart because the two are not the same thing. A day spent on a
+     * trade stand was worked; a day given off afterwards was not, and calling
+     * it work to save a sentence puts a false statement on a payslip somebody
+     * keeps.
+     */
+    protected function basicPayNote(Payslip $payslip): string
+    {
+        $note = 'Half of monthly salary';
+
+        $worked = (int) $payslip->days_offsite - (int) $payslip->days_offsite_day_off;
+        $daysOff = (int) $payslip->days_offsite_day_off;
+
+        $parts = [];
+
+        if ($worked > 0) {
+            $parts[] = $worked . ' day(s) worked off-site';
+        }
+
+        if ($daysOff > 0) {
+            $parts[] = $daysOff . ' day(s) off in lieu';
+        }
+
+        return $parts === [] ? $note : $note . ' · includes ' . implode(' and ', $parts);
     }
 
     /**

@@ -215,6 +215,32 @@ class OffsiteWorkScreenTest extends TestCase
     }
 
     #[Test]
+    public function the_form_counts_the_days_in_the_chosen_range(): void
+    {
+        // Both ends included, so the 8th to the 13th is six days.
+        $page = Livewire::test('attendance.offsite-work')
+            ->set('startDate', '2026-09-08')
+            ->set('endDate', '2026-09-13');
+
+        $this->assertSame(6, $page->instance()->rangeDays());
+
+        $page->set('endDate', '2026-09-08');
+        $this->assertSame(1, $page->instance()->rangeDays());
+    }
+
+    #[Test]
+    public function a_backwards_range_counts_nothing_rather_than_a_negative(): void
+    {
+        // Half-typed dates are normal while somebody is picking, and showing
+        // "-4 days covered" for a moment reads as a fault in the form.
+        $page = Livewire::test('attendance.offsite-work')
+            ->set('startDate', '2026-09-13')
+            ->set('endDate', '2026-09-08');
+
+        $this->assertSame(0, $page->instance()->rangeDays());
+    }
+
+    #[Test]
     public function the_page_opens_for_somebody_who_may_manage_it(): void
     {
         Employee::factory()->create();

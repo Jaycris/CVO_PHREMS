@@ -18,10 +18,31 @@ class OffsiteAssignment extends Model
 {
     use HasFactory;
 
+    /** Worked away from the office — an exhibit, a client visit, a booth. */
+    public const WORKED = 'worked';
+
+    /** A day given off to make up for working a weekend or a holiday. */
+    public const DAY_OFF = 'day_off';
+
+    /**
+     * Payroll treats both identically: a paid day nobody clocks in for.
+     *
+     * They are kept apart because the record has to say what actually
+     * happened. Calling a rest day given after a weekend exhibit "worked
+     * off-site" puts a false statement on a payslip to save a column.
+     *
+     * @var array<string, string>
+     */
+    public const KINDS = [
+        self::WORKED => 'Worked off-site',
+        self::DAY_OFF => 'Day off in lieu',
+    ];
+
     protected $fillable = [
         'employee_id',
         'start_date',
         'end_date',
+        'kind',
         'reason',
         'created_by_user_id',
     ];
@@ -57,6 +78,16 @@ class OffsiteAssignment extends Model
         $on = Carbon::parse($date)->startOfDay();
 
         return $on->betweenIncluded($this->start_date->startOfDay(), $this->end_date->startOfDay());
+    }
+
+    public function kindLabel(): string
+    {
+        return self::KINDS[$this->kind] ?? self::KINDS[self::WORKED];
+    }
+
+    public function isDayOff(): bool
+    {
+        return $this->kind === self::DAY_OFF;
     }
 
     /** Inclusive of both ends: 8th to 13th is six days, not five. */

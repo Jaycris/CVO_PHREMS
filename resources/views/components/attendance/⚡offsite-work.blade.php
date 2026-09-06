@@ -32,6 +32,15 @@ new #[Layout('layouts.app')] class extends Component
 
     public string $startDate = '';
     public string $endDate = '';
+
+    /*
+     * Payroll treats both the same — a paid day nobody clocks in for — so this
+     * changes nothing about the money. It changes what the record says, which
+     * matters because a rest day given after a weekend exhibit is not work, and
+     * describing it as work puts a false line on a payslip somebody keeps.
+     */
+    public string $kind = OffsiteAssignment::WORKED;
+
     public string $reason = '';
 
     /** @var list<int> */
@@ -48,7 +57,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function create(): void
     {
-        $this->reset(['editingId', 'reason', 'employeeIds']);
+        $this->reset(['editingId', 'kind', 'reason', 'employeeIds']);
         $this->startDate = now('Asia/Manila')->toDateString();
         $this->endDate = now('Asia/Manila')->toDateString();
 
@@ -70,6 +79,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->editingId = $assignment->id;
         $this->startDate = $assignment->start_date->toDateString();
         $this->endDate = $assignment->end_date->toDateString();
+        $this->kind = $assignment->kind;
         $this->reason = $assignment->reason;
         $this->employeeIds = [$assignment->employee_id];
 
@@ -82,6 +92,7 @@ new #[Layout('layouts.app')] class extends Component
         $data = $this->validate([
             'startDate' => ['required', 'date'],
             'endDate' => ['required', 'date', 'after_or_equal:startDate'],
+            'kind' => ['required', 'in:' . implode(',', array_keys(OffsiteAssignment::KINDS))],
             'reason' => ['required', 'string', 'max:150'],
             'employeeIds' => ['required', 'array', 'min:1'],
             'employeeIds.*' => ['integer', 'exists:employees,id'],
@@ -101,6 +112,7 @@ new #[Layout('layouts.app')] class extends Component
                 'employee_id' => $data['employeeIds'][0],
                 'start_date' => $data['startDate'],
                 'end_date' => $data['endDate'],
+                'kind' => $data['kind'],
                 'reason' => $data['reason'],
             ]);
 
@@ -113,6 +125,7 @@ new #[Layout('layouts.app')] class extends Component
                     'employee_id' => $employeeId,
                     'start_date' => $data['startDate'],
                     'end_date' => $data['endDate'],
+                    'kind' => $data['kind'],
                     'reason' => $data['reason'],
                     'created_by_user_id' => auth()->id(),
                 ]);
@@ -132,9 +145,36 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetPage();
     }
 
+    /**
+     * How many days the chosen range covers, both ends included.
+     *
+     * Calendar days, not working days: what each person is actually paid for
+     * depends on their own schedule, and a single number on a form covering
+     * six people cannot be true for all of them. The note underneath says rest
+     * days stay rest days, which is the part that would otherwise mislead.
+     *
+     * Returns 0 for a range that makes no sense, so the count disappears
+     * rather than showing something negative while somebody is mid-edit.
+     */
+    public function rangeDays(): int
+    {
+        if ($this->startDate === '' || $this->endDate === '') {
+            return 0;
+        }
+
+        try {
+            $start = Carbon::parse($this->startDate)->startOfDay();
+            $end = Carbon::parse($this->endDate)->startOfDay();
+        } catch (\Throwable) {
+            return 0;
+        }
+
+        return $end->lt($start) ? 0 : $start->diffInDays($end) + 1;
+    }
+
     public function closeForm(): void
     {
-        $this->reset(['editingId', 'reason', 'employeeIds']);
+        $this->reset(['editingId', 'kind', 'reason', 'employeeIds']);
         $this->resetValidation();
         $this->showForm = false;
     }
@@ -277,6 +317,7 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Employee</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Dates</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Days</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Kind</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Reason</th>
                         <th class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Added By</th>
                     </tr>
@@ -307,12 +348,15 @@ new #[Layout('layouts.app')] class extends Component
                             </td>
                             <td class="whitespace-nowrap px-4 py-4 font-semibold text-ink-700 dark:text-ink-200">{{ $assignment->rangeLabel() }}</td>
                             <td class="whitespace-nowrap px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $assignment->dayCount() }}</td>
+                            <td class="whitespace-nowrap px-4 py-4">
+                                <x-badge :color="$assignment->isDayOff() ? 'amber' : 'brand'">{{ $assignment->kindLabel() }}</x-badge>
+                            </td>
                             <td class="min-w-64 px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $assignment->reason }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-ink-500">{{ $assignment->createdBy?->name ?? '—' }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-5 py-16 text-center">
+                            <td colspan="7" class="px-5 py-16 text-center">
                                 <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
                                     <x-icon name="building" class="h-7 w-7" />
                                 </div>
@@ -374,7 +418,18 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="mt-5 rounded-xl border border-ink-200 bg-ink-50/70 p-4 dark:border-white/10 dark:bg-white/[0.03]">
-            <p class="muted-label">Assignment dates</p>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <p class="muted-label">Assignment dates</p>
+
+                @php $rangeDays = $this->rangeDays(); @endphp
+
+                @if ($rangeDays > 0)
+                    <p class="text-xs font-bold text-brand-700 dark:text-brand-300">
+                        {{ $rangeDays }} {{ \Illuminate\Support\Str::plural('day', $rangeDays) }} covered
+                    </p>
+                @endif
+            </div>
+
             <div class="mt-3 grid gap-4 sm:grid-cols-2">
                 <div>
                     <x-label>First Day</x-label>
@@ -390,6 +445,20 @@ new #[Layout('layouts.app')] class extends Component
             <p class="mt-3 text-xs font-medium leading-5 text-ink-500 dark:text-ink-400">
                 Both days are included. Rest days inside the range stay rest days, so nobody is paid twice.
             </p>
+        </div>
+
+        <div class="mt-5">
+            <x-label>What Kind Of Day</x-label>
+            <x-select wire:model="kind">
+                @foreach (\App\Models\OffsiteAssignment::KINDS as $key => $label)
+                    <option value="{{ $key }}">{{ $label }}</option>
+                @endforeach
+            </x-select>
+            <p class="mt-1.5 text-xs font-medium text-ink-500 dark:text-ink-400">
+                Both are paid the same and neither needs a punch. This is what the payslip will say happened —
+                a day on a stand was worked, a day given afterwards was not.
+            </p>
+            @error('kind') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
         </div>
 
         <div class="mt-5">
