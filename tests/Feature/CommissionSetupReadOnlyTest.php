@@ -90,7 +90,8 @@ class CommissionSetupReadOnlyTest extends TestCase
 
         Livewire::test('employees.edit', ['employee' => $this->employee])
             ->assertSet('crmKnowsEmployee', false)
-            ->assertSee('Nothing from the CRM for this employee')
+            ->assertSee('No data from the CRM')
+            // Names the ID, so whoever fixes it knows which record to add.
             ->assertSee('EMP-9256');
     }
 

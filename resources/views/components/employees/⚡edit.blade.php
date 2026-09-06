@@ -554,17 +554,18 @@ new #[Layout('layouts.app')] class extends Component
                     @if (! $this->crmReachable)
                         <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-400/20 dark:bg-amber-400/10">
                             <p class="text-sm font-bold text-amber-900 dark:text-amber-200">The CRM is not set up</p>
-                            <p class="mt-1 text-sm font-medium text-amber-800 dark:text-amber-300">
-                                No CRM address or token is configured, so there is nothing to read commission setup from.
-                            </p>
+                            <p class="mt-1 text-sm font-medium text-amber-800 dark:text-amber-300">No address or token configured.</p>
                         </div>
                     @elseif (! $this->crmKnowsEmployee)
+                        {{-- Deliberately does not say which of "not an agent" or
+                             "CRM unreachable" it was. PHREMS cannot tell them
+                             apart, and guessing wrong is worse than being
+                             brief. --}}
                         <div class="rounded-xl border border-ink-200 bg-ink-50 p-5 dark:border-white/10 dark:bg-white/5">
-                            <p class="text-sm font-bold text-ink-900 dark:text-white">Nothing from the CRM for this employee</p>
+                            <p class="text-sm font-bold text-ink-900 dark:text-white">No data from the CRM</p>
                             <p class="mt-1 text-sm font-medium text-ink-600 dark:text-ink-300">
-                                The CRM has no commission profile against
-                                <span class="font-mono font-bold">{{ $employee_id }}</span>, or it could not be reached just now.
-                                Add them as an agent in the CRM and set their HRIS Employee ID there — this page will show it the next time it is opened.
+                                Nothing for <span class="font-mono font-bold">{{ $employee_id }}</span>.
+                                Add them as an agent in the CRM with their HRIS Employee ID set.
                             </p>
                         </div>
                     @else
@@ -592,8 +593,7 @@ new #[Layout('layouts.app')] class extends Component
                         </div>
 
                         <p class="mt-5 text-xs font-medium text-[#778599]">
-                            Read from the CRM each time this page opens. To change any of it, change it in the CRM commission profile —
-                            an edit here would be overwritten on the next visit.
+                            Read from the CRM. Change it there, not here.
                         </p>
                     @endif
                 </div>
