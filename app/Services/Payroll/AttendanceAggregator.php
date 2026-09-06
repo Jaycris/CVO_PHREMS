@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\EmployeeScheduleAssignment;
 use App\Models\Holiday;
 use App\Models\LeaveRequest;
+use App\Models\OffsiteAssignment;
 use App\Models\OvertimeRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -40,6 +41,7 @@ class AttendanceAggregator
         $attendance = $this->loadAttendance($employeeIds, $start, $end);
         $assignments = $this->loadAssignments($employeeIds);
         $leave = $this->loadLeaveDays($employeeIds, $start, $end);
+        $offsite = $this->loadOffsiteDays($employeeIds, $start, $end);
         $overtime = $this->loadOvertimeHours($employeeIds, $start, $end);
 
         // The same for everyone, so it is loaded once rather than per employee.
@@ -54,6 +56,7 @@ class AttendanceAggregator
                 $attendance[$employee->id] ?? [],
                 $assignments[$employee->id] ?? collect(),
                 $leave[$employee->id] ?? [],
+                $offsite[$employee->id] ?? [],
                 (float) ($overtime[$employee->id] ?? 0),
                 $holidays,
                 $start,
@@ -69,6 +72,7 @@ class AttendanceAggregator
      * @param  array<string, AttendanceDay>  $attendance
      * @param  Collection<int, EmployeeScheduleAssignment>  $assignments
      * @param  array<string, string>  $leave  date => paid|lwop
+     * @param  array<string, string>  $offsite  date => reason
      * @param  array<string, Holiday>  $holidays  date => holiday
      * @return array<string, mixed>
      */
@@ -78,6 +82,7 @@ class AttendanceAggregator
         array $attendance,
         Collection $assignments,
         array $leave,
+        array $offsite,
         float $approvedOvertimeHours,
         array $holidays,
         Carbon $start,
@@ -89,6 +94,10 @@ class AttendanceAggregator
             'days_on_paid_leave' => 0,
             'days_lwop' => 0,
             'days_rest' => 0,
+            // Days worked away from the clock. Counted inside days_present too;
+            // held separately so a payslip can say why a day with no time in
+            // was paid.
+            'days_offsite' => 0,
             'days_holiday' => 0,
             'days_holiday_worked' => 0,
             // Days' worth of holiday premium earned, summed from each holiday's
@@ -165,6 +174,30 @@ class AttendanceAggregator
              */
             if (! $employee->tracks_attendance && $leaveKind === null) {
                 $counters['days_present']++;
+
+                continue;
+            }
+
+            /*
+             * Working for the company away from the clock — a trade stand, a
+             * client visit. Paid as a normal working day.
+             *
+             * Same treatment as somebody who does not punch at all, and for the
+             * same reason: there is no attendance to measure, and measuring
+             * anyway reads the day as an absence and deducts for it.
+             *
+             * Deliberately no night differential. The days these are used for
+             * are daytime work, whatever the person's usual shift says, and
+             * paying a night premium for a day spent on a stand would be
+             * inventing a fact nobody recorded.
+             *
+             * Leave still wins, as above. Somebody who filed leave for a day
+             * they were also listed for spent a credit on purpose, and the
+             * aggregator is not the place to hand it back.
+             */
+            if (isset($offsite[$date]) && $leaveKind === null) {
+                $counters['days_present']++;
+                $counters['days_offsite']++;
 
                 continue;
             }
@@ -293,6 +326,39 @@ class AttendanceAggregator
      *
      * @return array<int, array<string, string>> employee id => date => paid|lwop
      */
+    /**
+     * Days each employee was working for the company away from the clock.
+     *
+     * Ranges expanded to dates in memory, the same way leave is, so the day
+     * loop can answer with an array lookup rather than a query per day.
+     *
+     * @return array<int, array<string, string>> employee id => date => reason
+     */
+    protected function loadOffsiteDays(array $employeeIds, Carbon $start, Carbon $end): array
+    {
+        $assignments = OffsiteAssignment::whereIn('employee_id', $employeeIds)
+            ->overlapping($start, $end)
+            ->get(['employee_id', 'start_date', 'end_date', 'reason']);
+
+        $map = [];
+
+        foreach ($assignments as $assignment) {
+            $cursor = $assignment->start_date->copy()->startOfDay();
+            $last = $assignment->end_date->copy()->startOfDay();
+
+            while ($cursor->lte($last)) {
+                if ($cursor->betweenIncluded($start->copy()->startOfDay(), $end->copy()->startOfDay())) {
+                    $map[$assignment->employee_id][$cursor->toDateString()] = $assignment->reason;
+                }
+
+                $cursor->addDay();
+            }
+        }
+
+        return $map;
+    }
+
+    /** @return array<int, array<string, string>> */
     protected function loadLeaveDays(array $employeeIds, Carbon $start, Carbon $end): array
     {
         $requests = LeaveRequest::whereIn('employee_id', $employeeIds)

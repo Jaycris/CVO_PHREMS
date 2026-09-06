@@ -202,7 +202,9 @@ class AttendanceCorrectionTest extends TestCase
         $viewer->assignRole('Admin');
         $viewer->givePermissionTo('attendance.view_all');
 
-        $this->accidentalPunch();
+        // Dated today, because the DTR opens on the current month. A fixed date
+        // in August passed until September arrived and the filter moved on.
+        $this->accidentalPunch(now()->toDateString());
 
         $this->actingAs($viewer)
             ->get('/dtr')
@@ -213,7 +215,9 @@ class AttendanceCorrectionTest extends TestCase
     #[Test]
     public function an_administrator_who_may_correct_sees_the_button(): void
     {
-        $this->accidentalPunch();
+        // Today's date for the same reason as above: the DTR filters to the
+        // current month, so a hard-coded one silently stops being shown.
+        $this->accidentalPunch(now()->toDateString());
 
         $this->actingAs($this->admin)
             ->get('/dtr')

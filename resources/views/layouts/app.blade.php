@@ -73,7 +73,8 @@
                     $showOrganization = auth()->user()->canAny(['org.departments.manage', 'org.positions.manage']);
                     $showPeople = auth()->user()->canAny([
                         'employees.manage', 'users.manage', 'schedules.manage',
-                        'attendance.view_all', 'leave.types.manage', 'cash_advances.manage',
+                        'attendance.view_all', 'attendance.offsite.manage',
+                        'leave.types.manage', 'cash_advances.manage',
                         'requests.types.manage', 'holidays.manage',
                         'recruitment.manage',
                         'reimbursements.view_all',
@@ -124,6 +125,9 @@
                         @endcan
                         @can('attendance.view_all')
                             <x-nav-link :href="route('attendance.dtr')" :active="request()->routeIs('attendance.dtr')" icon="clock">DTR</x-nav-link>
+                        @endcan
+                        @can('attendance.offsite.manage')
+                            <x-nav-link :href="route('attendance.offsite')" :active="request()->routeIs('attendance.offsite')" icon="building">Off-Site Work</x-nav-link>
                         @endcan
                         @can('holidays.manage')
                             <x-nav-link :href="route('holidays.index')" :active="request()->routeIs('holidays.*')" icon="calendar">Holidays</x-nav-link>
@@ -216,6 +220,7 @@
                         request()->routeIs('recruitment.*') => 'Recruitment',
                         request()->routeIs('schedules.*') => 'Work Schedules',
                         request()->routeIs('attendance.dtr') => 'DTR',
+                        request()->routeIs('attendance.offsite') => 'Off-Site Work',
                         request()->routeIs('leave-types.*') => 'Leave Types',
                         request()->routeIs('cash-advances.*') => 'Cash Advance Record',
                         request()->routeIs('payroll.settings') => 'Payroll Settings',

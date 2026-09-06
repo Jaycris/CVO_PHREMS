@@ -94,6 +94,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::livewire('/dtr', 'attendance.dtr')->name('attendance.dtr');
     });
 
+    Route::middleware('can:attendance.offsite.manage')->group(function () {
+        Route::livewire('/offsite-work', 'attendance.offsite-work')->name('attendance.offsite');
+    });
+
     Route::middleware('can:attendance.networks.manage')->group(function () {
         Route::livewire('/office-networks', 'attendance.office-networks')->name('attendance.networks');
     });

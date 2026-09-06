@@ -369,6 +369,7 @@ class PayrollService
             'days_paid_leave' => $counters['days_on_paid_leave'] ?? 0,
             'days_lwop' => $counters['days_lwop'] ?? 0,
             'days_rest' => $counters['days_rest'] ?? 0,
+            'days_offsite' => $counters['days_offsite'] ?? 0,
             'days_holiday' => $counters['days_holiday'] ?? 0,
             'days_holiday_worked' => $counters['days_holiday_worked'] ?? 0,
             'night_diff_days' => $counters['night_diff_days'] ?? 0,
@@ -616,7 +617,13 @@ class PayrollService
             ];
         };
 
-        $add('earning', 'Basic pay', (float) $payslip->basic_pay, 'Half of monthly salary');
+        // Zero-value line, shown only when it applies: the basic pay above
+        // already covers these days, and the point is to say why days with no
+        // time in were paid rather than deducted.
+        $add('earning', 'Basic pay', (float) $payslip->basic_pay,
+            $payslip->days_offsite > 0
+                ? 'Half of monthly salary · includes ' . $payslip->days_offsite . ' day(s) worked off-site'
+                : 'Half of monthly salary');
         $add('earning', 'Absences', -(float) $payslip->absence_deduction,
             ($payslip->days_absent + $payslip->days_lwop) . ' day(s)');
         $add('earning', 'Overtime', (float) $payslip->overtime_pay, $payslip->overtime_hours . ' hour(s)');
