@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Models\Employee;
 use App\Models\OffsiteAssignment;
 use App\Models\User;
+use App\Notifications\OffsiteWorkScheduled;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -125,6 +127,102 @@ class OffsiteWorkScreenTest extends TestCase
             ->set('employeeIds', [$employee->id])
             ->call('save')
             ->assertHasErrors('reason');
+    }
+
+    #[Test]
+    public function everybody_added_is_told_they_need_not_clock_in(): void
+    {
+        /*
+         * Staff know a missing punch costs them a day's pay, so an employee
+         * sent to an exhibit will either try to clock in from a stand or spend
+         * the week wondering whether they are being marked absent. Saying so in
+         * advance is the whole point.
+         */
+        Notification::fake();
+
+        $team = collect(range(1, 2))->map(function () {
+            $user = User::factory()->create();
+            $user->assignRole('Employee');
+
+            return Employee::factory()->create(['user_id' => $user->id]);
+        });
+
+        Livewire::test('attendance.offsite-work')
+            ->set('startDate', '2026-09-08')
+            ->set('endDate', '2026-09-13')
+            ->set('reason', 'Trade exhibit')
+            ->set('employeeIds', $team->pluck('id')->all())
+            ->call('save');
+
+        foreach ($team as $employee) {
+            Notification::assertSentTo(
+                $employee->user,
+                OffsiteWorkScheduled::class,
+                fn (OffsiteWorkScheduled $n) => $n->change === OffsiteWorkScheduled::ADDED
+                    && str_contains($n->toArray($employee->user)['message'], 'No need to clock in'),
+            );
+        }
+    }
+
+    #[Test]
+    public function taking_somebody_off_the_list_tells_them_to_clock_in_again(): void
+    {
+        // The message that matters most. Somebody told not to punch, then
+        // quietly removed, loses a day's pay following the last thing they
+        // heard.
+        $user = User::factory()->create();
+        $user->assignRole('Employee');
+        $employee = Employee::factory()->create(['user_id' => $user->id]);
+
+        $assignment = OffsiteAssignment::create([
+            'employee_id' => $employee->id,
+            'start_date' => '2026-09-08',
+            'end_date' => '2026-09-13',
+            'reason' => 'Trade exhibit',
+        ]);
+
+        Notification::fake();
+
+        Livewire::test('attendance.offsite-work')->call('delete', $assignment->id);
+
+        Notification::assertSentTo(
+            $user,
+            OffsiteWorkScheduled::class,
+            fn (OffsiteWorkScheduled $n) => $n->change === OffsiteWorkScheduled::REMOVED
+                && str_contains($n->toArray($user)['message'], 'must clock in'),
+        );
+    }
+
+    #[Test]
+    public function somebody_with_no_login_is_recorded_anyway(): void
+    {
+        // Not everybody has an account. HR tells them in person, and a missing
+        // inbox must not stop the record being made.
+        Notification::fake();
+
+        $employee = Employee::factory()->create(['user_id' => null]);
+
+        Livewire::test('attendance.offsite-work')
+            ->set('startDate', '2026-09-08')
+            ->set('endDate', '2026-09-13')
+            ->set('reason', 'Trade exhibit')
+            ->set('employeeIds', [$employee->id])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame(1, OffsiteAssignment::where('employee_id', $employee->id)->count());
+        Notification::assertNothingSent();
+    }
+
+    #[Test]
+    public function the_page_opens_for_somebody_who_may_manage_it(): void
+    {
+        Employee::factory()->create();
+
+        $this->get('/offsite-work')
+            ->assertOk()
+            ->assertSee('Off-Site Work')
+            ->assertSee('Add Off-Site Days');
     }
 
     #[Test]
