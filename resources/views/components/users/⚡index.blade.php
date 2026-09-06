@@ -456,7 +456,7 @@ new #[Layout('layouts.app')] class extends Component
             </div>
         </div>
 
-        <div class="overflow-x-auto">
+        <x-directory-scroll>
             <table class="directory-table">
                 <thead class="directory-table-head">
                     <tr>
@@ -520,7 +520,7 @@ new #[Layout('layouts.app')] class extends Component
                     @endforelse
                 </tbody>
             </table>
-        </div>
+        </x-directory-scroll>
         @if ($users->hasPages())
             <div class="directory-pagination" @click="selected = []">
                 {{ $users->links('components.pagination', ['noun' => 'users']) }}
