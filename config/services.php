@@ -37,6 +37,44 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | SMS
+    |--------------------------------------------------------------------------
+    |
+    | Text messages go alongside email, never instead of it — they are for the
+    | handful of things somebody needs to know while away from a screen.
+    |
+    | The driver defaults to 'log', which writes the message to laravel.log and
+    | sends nothing. An app with no credentials must not be one setting away
+    | from texting the whole company, and local development must never reach a
+    | real phone, because the test data holds real colleagues' numbers.
+    |
+    | Semaphore is a Philippine gateway: it connects to Globe, Smart and DITO
+    | directly, bills in pesos, and registers the sender name with the carriers.
+    | Twilio is kept for the day something outside the Philippines needs
+    | texting, which Semaphore does not do.
+    |
+    */
+    'sms' => [
+        'driver' => env('SMS_DRIVER', 'log'),
+        'timeout' => (int) env('SMS_TIMEOUT', 15),
+
+        'semaphore' => [
+            'key' => env('SEMAPHORE_API_KEY'),
+            // Blank falls back to Semaphore's shared sender rather than
+            // failing, which is what an account waiting on approval has.
+            'sender_name' => env('SEMAPHORE_SENDER_NAME'),
+            'endpoint' => env('SEMAPHORE_ENDPOINT', 'https://api.semaphore.co/api/v4/messages'),
+        ],
+
+        'twilio' => [
+            'sid' => env('TWILIO_ACCOUNT_SID'),
+            'token' => env('TWILIO_AUTH_TOKEN'),
+            'from' => env('TWILIO_FROM'),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | CRM
     |--------------------------------------------------------------------------
     |

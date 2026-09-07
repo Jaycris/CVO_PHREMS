@@ -11,6 +11,10 @@ use App\Models\User;
 use App\Observers\AttendanceLockObserver;
 use App\Observers\PayslipAdjustmentObserver;
 use App\Observers\PayslipObserver;
+use App\Services\Sms\LogDriver;
+use App\Services\Sms\SemaphoreDriver;
+use App\Services\Sms\SmsDriver;
+use App\Services\Sms\TwilioDriver;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -21,7 +25,34 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        /*
+         * Which SMS provider is in use, decided once here.
+         *
+         * Anything unrecognised — including the default — resolves to the log
+         * driver, which writes the message and sends nothing. Failing closed
+         * matters more than failing loudly: a typo in SMS_DRIVER should mean no
+         * texts, never texts to the whole company through a provider nobody
+         * meant to use.
+         */
+        $this->app->singleton(SmsDriver::class, function () {
+            $sms = config('services.sms');
+
+            return match ($sms['driver'] ?? 'log') {
+                'semaphore' => new SemaphoreDriver(
+                    $sms['semaphore']['key'] ?? null,
+                    $sms['semaphore']['sender_name'] ?? null,
+                    $sms['semaphore']['endpoint'] ?? 'https://api.semaphore.co/api/v4/messages',
+                    (int) ($sms['timeout'] ?? 15),
+                ),
+                'twilio' => new TwilioDriver(
+                    $sms['twilio']['sid'] ?? null,
+                    $sms['twilio']['token'] ?? null,
+                    $sms['twilio']['from'] ?? null,
+                    (int) ($sms['timeout'] ?? 15),
+                ),
+                default => new LogDriver,
+            };
+        });
     }
 
     /**

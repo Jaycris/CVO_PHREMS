@@ -2,6 +2,8 @@
 
 use App\Models\ApiToken;
 use App\Models\AppSetting;
+use App\Services\Sms\PhoneNumber;
+use App\Services\Sms\SmsGateway;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -22,6 +24,9 @@ new #[Layout('layouts.app')] class extends Component
     public function mount(): void
     {
         $this->loadSettings();
+
+        // Their own mobile, so the obvious first test is one keystroke.
+        $this->testNumber = (string) (auth()->user()?->employee?->personal_contact_number ?? '');
     }
 
     protected function loadSettings(): void
@@ -38,6 +43,10 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->validate([
             'settings.rows_per_page' => ['required', 'integer', 'in:' . implode(',', AppSetting::ROWS_PER_PAGE_CHOICES)],
+            // Each of these spends money when it is on, so neither is allowed
+            // to end up holding something that is not plainly yes or no.
+            'settings.' . SmsGateway::OFFSITE_WORK => ['nullable', 'in:0,1'],
+            'settings.' . SmsGateway::URGENT_ANNOUNCEMENT => ['nullable', 'in:0,1'],
         ], [], [
             'settings.rows_per_page' => 'rows per page',
         ]);
@@ -52,6 +61,62 @@ new #[Layout('layouts.app')] class extends Component
         AppSetting::flushCache();
 
         $this->statusMessage = 'Settings saved.';
+    }
+
+    /*
+     * Proving the SMS setup works, before it matters.
+     */
+
+    public string $testNumber = '';
+
+    public ?string $smsTestResult = null;
+
+    public ?string $smsTestTone = null;
+
+    /**
+     * Sends one message to a number the admin types.
+     *
+     * Without this there is no way to check an API key except by arranging real
+     * off-site work for a real employee and seeing whether their phone lights
+     * up. Credentials get typed into a live .env and then sit unproven until
+     * the first message that actually mattered fails to arrive.
+     *
+     * Costs one credit when the driver is a real one, which the screen says
+     * plainly rather than leaving somebody to find out on their bill.
+     */
+    public function sendTestSms(): void
+    {
+        $this->validate(
+            ['testNumber' => ['required', 'string', 'max:50']],
+            ['testNumber.required' => 'Type the mobile number to send the test to.'],
+        );
+
+        $gateway = app(SmsGateway::class);
+
+        if (! PhoneNumber::isSendable($this->testNumber)) {
+            $this->smsTestTone = 'warning';
+            $this->smsTestResult = 'That is not a Philippine mobile number, so nothing was sent. '
+                . 'It needs to look like 09171234567. Landlines cannot receive a text.';
+
+            return;
+        }
+
+        $body = SmsGateway::SENDER . ': Test message from your HR system. If you can read this, SMS is working.';
+
+        if ($gateway->send($this->testNumber, $body)) {
+            $this->smsTestTone = $gateway->isLive() ? 'success' : 'info';
+            $this->smsTestResult = $gateway->isLive()
+                ? 'Sent to ' . PhoneNumber::mask($this->testNumber) . ' through ' . $gateway->driverName()
+                    . '. It should arrive within a minute — if it does not, the carrier dropped it and the gateway will not know.'
+                : 'Nothing was sent, because SMS_DRIVER is still "log". The message was written to storage/logs/laravel.log instead. '
+                    . 'Set SMS_DRIVER=semaphore in .env to send for real.';
+
+            return;
+        }
+
+        $this->smsTestTone = 'error';
+        $this->smsTestResult = 'The gateway refused it. Check SEMAPHORE_API_KEY, whether your sender name is approved, '
+            . 'and whether there are credits left. The reason is in storage/logs/laravel.log.';
     }
 
     /*
@@ -104,6 +169,7 @@ new #[Layout('layouts.app')] class extends Component
                 ->get()
                 ->groupBy('group'),
             'tokens' => ApiToken::with('createdBy')->orderByDesc('id')->get(),
+            'sms' => app(SmsGateway::class),
             'envTokenSet' => filled(config('services.crm.inbound_token')),
             'apiBaseUrl' => rtrim(request()->getSchemeAndHttpHost(), '/'),
         ];
@@ -170,6 +236,65 @@ new #[Layout('layouts.app')] class extends Component
 
         <div class="border-t border-neutral-200 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-neutral-800/50">
             <x-button wire:click="save">Save</x-button>
+        </div>
+    </x-card>
+
+    <x-card :padding="false">
+        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <div class="max-w-xl">
+                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Text Messages</p>
+                <h2 class="mt-1 text-base font-bold text-[#0f172a] dark:text-white">Send a test message</h2>
+                <p class="mt-1 text-sm font-medium text-[#778599]">
+                    Proves the gateway, the API key and the sender name, without waiting for something real to happen.
+                </p>
+            </div>
+
+            <div class="shrink-0 text-right">
+                <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#778599]">Gateway</p>
+                <p class="mt-1 text-sm font-bold text-[#0f172a] dark:text-white">{{ $sms->driverName() }}</p>
+                @if ($sms->isLive())
+                    <span class="mt-1 inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300">Sending for real</span>
+                @else
+                    <span class="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">Log only — nothing sends</span>
+                @endif
+            </div>
+        </div>
+
+        <div class="px-5 py-4">
+            <div class="flex flex-wrap items-end gap-3">
+                <div class="w-64">
+                    <x-label>Mobile number</x-label>
+                    <x-input wire:model="testNumber" type="text" placeholder="09171234567" />
+                    @error('testNumber') <p class="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+
+                <x-button type="button" variant="secondary" wire:click="sendTestSms" wire:loading.attr="disabled" wire:target="sendTestSms">
+                    <span wire:loading.remove wire:target="sendTestSms">Send test</span>
+                    <span wire:loading wire:target="sendTestSms">Sending…</span>
+                </x-button>
+            </div>
+
+            @if ($smsTestResult)
+                @php
+                    $tones = [
+                        'success' => 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300',
+                        'info' => 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300',
+                        'warning' => 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
+                        'error' => 'border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300',
+                    ];
+                @endphp
+                <div class="mt-3 rounded-xl border px-4 py-3 text-sm font-semibold {{ $tones[$smsTestTone] ?? $tones['info'] }}">
+                    {{ $smsTestResult }}
+                </div>
+            @endif
+
+            <p class="mt-3 text-xs font-medium text-[#778599]">
+                @if ($sms->isLive())
+                    This spends one credit. Philippine carriers strip links out of business texts, so nothing PHREMS sends contains one.
+                @else
+                    While the gateway is <span class="font-bold">log</span>, the message is written to <span class="font-bold">storage/logs/laravel.log</span> and no credit is spent. Set <span class="font-bold">SMS_DRIVER</span> in .env to send for real.
+                @endif
+            </p>
         </div>
     </x-card>
 

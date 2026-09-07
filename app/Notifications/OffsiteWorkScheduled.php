@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\OffsiteAssignment;
+use App\Notifications\Channels\SmsChannel;
+use App\Services\Sms\SmsGateway;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -35,10 +37,51 @@ class OffsiteWorkScheduled extends Notification implements ShouldQueue
         public string $change = self::ADDED,
     ) {}
 
-    /** @return list<string> */
+    /**
+     * Email and the bell always; a text as well when it is switched on.
+     *
+     * This is the strongest case for SMS in the app. Somebody standing on a
+     * trade stand is not reading email, and the thing they need to know — that
+     * a missing punch will not cost them a day's pay — is exactly what they
+     * will otherwise spend the week worrying about.
+     *
+     * @return list<string>
+     */
     public function via(object $notifiable): array
     {
-        return ['mail', 'database'];
+        $channels = ['mail', 'database'];
+
+        if (SmsGateway::enabledFor(SmsGateway::OFFSITE_WORK)) {
+            $channels[] = SmsChannel::class;
+        }
+
+        return $channels;
+    }
+
+    /**
+     * One segment, no link.
+     *
+     * Philippine carriers strip URLs out of business SMS, so a text saying
+     * "see PHREMS for details" arrives without the details and without the
+     * link. Everything that matters has to be in the words themselves.
+     */
+    public function toSms(object $notifiable): string
+    {
+        $assignment = $this->assignment;
+        $dates = $assignment->rangeLabel();
+        $from = SmsGateway::SENDER;
+
+        if ($this->change === self::REMOVED) {
+            return "{$from}: Your off-site work for {$dates} was cancelled. Please clock in as normal on those days.";
+        }
+
+        $opening = $this->change === self::CHANGED ? 'Your off-site dates changed to' : 'You are on off-site work';
+
+        if ($assignment->isDayOff()) {
+            return "{$from}: {$opening} {$dates} - day off in lieu ({$assignment->reason}). No need to clock in. Paid as normal.";
+        }
+
+        return "{$from}: {$opening} {$dates} ({$assignment->reason}). No need to clock in. These days are paid.";
     }
 
     public function toMail(object $notifiable): MailMessage

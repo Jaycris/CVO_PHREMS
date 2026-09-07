@@ -43,6 +43,19 @@ class User extends Authenticatable
     }
 
     /**
+     * Where a text message goes: the employee's own mobile.
+     *
+     * Returned exactly as it was typed. The gateway decides whether it is a
+     * usable Philippine mobile, because this column has never been validated
+     * and a blank or a landline is ordinary here — sorting that out in one
+     * place beats every caller guessing at it.
+     */
+    public function routeNotificationForSms(): ?string
+    {
+        return $this->employee?->personal_contact_number;
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
