@@ -27,6 +27,12 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::livewire('/attendance', 'attendance.punch-clock')->name('attendance.punch');
     Route::livewire('/my-profile', 'my-profile')->name('my-profile');
 
+    // The noticeboard is for everybody to read. The page itself shows the
+    // posting controls only to announcements.manage, so there is no permission
+    // on the route — gating it would hide the notices from the people they
+    // were written for.
+    Route::livewire('/announcements', 'announcements.index')->name('announcements.index');
+
     // The page decides what belongs to the signer; there is no permission for
     // "your own payslip".
     Route::livewire('/my-payslips', 'my-payslips')->name('my-payslips');

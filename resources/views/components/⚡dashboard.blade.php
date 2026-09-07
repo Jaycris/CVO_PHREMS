@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
+use App\Services\TodayBoard;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -43,6 +44,9 @@ new #[Layout('layouts.app')] class extends Component
             'greeting' => $greeting,
             'today' => $today,
             'isAdminHr' => $isAdminHr,
+            // Holidays, notices, off-site days and anniversaries, gathered from
+            // where they already live. Nothing here is stored as a board item.
+            'board' => app(TodayBoard::class)->for($user, $today),
             'employee' => $employee,
             'stats' => $isAdminHr ? [
                 'totalEmployees' => Employee::count(),
@@ -107,6 +111,9 @@ new #[Layout('layouts.app')] class extends Component
             </div>
         </div>
     </section>
+
+    <x-today-board :items="$board" :today="$today" />
+
     @if ($isAdminHr)
         <section class="grid grid-cols-2 overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm lg:grid-cols-4 dark:border-white/10 dark:bg-ink-900">
             @foreach ([

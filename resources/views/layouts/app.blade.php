@@ -90,6 +90,15 @@
 
                 <nav class="sidebar-nav mt-2 flex-1 space-y-1 overflow-y-auto overscroll-contain px-2.5 pb-6">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" icon="home">Dashboard</x-nav-link>
+
+                    {{-- Everybody reads the noticeboard, so everybody needs the
+                         link. It sits with Holidays further down for anyone who
+                         sees the People section, and here for anyone who does
+                         not — never in both places at once. --}}
+                    @unless ($showPeople)
+                        <x-nav-link :href="route('announcements.index')" :active="request()->routeIs('announcements.*')" icon="bell">Announcements</x-nav-link>
+                    @endunless
+
                     <x-nav-link :href="route('attendance.punch')" :active="request()->routeIs('attendance.punch')" icon="clock">My Attendance</x-nav-link>
                     <x-nav-link :href="route('my-payslips')" :active="request()->routeIs('my-payslips*')" icon="money">My Payslips</x-nav-link>
                     <x-nav-link :href="route('my-commission')" :active="request()->routeIs('my-commission')" icon="chart">My Commission</x-nav-link>
@@ -132,6 +141,9 @@
                         @can('holidays.manage')
                             <x-nav-link :href="route('holidays.index')" :active="request()->routeIs('holidays.*')" icon="calendar">Holidays</x-nav-link>
                         @endcan
+                        {{-- Not behind a permission: reading notices needs none.
+                             The page hides the posting controls by itself. --}}
+                        <x-nav-link :href="route('announcements.index')" :active="request()->routeIs('announcements.*')" icon="bell">Announcements</x-nav-link>
                         @can('requests.types.manage')
                             <x-nav-link :href="route('request-types.index')" :active="request()->routeIs('request-types.*')" icon="document">Request Types</x-nav-link>
                         @endcan

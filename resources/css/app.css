@@ -163,6 +163,19 @@
         animation: page-enter 220ms ease both;
     }
 
+    .today-board-date {
+        animation: today-board-date-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .today-board-item {
+        animation: today-board-item-enter 360ms ease-out both;
+        animation-delay: calc(90ms + (var(--board-item-index, 0) * 65ms));
+    }
+
+    .today-board-live-dot {
+        animation: today-board-live-pulse 2.4s ease-out infinite;
+    }
+
     .page-loading-bar {
         position: fixed;
         top: 0;
@@ -297,6 +310,42 @@
         }
     }
 
+    @keyframes today-board-date-enter {
+        from {
+            opacity: 0;
+            transform: translateY(-6px) scale(0.9);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    @keyframes today-board-item-enter {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes today-board-live-pulse {
+        0%,
+        55%,
+        100% {
+            box-shadow: 0 0 0 0 rgba(21, 122, 82, 0);
+        }
+
+        25% {
+            box-shadow: 0 0 0 5px rgba(21, 122, 82, 0.18);
+        }
+    }
+
     @media (prefers-reduced-motion: reduce) {
         .page-transition,
         .page-loading-bar,
@@ -310,7 +359,10 @@
 
         .skeleton-card::after,
         .skeleton-line::after,
-        [class*='payslip-loader'] {
+        [class*='payslip-loader'],
+        .today-board-date,
+        .today-board-item,
+        .today-board-live-dot {
             animation: none;
         }
     }

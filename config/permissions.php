@@ -34,6 +34,10 @@ return [
         'Organization' => [
             'org.departments.manage' => 'Departments — add, edit and remove',
             'org.positions.manage' => 'Positions — add, edit and set what each position may access',
+            // Reading the noticeboard needs no permission — everybody does.
+            // This is the permission to write on it, which is a different
+            // thing: a notice goes on every employee's dashboard.
+            'announcements.manage' => 'Announcements — post company news, reminders and events',
         ],
 
         'People' => [
