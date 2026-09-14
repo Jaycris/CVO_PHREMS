@@ -52,6 +52,9 @@ new #[Layout('layouts.app')] class extends Component
     public function compute(PayrollService $service): void
     {
         $this->attempt(function () use ($service) {
+            // The route now admits whoever only sends payslips out, so every
+            // action that changes a figure has to say so for itself.
+            abort_unless(Auth::user()->can('payroll.runs.manage'), 403, 'You cannot compute a payroll run.');
             $service->compute($this->run(), Auth::user());
             $this->statusMessage = 'Payroll computed. Review the payslips before finalizing.';
         });
@@ -78,6 +81,21 @@ new #[Layout('layouts.app')] class extends Component
     public function sendPayslips(\App\Services\Payroll\PayslipNotifier $notifier): void
     {
         $this->attempt(function () use ($notifier) {
+            /*
+             * Either permission is enough. Whoever runs the payroll could
+             * always release it and still can — withholding that would break
+             * today's arrangement and buy nothing, since they can download the
+             * register and send it by hand regardless. The new permission is
+             * about letting HR do it *without* the rest of payroll.
+             */
+            abort_unless(
+                Auth::user()->canAny(['payroll.payslips.send', 'payroll.runs.manage']),
+                403,
+                'You cannot send payslips to employees.',
+            );
+
+            // The notifier refuses anything not yet finalized, which is what
+            // keeps this from becoming a way to mail a draft figure out.
             $result = $notifier->sendForRun($this->run());
 
             $this->statusMessage = $result['sent'] . ' payslip(s) sent.'
@@ -115,6 +133,8 @@ new #[Layout('layouts.app')] class extends Component
                 ->orderBy(\App\Models\Employee::select('last_name')->whereColumn('employees.id', 'payslips.employee_id'))
                 ->paginate($this->perPage()),
             'logs' => $run->logs()->paginate($this->perPage(), pageName: 'log'),
+            'canManageRuns' => $user->can('payroll.runs.manage'),
+            'canSendPayslips' => $user->canAny(['payroll.payslips.send', 'payroll.runs.manage']),
             'canFinalize' => $user->can('payroll.runs.finalize'),
             'canUnlock' => $user->can('payroll.runs.unlock'),
             'unsentPayslips' => in_array($run->status, ['finalized', 'paid'], true)
@@ -196,12 +216,12 @@ new #[Layout('layouts.app')] class extends Component
         </div>
 
         <div class="mt-5 flex flex-wrap gap-2 border-t border-neutral-100 pt-5 dark:border-neutral-800">
-            @if ($run->isMutable() && $run->run_type === 'regular')
+            @if ($run->isMutable() && $run->run_type === 'regular' && $canManageRuns)
                 <x-button wire:click="compute" :disabled="(bool) ($preflight['blocking'] ?? false)">
                     <span wire:loading.remove wire:target="compute">{{ $run->status === 'draft' ? 'Compute Payroll' : 'Recompute' }}</span>
                     <span wire:loading wire:target="compute">Computing…</span>
                 </x-button>
-            @elseif ($run->isMutable())
+            @elseif ($run->isMutable() && $canManageRuns)
                 <x-button as="a" href="{{ route('payroll.thirteenth-month') }}" wire:navigate variant="secondary">Back to 13th Month</x-button>
             @endif
 
@@ -218,7 +238,7 @@ new #[Layout('layouts.app')] class extends Component
                 @endif
             @endif
 
-            @if ($unsentPayslips > 0)
+            @if ($unsentPayslips > 0 && $canSendPayslips)
                 <x-button variant="secondary" wire:click="sendPayslips"
                           wire:confirm="Email {{ $unsentPayslips }} payslip(s) to employees?">
                     <span wire:loading.remove wire:target="sendPayslips">Send Payslips ({{ $unsentPayslips }})</span>
@@ -226,7 +246,9 @@ new #[Layout('layouts.app')] class extends Component
                 </x-button>
             @endif
 
-            @if ($payslips->isNotEmpty())
+            {{-- The register is every employee's pay in one file, which is a
+                 different thing from sending each person their own payslip. --}}
+            @if ($payslips->isNotEmpty() && $canManageRuns)
                 <x-button as="a" href="{{ route('payroll.export', $run) }}" variant="secondary">Download Register</x-button>
             @endif
         </div>

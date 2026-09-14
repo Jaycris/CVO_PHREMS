@@ -6,6 +6,7 @@ use App\Models\CommissionRun;
 use App\Models\CommissionSlip;
 use App\Models\Employee;
 use App\Models\User;
+use App\Notifications\CommissionReadyToSend;
 use App\Services\Crm\CommissionSlipService;
 use App\Services\Crm\CrmUnavailable;
 use Illuminate\Support\Carbon;
@@ -341,7 +342,36 @@ class CommissionRunService
 
         $run->log('finalized', 'Figures locked');
 
+        $this->tellWhoeverSends($run->refresh(), $actor);
+
         return $run->refresh();
+    }
+
+    /**
+     * Tells whoever releases commission slips that this run is ready.
+     *
+     * Same reasoning as payroll: somebody who may only send has nothing else to
+     * do on this screen, so they never open it unprompted. Whoever locked the
+     * run is left out — nobody needs telling about their own click.
+     */
+    protected function tellWhoeverSends(CommissionRun $run, ?User $actor): void
+    {
+        $pending = $run->slips()->whereNull('notified_at')->whereNull('fetch_error')->count();
+
+        if ($pending === 0) {
+            return;
+        }
+
+        User::withPermission('commissions.slips.send')
+            ->when($actor, fn ($query) => $query->whereKeyNot($actor->id))
+            ->get()
+            ->each(function (User $user) use ($run, $pending) {
+                try {
+                    $user->notify(new CommissionReadyToSend($run, $pending));
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            });
     }
 
     /**

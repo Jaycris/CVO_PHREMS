@@ -72,6 +72,30 @@ class AppServiceProvider extends ServiceProvider
             return $user->hasEffectivePermission($ability) ?: null;
         });
 
+        /*
+         * Who may open the payroll screens at all.
+         *
+         * Two different jobs end up on the same pages: running the payroll, and
+         * sending out the payslips once somebody else has locked them. Whoever
+         * only does the second still has to reach the run to press the button,
+         * so the route asks this rather than naming one permission — and every
+         * action on those screens checks its own permission for itself.
+         *
+         * Not a permission row: nothing is granted here, it only says which
+         * grants are enough to get through the door.
+         */
+        Gate::define('payroll.open', fn (User $user) => $user->canAny([
+            'payroll.runs.manage',
+            'payroll.payslips.send',
+        ]));
+
+        // The same arrangement for commission: whoever only releases the slips
+        // still has to reach the run to press the button.
+        Gate::define('commissions.open', fn (User $user) => $user->canAny([
+            'commissions.runs.manage',
+            'commissions.slips.send',
+        ]));
+
         // Refuses any write to a finalised or paid payslip, whatever code path
         // it arrives through.
         Payslip::observe(PayslipObserver::class);

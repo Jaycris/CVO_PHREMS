@@ -47,8 +47,21 @@ new #[Layout('layouts.app')] class extends Component
         $this->applyPreset();
     }
 
+    /**
+     * Opening a run is commission work, not releasing work.
+     *
+     * The list is reachable by whoever only sends slips out — they have to find
+     * the run — so each action that changes something refuses for itself.
+     */
+    protected function guardManage(): void
+    {
+        abort_unless(auth()->user()->can('commissions.runs.manage'), 403);
+    }
+
     public function openForm(): void
     {
+        $this->guardManage();
+
         $this->runType = 'monthly';
         $this->month = now('Asia/Manila')->format('Y-m');
         $this->applyPreset();
@@ -121,6 +134,8 @@ new #[Layout('layouts.app')] class extends Component
     public function openRun(CommissionRunService $service): void
     {
         $this->errorMessage = null;
+
+        $this->guardManage();
 
         $this->validate([
             'runType' => ['required', 'in:monthly,biweekly,custom'],

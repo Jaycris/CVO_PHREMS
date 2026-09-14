@@ -25,14 +25,30 @@ new #[Layout('layouts.app')] class extends Component
         $this->month = (int) now()->month;
     }
 
+    /**
+     * Starting or discarding a run is payroll work, not releasing work.
+     *
+     * This list is reachable by whoever only sends payslips out — they have to
+     * find the run to open it — so each action that changes something says who
+     * it is for rather than leaning on the route.
+     */
+    protected function guardManage(): void
+    {
+        abort_unless(auth()->user()->can('payroll.runs.manage'), 403, 'You cannot open or change a payroll run.');
+    }
+
     public function openForm(): void
     {
+        $this->guardManage();
+
         $this->resetValidation();
         $this->showOpen = true;
     }
 
     public function open(PayrollService $service): void
     {
+        $this->guardManage();
+
         $data = $this->validate([
             'year' => ['required', 'integer', 'min:2020', 'max:2100'],
             'month' => ['required', 'integer', 'min:1', 'max:12'],
@@ -47,6 +63,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function cancelRun(int $id, PayrollService $service): void
     {
+        $this->guardManage();
+
         $service->cancel(PayrollRun::findOrFail($id));
         $this->statusMessage = 'Draft discarded.';
     }
@@ -60,6 +78,7 @@ new #[Layout('layouts.app')] class extends Component
             'preview' => $resolver->payDateFor($this->year, $this->month, $this->cutoff),
             'months' => collect(range(1, 12))->mapWithKeys(fn ($m) => [$m => Carbon::create(null, $m, 1)->format('F')]),
             'years' => range((int) now()->year - 1, (int) now()->year + 1),
+            'canManageRuns' => auth()->user()->can('payroll.runs.manage'),
         ];
     }
 };
@@ -71,9 +90,11 @@ new #[Layout('layouts.app')] class extends Component
             <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Payroll</h1>
             <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">One run per cutoff. Nothing is paid until someone says so.</p>
         </div>
-        <x-button wire:click="openForm" pill>
-            <x-icon name="plus" class="h-4 w-4" /> Start a Payroll
-        </x-button>
+        @if ($canManageRuns)
+            <x-button wire:click="openForm" pill>
+                <x-icon name="plus" class="h-4 w-4" /> Start a Payroll
+            </x-button>
+        @endif
     </div>
 
     @if ($statusMessage)
@@ -115,7 +136,7 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="px-4 py-3 text-right">
                                 <div class="flex justify-end gap-3">
                                     <a href="{{ route('payroll.show', $run) }}" wire:navigate class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Open</a>
-                                    @if ($run->status === 'draft')
+                                    @if ($run->status === 'draft' && $canManageRuns)
                                         <button wire:click="cancelRun({{ $run->id }})" wire:confirm="Discard this draft? Nothing has been computed yet."
                                                 class="font-medium text-red-600 hover:text-red-700 dark:text-red-400">Discard</button>
                                     @endif

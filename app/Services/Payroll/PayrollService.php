@@ -13,6 +13,7 @@ use App\Models\Payslip;
 use App\Models\PayslipLine;
 use App\Models\ReimbursementRequest;
 use App\Models\User;
+use App\Notifications\PayrollReadyToSend;
 use App\Services\CashAdvanceService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -243,7 +244,41 @@ class PayrollService
 
         $run->log('finalized', 'Figures locked.');
 
+        $this->tellWhoeverSends($run->fresh(), $actor);
+
         return $run->fresh();
+    }
+
+    /**
+     * Tells whoever releases payslips that this run is ready.
+     *
+     * Only holders of payroll.payslips.send, and never whoever just locked it —
+     * somebody who can finalize and send does not need telling about their own
+     * click, and a notification about something you just did is what teaches
+     * people to ignore the next one.
+     *
+     * Failures are reported and swallowed. A payroll run is locked whether or
+     * not an email got out, and raising here would leave the figures locked
+     * with the caller seeing an error.
+     */
+    protected function tellWhoeverSends(PayrollRun $run, ?User $actor): void
+    {
+        $pending = $run->payslips()->whereNull('notified_at')->count();
+
+        if ($pending === 0) {
+            return;
+        }
+
+        User::withPermission('payroll.payslips.send')
+            ->when($actor, fn ($query) => $query->whereKeyNot($actor->id))
+            ->get()
+            ->each(function (User $user) use ($run, $pending) {
+                try {
+                    $user->notify(new PayrollReadyToSend($run, $pending));
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            });
     }
 
     /**

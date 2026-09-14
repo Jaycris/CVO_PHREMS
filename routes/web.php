@@ -124,7 +124,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::livewire('/cash-advances', 'cash-advances.index')->name('cash-advances.index');
     });
 
-    Route::middleware('can:commissions.runs.manage')->group(function () {
+    // Same split as payroll: reaching a run and releasing it are different
+    // jobs, and each control on these pages gates itself.
+    Route::middleware('can:commissions.open')->group(function () {
         Route::livewire('/commissions', 'commissions.runs')->name('commissions.runs');
         Route::livewire('/commissions/runs/{run}', 'commissions.run-show')->name('commissions.run-show');
     });
@@ -141,11 +143,24 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::livewire('/payroll/settings', 'payroll.settings')->name('payroll.settings');
     });
 
-    Route::middleware('can:payroll.runs.manage')->group(function () {
+    /*
+     * Reaching a run, and releasing it, are two different jobs.
+     *
+     * Whoever only sends payslips out still has to open the run to press the
+     * button, so these three ask payroll.open — which either permission
+     * satisfies. Each page then gates its own controls, and every action
+     * refuses on its own account rather than trusting the route.
+     */
+    Route::middleware('can:payroll.open')->group(function () {
         Route::livewire('/payroll', 'payroll.index')->name('payroll.index');
-        Route::livewire('/payroll/13th-month', 'payroll.thirteenth-month')->name('payroll.thirteenth-month');
         Route::livewire('/payroll/runs/{run}', 'payroll.show')->name('payroll.show');
         Route::livewire('/payroll/payslips/{payslip}', 'payroll.payslip')->name('payroll.payslip');
+    });
+
+    // Nothing here is part of releasing payslips: the 13th month is its own
+    // computation, and the register is the whole company's pay in one file.
+    Route::middleware('can:payroll.runs.manage')->group(function () {
+        Route::livewire('/payroll/13th-month', 'payroll.thirteenth-month')->name('payroll.thirteenth-month');
         Route::get('/payroll/runs/{run}/export', PayrollRegisterExportController::class)->name('payroll.export');
     });
 

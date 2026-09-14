@@ -45,8 +45,19 @@ new #[Layout('layouts.app')] class extends Component
         $this->runId = $run->id;
     }
 
+    /**
+     * Who is on the run decides who gets paid commission at all, so it belongs
+     * with running the run rather than with releasing it.
+     */
+    protected function guardManage(): void
+    {
+        abort_unless(Auth::user()->can('commissions.runs.manage'), 403);
+    }
+
     public function chooseAgents(): void
     {
+        $this->guardManage();
+
         $this->selectedAgents = $this->run()->agents()->pluck('employees.id')->all();
         $this->agentSearch = '';
         $this->errorMessage = null;
@@ -56,6 +67,8 @@ new #[Layout('layouts.app')] class extends Component
     public function saveAgents(CommissionRunService $service): void
     {
         $this->errorMessage = null;
+
+        $this->guardManage();
 
         try {
             $service->setAgents($this->run(), $this->selectedAgents);
@@ -94,6 +107,10 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->errorMessage = null;
 
+        // The route now admits whoever only releases slips, so anything that
+        // changes a figure has to refuse them for itself.
+        abort_unless(Auth::user()->can('commissions.runs.manage'), 403);
+
         try {
             $run = $service->compute($this->run(), Auth::user());
         } catch (\Throwable $e) {
@@ -128,7 +145,16 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->errorMessage = null;
 
-        abort_unless(Auth::user()->can('commissions.runs.finalize'), 403);
+        /*
+         * Either permission. Whoever locks a run could always release it and
+         * still can, so nothing about today's arrangement changes; the new
+         * permission is about letting HR send without also being able to lock
+         * a run or reopen one.
+         */
+        abort_unless(
+            Auth::user()->canAny(['commissions.slips.send', 'commissions.runs.finalize']),
+            403,
+        );
 
         try {
             $result = $notifier->sendForRun($this->run());
@@ -194,6 +220,8 @@ new #[Layout('layouts.app')] class extends Component
             'logs' => $run->logs()->limit(15)->get(),
             'pendingSends' => $run->isFinalized() ? $notifier->pendingCount($run) : 0,
             'canFinalize' => Auth::user()->can('commissions.runs.finalize'),
+            'canManageRuns' => Auth::user()->can('commissions.runs.manage'),
+            'canSendSlips' => Auth::user()->canAny(['commissions.slips.send', 'commissions.runs.finalize']),
             'viewingSlip' => $this->viewingSlipId
                 ? CommissionSlip::with(['lines', 'employee', 'commissionRun'])->find($this->viewingSlipId)
                 : null,
@@ -228,7 +256,7 @@ new #[Layout('layouts.app')] class extends Component
     {{-- The three steps, offered one at a time and in order. --}}
     <x-card>
         <div class="flex flex-wrap items-center gap-3">
-            @if ($run->isMutable())
+            @if ($run->isMutable() && $canManageRuns)
                 {{-- Before computing: who the run covers. Frequency pre-ticks
                      the list, but the last word is a person's. --}}
                 <x-button wire:click="chooseAgents" @click="$wire.showAgents = true" variant="secondary">
@@ -237,7 +265,7 @@ new #[Layout('layouts.app')] class extends Component
                 </x-button>
             @endif
 
-            @if ($run->isMutable())
+            @if ($run->isMutable() && $canManageRuns)
                 <x-button wire:click="compute" wire:loading.attr="disabled" wire:target="compute">
                     <span wire:loading.remove wire:target="compute">
                         <x-icon name="chart" class="mr-1 inline h-4 w-4" />
@@ -256,7 +284,7 @@ new #[Layout('layouts.app')] class extends Component
                 </x-button>
             @endif
 
-            @if ($run->isFinalized() && $canFinalize && $pendingSends > 0)
+            @if ($run->isFinalized() && $canSendSlips && $pendingSends > 0)
                 <x-button type="button"
                           wire:click="$set('showSend', true)"
                           @click="$dispatch('open-phrems-modal', 'showSend')"

@@ -83,6 +83,14 @@ return [
             'commissions.view_all' => 'Commission Slips — open and print any agent\'s slip',
             'commissions.runs.manage' => 'Commission Runs — open a month and compute it from the CRM',
             'commissions.runs.finalize' => 'Commission Runs — lock the figures and send the slips to agents',
+            /*
+             * The commission twin of payroll.payslips.send, and separate for
+             * the same reason: releasing slips somebody else has locked is a
+             * different job from deciding the figures. Without this, letting HR
+             * press Send meant granting commissions.runs.finalize, which also
+             * locks a run and reopens one.
+             */
+            'commissions.slips.send' => 'Commission Slips — send locked slips out to agents (does not allow computing or locking a run)',
         ],
 
         'Bank Details' => [
@@ -99,6 +107,16 @@ return [
             'payroll.runs.manage' => 'Payroll — open a run, compute it and review the payslips',
             'payroll.runs.finalize' => 'Payroll — lock the figures and mark a run as paid',
             'payroll.runs.unlock' => 'Payroll — reopen a run that was already locked',
+            /*
+             * Deliberately separate from payroll.runs.manage, so HR can release
+             * payslips the CEO or COO has already locked without also being
+             * able to open a run, recompute it, or change what anybody is paid.
+             *
+             * Holding only this still shows the figures — you cannot sensibly
+             * send a payslip you are not allowed to look at — but every control
+             * that changes one stays hidden and refuses if called anyway.
+             */
+            'payroll.payslips.send' => 'Payroll — send finalized payslips out to employees (does not allow running payroll)',
             'payroll.settings.manage' => 'Payroll Settings — government contribution rates, which cutoff they come out of, and company payroll policy',
         ],
 
@@ -111,7 +129,15 @@ return [
         ],
 
         'System' => [
-            'app.settings.manage' => 'System Settings — how many rows the tables show, and other app-wide display options',
+            'app.settings.manage' => 'System Settings — app-wide display options',
+            /*
+             * Meant for the CEO or COO, like bank_details.approve and
+             * leave.opening_balance.manage, and kept apart from
+             * app.settings.manage on purpose: the page size applies to every
+             * table for every person in the company, so it is not something an
+             * administrator changes on somebody's behalf on a Tuesday.
+             */
+            'app.settings.pagination.manage' => 'Settings — change how many rows every table shows (CEO/COO)',
         ],
 
     ],
