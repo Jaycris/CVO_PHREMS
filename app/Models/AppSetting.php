@@ -90,4 +90,27 @@ class AppSetting extends Model
 
         return in_array($value, self::ROWS_PER_PAGE_CHOICES, true) ? $value : 10;
     }
+
+    /** The key the DTR reads, kept next to its own setting. */
+    public const DTR_ROWS_PER_PAGE = 'dtr_rows_per_page';
+
+    /**
+     * How many rows the Daily Time Record shows.
+     *
+     * Its own number because the DTR is not like the other tables: it holds a
+     * row per employee per day, so a fortnight for fifty staff is seven hundred
+     * rows where the employee directory is fifty. Ten at a time is right for
+     * one and useless for the other.
+     *
+     * Falls back to the company-wide size when nobody has set it, so the DTR
+     * behaves exactly as it always did until somebody decides otherwise.
+     */
+    public static function dtrRowsPerPage(): int
+    {
+        $value = (int) static::get(self::DTR_ROWS_PER_PAGE, 0);
+
+        return in_array($value, self::ROWS_PER_PAGE_CHOICES, true)
+            ? $value
+            : static::rowsPerPage();
+    }
 }

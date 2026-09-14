@@ -45,6 +45,7 @@ class AttendanceCorrectionService
         ?string $timeOut,
         string $reason,
         User $actor,
+        ?array $breaks = null,
     ): AttendanceDay {
         $date = Carbon::parse($workDate)->startOfDay();
 
@@ -68,7 +69,7 @@ class AttendanceCorrectionService
             ]);
         }
 
-        return DB::transaction(function () use ($employee, $date, $in, $out, $reason, $actor) {
+        return DB::transaction(function () use ($employee, $date, $in, $out, $reason, $actor, $breaks) {
             $this->lockEmployee($employee);
 
             // Re-read inside the lock: the employee may have punched between
@@ -82,6 +83,8 @@ class AttendanceCorrectionService
             $before = [
                 'time_in' => $day?->time_in?->toDateTimeString(),
                 'time_out' => $day?->time_out?->toDateTimeString(),
+                'break_minutes' => $day?->totalBreakMinutes(),
+                'breaks' => $this->describeBreaks($day),
             ];
 
             if ($day) {
@@ -95,9 +98,17 @@ class AttendanceCorrectionService
                 ]);
             }
 
+            if ($breaks !== null) {
+                $this->setBreaks($day, $breaks);
+            }
+
+            $day->load('breaks');
+
             $after = [
                 'time_in' => $in?->toDateTimeString(),
                 'time_out' => $out?->toDateTimeString(),
+                'break_minutes' => $day->totalBreakMinutes(),
+                'breaks' => $this->describeBreaks($day),
             ];
 
             // Nothing moved, so there is nothing worth recording. Writing a
@@ -116,6 +127,102 @@ class AttendanceCorrectionService
 
             return $day->fresh();
         });
+    }
+
+    /**
+     * Replaces the day's breaks with the ones HR typed.
+     *
+     * Times, not a total, because times are what anybody actually knows: "she
+     * went on break at one and came back at two". A total asks HR to do
+     * arithmetic on somebody's pay, which is how the wrong figure gets typed.
+     *
+     * A list rather than one pair, because the schedules here carry a lunch and
+     * a coffee break — collapsing a day to a single stretch would silently lose
+     * the other one and hand the employee back time they did not work.
+     *
+     * Break rows stay the single source of truth, so totalBreakMinutes(),
+     * overBreakMinutes() and workedMinutes() carry on untouched. An override
+     * column on the day would mean two places disagreeing about the same fact
+     * and payroll having to pick one.
+     *
+     * @param  list<array{start: ?string, end: ?string}>  $breaks
+     */
+    protected function setBreaks(AttendanceDay $day, array $breaks): void
+    {
+        // Deleted one at a time rather than in a single query, so the lock
+        // observer still gets its say on each row.
+        $day->breaks()->get()->each->delete();
+
+        $shiftStart = $day->time_in;
+
+        foreach ($breaks as $break) {
+            $start = $this->breakMoment($day->work_date, $shiftStart, $break['start'] ?? null);
+
+            if ($start === null) {
+                continue;
+            }
+
+            $end = $this->breakMoment($day->work_date, $shiftStart, $break['end'] ?? null);
+
+            // A break that ends before it starts crossed midnight, the same way
+            // a night shift does.
+            if ($end && $end->lessThanOrEqualTo($start)) {
+                $end->addDay();
+            }
+
+            $day->breaks()->create([
+                'break_start' => $start,
+                // Left open when there is no end time — which is what an
+                // employee still on break looks like, and HR may be correcting
+                // the start of one that is genuinely still running.
+                'break_end' => $end,
+            ]);
+        }
+    }
+
+    /**
+     * A wall-clock time placed on the right calendar day.
+     *
+     * The subtlety is the night shift. A break at 01:00 on a shift that began
+     * at 21:53 belongs to the following morning, not to thirteen hours before
+     * the employee arrived — which would price the break as negative and the
+     * day as far longer than it was.
+     */
+    protected function breakMoment(Carbon|string $date, ?Carbon $shiftStart, ?string $time): ?Carbon
+    {
+        if (blank($time)) {
+            return null;
+        }
+
+        [$hour, $minute] = array_pad(explode(':', $time), 2, '0');
+
+        $moment = Carbon::parse($date)->startOfDay()->setTime((int) $hour, (int) $minute);
+
+        if ($shiftStart && $moment->lessThan($shiftStart)) {
+            $moment->addDay();
+        }
+
+        return $moment;
+    }
+
+    /**
+     * The day's breaks as plain times, for the correction record.
+     *
+     * @return list<array{start: string, end: ?string}>
+     */
+    protected function describeBreaks(?AttendanceDay $day): array
+    {
+        if (! $day) {
+            return [];
+        }
+
+        return $day->breaks
+            ->map(fn ($break) => [
+                'start' => $break->break_start->format('H:i'),
+                'end' => $break->break_end?->format('H:i'),
+            ])
+            ->values()
+            ->all();
     }
 
     /**

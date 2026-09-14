@@ -39,10 +39,17 @@ new #[Layout('layouts.app')] class extends Component
             ->all();
     }
 
+    /** Only the CEO or COO sets the page size, however else this screen opens. */
+    protected function canSetPagination(): bool
+    {
+        return auth()->user()?->can('app.settings.pagination.manage') ?? false;
+    }
+
     public function save(): void
     {
         $this->validate([
             'settings.rows_per_page' => ['required', 'integer', 'in:' . implode(',', AppSetting::ROWS_PER_PAGE_CHOICES)],
+            'settings.' . AppSetting::DTR_ROWS_PER_PAGE => ['nullable', 'integer', 'in:' . implode(',', AppSetting::ROWS_PER_PAGE_CHOICES)],
             // Each of these spends money when it is on, so neither is allowed
             // to end up holding something that is not plainly yes or no.
             'settings.' . SmsGateway::OFFSITE_WORK => ['nullable', 'in:0,1'],
@@ -52,6 +59,14 @@ new #[Layout('layouts.app')] class extends Component
         ]);
 
         foreach ($this->settings as $key => $value) {
+            // The control is not rendered for anybody else, but a crafted
+            // request still reaches this loop — and this one setting changes
+            // every table for every person in the company.
+            if (in_array($key, ['rows_per_page', AppSetting::DTR_ROWS_PER_PAGE], true)
+                && ! $this->canSetPagination()) {
+                continue;
+            }
+
             AppSetting::where('key', $key)->update(['value' => $value]);
         }
 
@@ -170,6 +185,7 @@ new #[Layout('layouts.app')] class extends Component
                 ->groupBy('group'),
             'tokens' => ApiToken::with('createdBy')->orderByDesc('id')->get(),
             'sms' => app(SmsGateway::class),
+            'canSetPagination' => $this->canSetPagination(),
             'envTokenSet' => filled(config('services.crm.inbound_token')),
             'apiBaseUrl' => rtrim(request()->getSchemeAndHttpHost(), '/'),
         ];
@@ -208,12 +224,21 @@ new #[Layout('layouts.app')] class extends Component
                                 </div>
 
                                 <div class="w-48 shrink-0">
-                                    @if ($setting->key === 'rows_per_page')
-                                        <x-select wire:model="settings.rows_per_page">
-                                            @foreach (App\Models\AppSetting::ROWS_PER_PAGE_CHOICES as $choice)
-                                                <option value="{{ $choice }}">{{ $choice }} rows</option>
-                                            @endforeach
-                                        </x-select>
+                                    @if ($setting->type === 'choice')
+                                        @if ($canSetPagination)
+                                            <x-select wire:model="settings.{{ $setting->key }}">
+                                                @foreach (App\Models\AppSetting::ROWS_PER_PAGE_CHOICES as $choice)
+                                                    <option value="{{ $choice }}">{{ $choice }} rows</option>
+                                                @endforeach
+                                            </x-select>
+                                        @else
+                                            {{-- Shown, not offered. Knowing the size is useful;
+                                                 changing it for the whole company is the CEO's. --}}
+                                            <p class="py-2.5 text-sm font-bold text-[#0f172a] dark:text-white">
+                                                {{ $settings[$setting->key] ?? AppSetting::rowsPerPage() }} rows
+                                            </p>
+                                            <p class="text-xs font-medium text-[#778599]">Only the CEO or COO can change this.</p>
+                                        @endif
                                     @elseif ($setting->type === 'boolean')
                                         <x-select wire:model="settings.{{ $setting->key }}">
                                             <option value="1">Yes</option>

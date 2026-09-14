@@ -23,6 +23,14 @@ class AppSettingSeeder extends Seeder
                 'type' => 'choice',
                 'group' => 'Tables',
             ],
+            [
+                'key' => AppSetting::DTR_ROWS_PER_PAGE,
+                'default' => '10',
+                'label' => 'Rows per page — Daily Time Record',
+                'description' => 'The DTR holds a row per employee per day, so it fills up far faster than the other tables. Set it higher to work through a whole cutoff without paging.',
+                'type' => 'choice',
+                'group' => 'Tables',
+            ],
 
             /*
              * Both default to No, and stay that way until somebody turns them
@@ -41,8 +49,8 @@ class AppSettingSeeder extends Seeder
             [
                 'key' => SmsGateway::URGENT_ANNOUNCEMENT,
                 'default' => '0',
-                'label' => 'Text everybody about Important announcements',
-                'description' => 'Only announcements marked Important, and only when you also tick "Email everybody as well" on the notice. Ordinary news is never texted.',
+                'label' => 'Allow announcements to be texted',
+                'description' => 'Adds a "Text everybody as well" option when posting a notice. It is never automatic — whoever writes the notice ticks it, having seen what the text will say and how many staff it reaches.',
                 'type' => 'boolean',
                 'group' => 'Text Messages',
             ],

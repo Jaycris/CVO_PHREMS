@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Concerns\WithTablePagination;
+use App\Models\AppSetting;
 use App\Models\AttendanceCorrection;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
@@ -27,6 +28,21 @@ new #[Layout('layouts.app')] class extends Component
     public string $editTimeOut = '';
     public string $editReason = '';
 
+    /**
+     * The day's breaks, as times rather than a total.
+     *
+     * Times are what anybody actually knows — "she went on break at one and
+     * came back at two". Asking for a total makes HR do arithmetic on somebody
+     * else's pay, which is how the wrong figure gets typed.
+     *
+     * A list, because the schedules here carry a lunch and a coffee break. One
+     * pair of fields would silently lose the second and hand back time nobody
+     * worked.
+     *
+     * @var list<array{start: string, end: string}>
+     */
+    public array $editBreaks = [];
+
     public ?string $statusMessage = null;
 
     public function mount(): void
@@ -39,6 +55,36 @@ new #[Layout('layouts.app')] class extends Component
     public function updated(): void
     {
         $this->resetPage();
+    }
+
+    public function addBreak(): void
+    {
+        abort_unless($this->canCorrect(), 403);
+
+        $this->editBreaks[] = ['start' => '', 'end' => ''];
+    }
+
+    public function removeBreak(int $index): void
+    {
+        abort_unless($this->canCorrect(), 403);
+
+        unset($this->editBreaks[$index]);
+
+        // Re-indexed, or Livewire sends the array back as an object with gaps
+        // in its keys and the next add lands in the wrong place.
+        $this->editBreaks = array_values($this->editBreaks);
+    }
+
+    /**
+     * The DTR has its own page size.
+     *
+     * A row per employee per day means a fortnight for fifty staff is seven
+     * hundred rows, where the employee directory is fifty. Ten at a time is
+     * right for one table and useless for this one.
+     */
+    public function perPage(): int
+    {
+        return AppSetting::dtrRowsPerPage();
     }
 
     public function canCorrect(): bool
@@ -55,6 +101,15 @@ new #[Layout('layouts.app')] class extends Component
         $this->editingDayId = $day->id;
         $this->editTimeIn = $day->time_in?->format('H:i') ?? '';
         $this->editTimeOut = $day->time_out?->format('H:i') ?? '';
+        $this->editBreaks = $day->breaks
+            ->sortBy('break_start')
+            ->map(fn ($break) => [
+                'start' => $break->break_start->format('H:i'),
+                'end' => $break->break_end?->format('H:i') ?? '',
+            ])
+            ->values()
+            ->all();
+
         $this->editReason = '';
 
         $this->resetValidation();
@@ -68,6 +123,11 @@ new #[Layout('layouts.app')] class extends Component
         $this->validate([
             'editTimeIn' => ['nullable', 'date_format:H:i'],
             'editTimeOut' => ['nullable', 'date_format:H:i'],
+            'editBreaks' => ['array', 'max:6'],
+            'editBreaks.*.start' => ['nullable', 'date_format:H:i'],
+            // An end with no start is meaningless, and would otherwise be
+            // dropped without a word.
+            'editBreaks.*.end' => ['nullable', 'date_format:H:i', 'required_with:editBreaks.*.start'],
             // Required, and deliberately so. Six months on, "why is this day
             // different from what I clocked?" needs an answer on the record.
             'editReason' => ['required', 'string', 'min:3', 'max:255'],
@@ -87,6 +147,13 @@ new #[Layout('layouts.app')] class extends Component
                 $this->editTimeOut ?: null,
                 $this->editReason,
                 auth()->user(),
+                // Rows with no start time are blanks somebody added and left,
+                // not an instruction. Removing every row clears the day's
+                // breaks, which is what an untaken break should look like.
+                array_values(array_filter(
+                    $this->editBreaks,
+                    fn ($break) => filled($break['start'] ?? null),
+                )),
             );
         } catch (\Illuminate\Validation\ValidationException $e) {
             // The service speaks in its own field names; put them where the
@@ -105,7 +172,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function closeEdit(): void
     {
-        $this->reset(['editingDayId', 'editTimeIn', 'editTimeOut', 'editReason']);
+        $this->reset(['editingDayId', 'editTimeIn', 'editTimeOut', 'editBreaks', 'editReason']);
         $this->resetValidation();
         $this->showEdit = false;
     }
@@ -272,6 +339,47 @@ new #[Layout('layouts.app')] class extends Component
             Leave Time Out empty to reopen the day, so the employee can carry on punching.
             A time out earlier than the time in is treated as a shift running past midnight.
         </p>
+
+        <div class="mt-5">
+            <div class="flex items-center justify-between gap-3">
+                <x-label>Breaks</x-label>
+                <button type="button" wire:click="addBreak"
+                        class="text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">
+                    + Add a break
+                </button>
+            </div>
+
+            <div class="mt-2 space-y-2">
+                @forelse ($editBreaks as $index => $break)
+                    <div class="flex flex-wrap items-start gap-2" wire:key="break-row-{{ $index }}">
+                        <div>
+                            <span class="block text-[11px] font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400">Started</span>
+                            <x-input wire:model.blur="editBreaks.{{ $index }}.start" type="time" class="!w-36" />
+                        </div>
+                        <div>
+                            <span class="block text-[11px] font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400">Ended</span>
+                            <x-input wire:model.blur="editBreaks.{{ $index }}.end" type="time" class="!w-36" />
+                        </div>
+                        <button type="button" wire:click="removeBreak({{ $index }})" title="Remove this break"
+                                class="mt-5 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+                            <x-icon name="trash" class="h-4 w-4" />
+                        </button>
+
+                        @error('editBreaks.' . $index . '.start') <p class="w-full text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                        @error('editBreaks.' . $index . '.end') <p class="w-full text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                @empty
+                    <p class="rounded-lg border border-dashed border-ink-200 px-3 py-4 text-sm font-medium text-ink-500 dark:border-white/10 dark:text-ink-400">
+                        No break recorded for this day.
+                    </p>
+                @endforelse
+            </div>
+
+            <p class="mt-2 text-xs font-medium text-ink-500 dark:text-ink-400">
+                Worked hours are the time between in and out, less these. Remove a row if the break was never
+                actually taken. On a night shift, a break after midnight is understood as the following morning.
+            </p>
+        </div>
 
         <div class="mt-5">
             <x-label>Reason</x-label>

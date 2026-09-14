@@ -11,6 +11,7 @@ use App\Services\Attendance\AttendanceCorrectionService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
+use App\Models\AttendanceBreak;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -59,6 +60,176 @@ class AttendanceCorrectionTest extends TestCase
             'time_in' => $date . ' 05:33:00',
             'time_out' => $date . ' 05:34:00',
         ]);
+    }
+
+    #[Test]
+    public function an_overlong_break_can_be_corrected(): void
+    {
+        /*
+         * Somebody who forgot to end a break shows four hours of it and loses
+         * the worked time to match — 8 hours in the office paying as 4.2. The
+         * total is the number on the screen and the number that is wrong, so
+         * that is what HR sets.
+         */
+        $day = AttendanceDay::create([
+            'employee_id' => $this->employee->id,
+            'work_date' => '2026-08-26',
+            'time_in' => '2026-08-26 21:53:00',
+            'time_out' => '2026-08-27 06:00:00',
+        ]);
+
+        AttendanceBreak::create([
+            'attendance_day_id' => $day->id,
+            'break_start' => '2026-08-26 23:00:00',
+            'break_end' => '2026-08-27 02:57:00',
+        ]);
+
+        $this->assertSame(237, $day->fresh()->totalBreakMinutes());
+
+        /*
+         * Typed as the times HR was told — "she went at eleven and came back at
+         * midnight" — not as a total. Both are after the 21:53 start on a night
+         * shift, so both belong to the same calendar day.
+         */
+        $this->corrections->apply(
+            $this->employee, '2026-08-26', '21:53', '06:00',
+            'Break was an hour; the end was never tapped', $this->admin,
+            breaks: [['start' => '23:00', 'end' => '00:00']],
+        );
+
+        $this->assertSame(60, $day->fresh()->totalBreakMinutes());
+    }
+
+    #[Test]
+    public function a_break_after_midnight_belongs_to_the_following_morning(): void
+    {
+        /*
+         * The night shift trap. A break at 01:00 on a shift that began at 21:53
+         * is four hours in, not twenty hours before the employee arrived —
+         * which would price the break as negative and the day as far longer
+         * than anybody worked.
+         */
+        $day = AttendanceDay::create([
+            'employee_id' => $this->employee->id,
+            'work_date' => '2026-08-26',
+            'time_in' => '2026-08-26 21:53:00',
+            'time_out' => '2026-08-27 06:00:00',
+        ]);
+
+        $this->corrections->apply(
+            $this->employee, '2026-08-26', '21:53', '06:00',
+            'Break times from the supervisor', $this->admin,
+            breaks: [['start' => '01:00', 'end' => '02:00']],
+        );
+
+        $break = $day->fresh()->breaks->sole();
+
+        $this->assertSame('2026-08-27 01:00:00', $break->break_start->toDateTimeString());
+        $this->assertSame(60, $day->fresh()->totalBreakMinutes());
+    }
+
+    #[Test]
+    public function a_lunch_and_a_coffee_break_both_survive(): void
+    {
+        // The schedules carry both, so collapsing a day to one stretch would
+        // hand the employee back time they did not work.
+        $day = AttendanceDay::create([
+            'employee_id' => $this->employee->id,
+            'work_date' => '2026-08-26',
+            'time_in' => '2026-08-26 21:00:00',
+            'time_out' => '2026-08-27 06:00:00',
+        ]);
+
+        $this->corrections->apply(
+            $this->employee, '2026-08-26', '21:00', '06:00',
+            'Both breaks logged late', $this->admin,
+            breaks: [
+                ['start' => '23:00', 'end' => '00:00'],
+                ['start' => '03:00', 'end' => '03:15'],
+            ],
+        );
+
+        $this->assertSame(2, $day->fresh()->breaks->count());
+        $this->assertSame(75, $day->fresh()->totalBreakMinutes());
+    }
+
+    #[Test]
+    public function correcting_a_break_is_recorded_with_what_it_was(): void
+    {
+        // Attendance decides pay, so an untraceable edit is a dispute waiting
+        // to happen — the old figure has to survive the correction.
+        $day = $this->accidentalPunch();
+
+        AttendanceBreak::create([
+            'attendance_day_id' => $day->id,
+            'break_start' => '2026-08-26 05:33:00',
+            'break_end' => '2026-08-26 07:33:00',
+        ]);
+
+        // An empty list is how "the break was never taken" is expressed.
+        $this->corrections->apply(
+            $this->employee, '2026-08-26', '21:00', null,
+            'Break logged against the wrong day', $this->admin,
+            breaks: [],
+        );
+
+        $correction = AttendanceCorrection::latest('id')->first();
+
+        $this->assertSame(120, $correction->before['break_minutes']);
+        $this->assertSame([['start' => '05:33', 'end' => '07:33']], $correction->before['breaks']);
+        $this->assertSame(0, $correction->after['break_minutes']);
+        $this->assertSame(0, $day->fresh()->totalBreakMinutes());
+    }
+
+    #[Test]
+    public function leaving_the_break_alone_does_not_touch_it(): void
+    {
+        // Fixing a time out must not silently wipe the day's breaks.
+        $day = $this->accidentalPunch();
+
+        AttendanceBreak::create([
+            'attendance_day_id' => $day->id,
+            'break_start' => '2026-08-26 05:33:00',
+            'break_end' => '2026-08-26 06:33:00',
+        ]);
+
+        $this->corrections->apply(
+            $this->employee, '2026-08-26', '21:00', null,
+            'Punched out by mistake', $this->admin,
+        );
+
+        $this->assertSame(60, $day->fresh()->totalBreakMinutes());
+    }
+
+    #[Test]
+    public function a_break_cannot_be_changed_once_the_payroll_is_paid(): void
+    {
+        $day = $this->accidentalPunch();
+
+        PayrollRun::create([
+            'run_type' => 'regular',
+            'cutoff' => 'second',
+            'period_start' => '2026-08-11',
+            'period_end' => '2026-08-25',
+            'pay_date' => '2026-08-30',
+            'status' => 'paid',
+        ]);
+
+        PayrollRun::create([
+            'run_type' => 'regular',
+            'cutoff' => 'first',
+            'period_start' => '2026-08-26',
+            'period_end' => '2026-09-10',
+            'pay_date' => '2026-09-15',
+            'status' => 'paid',
+        ]);
+
+        $this->expectException(ValidationException::class);
+
+        $this->corrections->apply(
+            $this->employee, '2026-08-26', '21:00', '06:00',
+            'Too late', $this->admin, breaks: [],
+        );
     }
 
     #[Test]
