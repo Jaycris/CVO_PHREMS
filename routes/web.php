@@ -16,6 +16,11 @@ Route::middleware('guest')->group(function () {
 Route::middleware('signed')->group(function () {
     Route::livewire('/onboarding/{employee}', 'public.onboarding-form')->name('onboarding.show');
     Route::livewire('/set-password/{user}', 'public.set-password')->name('password.setup');
+
+    // Separate from the invitation above: that one activates a new account and
+    // refuses anybody who already has a password. This is for somebody locked
+    // out of an account they have been using.
+    Route::livewire('/reset-password/{user}', 'public.reset-password')->name('password.reset');
 });
 
 Route::middleware(['auth', 'active'])->group(function () {

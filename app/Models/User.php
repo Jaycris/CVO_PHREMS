@@ -36,6 +36,62 @@ class User extends Authenticatable
         });
     }
 
+    /**
+     * How long after a request somebody still counts as here.
+     *
+     * Five minutes, because a page can sit open while somebody reads it. Any
+     * shorter and a person reading a payslip flickers offline mid-sentence.
+     */
+    public const ONLINE_WITHIN_MINUTES = 5;
+
+    /**
+     * Whether they are in PHREMS right now.
+     *
+     * A disabled account is never online whatever its stamp says — it cannot
+     * make a request, and showing a green dot beside somebody whose access was
+     * revoked this morning would be worse than showing nothing.
+     */
+    public function isOnline(): bool
+    {
+        return $this->is_active
+            && $this->last_seen_at !== null
+            && $this->last_seen_at->gt(now()->subMinutes(self::ONLINE_WITHIN_MINUTES));
+    }
+
+    /**
+     * The words beside the dot.
+     *
+     * Deliberately says nothing about work. Somebody on a call for four hours
+     * touches PHREMS once all morning, and a booth team at an exhibit never
+     * opens it at all — attendance is what says whether they worked.
+     */
+    public function presenceLabel(): string
+    {
+        if (! $this->is_active) {
+            return 'Disabled';
+        }
+
+        if ($this->isOnline()) {
+            return 'Online';
+        }
+
+        if ($this->last_seen_at === null) {
+            return 'Never signed in';
+        }
+
+        return 'Last seen ' . $this->last_seen_at->diffForHumans();
+    }
+
+    /** green online, neutral away, red for an account that is switched off. */
+    public function presenceColor(): string
+    {
+        return match (true) {
+            ! $this->is_active => 'red',
+            $this->isOnline() => 'green',
+            default => 'neutral',
+        };
+    }
+
     /** Payroll and HR mail must reach the company address, not a personal login email. */
     public function routeNotificationForMail(): string
     {
@@ -68,6 +124,7 @@ class User extends Authenticatable
             'password_set_at' => 'datetime',
             'is_super_admin' => 'boolean',
             'is_active' => 'boolean',
+            'last_seen_at' => 'datetime',
         ];
     }
 

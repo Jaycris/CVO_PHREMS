@@ -20,6 +20,19 @@ return Application::configure(basePath: dirname(__DIR__))
         // belongs in a search result.
         $middleware->append(\App\Http\Middleware\PreventSearchIndexing::class);
 
+        /*
+         * Stamps when somebody was last doing anything here.
+         *
+         * On the web group, not the global stack. Global middleware runs before
+         * StartSession, so $request->user() there is always null and nothing
+         * was ever recorded — which looked exactly like the feature working and
+         * everybody being offline. Inside the web group the session exists and
+         * the guard can resolve who is signed in.
+         */
+        $middleware->web(append: [
+            \App\Http\Middleware\RecordLastSeen::class,
+        ]);
+
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,

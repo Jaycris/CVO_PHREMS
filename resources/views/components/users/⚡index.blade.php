@@ -2,8 +2,10 @@
 
 use App\Livewire\Concerns\WithTablePagination;
 use App\Mail\AccountInviteMail;
+use App\Mail\PasswordResetMail;
 use App\Models\Employee;
 use App\Models\User;
+use App\Services\Auth\PasswordResetLink;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -39,10 +41,20 @@ new #[Layout('layouts.app')] class extends Component
     public string $userCode = '';
 
     public string $search = '';
+    public string $presence = 'all';
     public ?string $statusMessage = null;
 
     public function updatedSearch(): void
     {
+        $this->resetPage();
+    }
+
+    public function updatedPresence(): void
+    {
+        if (! in_array($this->presence, ['all', 'online', 'offline'], true)) {
+            $this->presence = 'all';
+        }
+
         $this->resetPage();
     }
 
@@ -188,6 +200,79 @@ new #[Layout('layouts.app')] class extends Component
             : implode(' ', $parts);
     }
 
+    /**
+     * Emails a reset link to somebody locked out of an account they use.
+     *
+     * HR starts it; the employee finishes it. Nobody here ever sees or sets the
+     * password, which is what keeps an account provably theirs — it matters
+     * when the same login approves payroll.
+     *
+     * Deliberately not offered for accounts with no password yet: those need
+     * the invitation, which says "activate your account" rather than "reset",
+     * and Resend Invitation already does that.
+     *
+     * @param  list<int|string>  $ids
+     */
+    public function sendResetSelected(array $ids): void
+    {
+        $users = User::with('employee')->whereKey(array_map('intval', $ids))->get();
+
+        $sent = 0;
+        $notYetActivated = 0;
+        $ineligible = 0;
+        $failed = [];
+
+        foreach ($users as $user) {
+            if (! $user->password_set_at) {
+                $notYetActivated++;
+                continue;
+            }
+
+            // A disabled account cannot sign in with a new password either, and
+            // the email is written around an employee record.
+            if (! $user->is_active || ! $user->employee) {
+                $ineligible++;
+                continue;
+            }
+
+            try {
+                Mail::to($user->email)->queue(new PasswordResetMail(
+                    $user->employee,
+                    PasswordResetLink::for($user),
+                    auth()->user()?->name ?? 'Human Resources',
+                    PasswordResetLink::VALID_FOR_MINUTES,
+                ));
+
+                $sent++;
+            } catch (\Throwable $e) {
+                // One unreachable address must not stop the rest of the batch.
+                report($e);
+                $failed[] = $user->email;
+            }
+        }
+
+        $parts = [];
+
+        if ($sent > 0) {
+            $parts[] = $sent . ' reset ' . Str::plural('link', $sent) . ' sent. '
+                . 'The link expires in ' . PasswordResetLink::VALID_FOR_MINUTES . ' minutes and nobody here can see the new password.';
+        }
+
+        if ($notYetActivated > 0) {
+            $parts[] = $notYetActivated . ' skipped: that account has no password yet — use Resend Invitation instead.';
+        }
+
+        if ($ineligible > 0) {
+            $parts[] = $ineligible . ' skipped: the account is disabled or has no employee linked.';
+        }
+
+        if ($failed !== []) {
+            $parts[] = 'Could not send to ' . implode(', ', $failed) . '.';
+        }
+
+        $this->statusMessage = $parts === [] ? 'No reset link was sent.' : implode(' ', $parts);
+    }
+
     public function create(): void
     {
         $this->reset(['employeeId', 'email']);
@@ -325,6 +410,10 @@ new #[Layout('layouts.app')] class extends Component
         $accessUser = $this->accessUserId
             ? User::with(['employee.position.permissions'])->find($this->accessUserId)
             : null;
+        $onlineCutoff = now()->subMinutes(User::ONLINE_WITHIN_MINUTES);
+        $presence = in_array($this->presence, ['online', 'offline'], true)
+            ? $this->presence
+            : 'all';
 
         return [
             'accessUser' => $accessUser,
@@ -335,6 +424,13 @@ new #[Layout('layouts.app')] class extends Component
                     ->where('name', 'like', "%{$this->search}%")
                     ->orWhere('email', 'like', "%{$this->search}%")
                     ->orWhere('user_code', 'like', "%{$this->search}%")))
+                ->when($presence === 'online', fn ($q) => $q
+                    ->where('is_active', true)
+                    ->where('last_seen_at', '>', $onlineCutoff))
+                ->when($presence === 'offline', fn ($q) => $q->where(fn ($offline) => $offline
+                    ->where('is_active', false)
+                    ->orWhereNull('last_seen_at')
+                    ->orWhere('last_seen_at', '<=', $onlineCutoff)))
                 ->orderBy('name')
                 ->paginate($this->perPage()),
             'totalUsers' => User::count(),
@@ -408,7 +504,15 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </div>
 
-    <x-card :padding="false" class="directory-panel">
+    {{-- Refreshes the dots without a page reload.
+         Polling rather than a websocket because the app runs on shared hosting
+         with nothing that can hold a connection open. Thirty seconds is far
+         finer than the five-minute window that decides online, so the answer is
+         never wrong because of the interval.
+         .visible stops it while the tab is in the background, so a directory
+         left open overnight is not a request every thirty seconds until
+         morning. --}}
+    <x-card :padding="false" class="directory-panel" wire:poll.30s.visible>
         <div class="directory-toolbar">
             <div>
                 <h3 class="directory-title">User Directory</h3>
@@ -427,6 +531,15 @@ new #[Layout('layouts.app')] class extends Component
                         :disabled="selected.length === 0" @click="if (selected.length) { $wire.resendSelected(selected); selected = []; }"
                         title="Send the invitation again">
                         <x-icon name="mail" class="h-4 w-4" />
+                    </button>
+                    {{-- Emails a reset link to the employee. HR starts it; only
+                         the employee ever knows the new password. --}}
+                    <button type="button"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 shadow-sm transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+                        :disabled="selected.length === 0"
+                        @click="if (selected.length && confirm('Email a password reset link to the selected ' + (selected.length === 1 ? 'person' : 'people') + '? Their current password keeps working until they choose a new one.')) { $wire.sendResetSelected(selected); selected = []; }"
+                        title="Send a password reset link">
+                        <x-icon name="lock" class="h-4 w-4" />
                     </button>
                     <button type="button"
                         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
@@ -449,6 +562,19 @@ new #[Layout('layouts.app')] class extends Component
                         <x-icon name="trash" class="h-4 w-4" />
                     </button>
                 </div>
+                <label class="w-full sm:w-40">
+                    <span class="sr-only">Filter users by presence</span>
+                    <x-select
+                        wire:model.live="presence"
+                        @change="selected = []"
+                        class="h-10 !w-full"
+                        aria-label="Filter users by presence"
+                    >
+                        <option value="all">All users</option>
+                        <option value="online">Online now</option>
+                        <option value="offline">Offline</option>
+                    </x-select>
+                </label>
                 <label class="directory-search">
                     <x-icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
                     <x-input wire:model.live.debounce.250ms="search" @input="selected = []" placeholder="Search users..." class="h-10 pl-9" />
@@ -473,6 +599,7 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Tier</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Permissions</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Account</th>
+                        <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Presence</th>
                         <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Password</th>
                     </tr>
                 </thead>
@@ -504,17 +631,23 @@ new #[Layout('layouts.app')] class extends Component
                                 <x-badge :color="$user->is_active ? 'green' : 'red'">{{ $user->is_active ? 'Enabled' : 'Disabled' }}</x-badge>
                             </td>
                             <td class="whitespace-nowrap px-4 py-4">
+                                {{-- Whether they are on this screen, which is a
+                                     different question from whether the account
+                                     is switched on next to it. --}}
+                                <x-presence :user="$user" />
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-4">
                                 <x-badge :color="$user->password_set_at ? 'green' : 'amber'">{{ $user->password_set_at ? 'Set' : 'Invite pending' }}</x-badge>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="px-6 py-16 text-center">
+                            <td colspan="10" class="px-6 py-16 text-center">
                                 <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
                                     <x-icon name="users" class="h-7 w-7" />
                                 </div>
                                 <p class="mt-4 text-base font-bold text-ink-950 dark:text-white">No users found</p>
-                                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Add a user account or adjust your search.</p>
+                                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">Add a user account or adjust your search and presence filter.</p>
                             </td>
                         </tr>
                     @endforelse
