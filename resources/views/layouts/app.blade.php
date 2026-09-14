@@ -81,6 +81,7 @@
                         'bank_details.approve',
                         'commissions.view_all',
                         'commissions.runs.manage',
+                        'commissions.slips.send',
                     ]);
                 @endphp
 
@@ -156,18 +157,21 @@
                         @can('reimbursements.view_all')
                             <x-nav-link :href="route('reimbursements.index')" :active="request()->routeIs('reimbursements.index')" icon="clipboard">Reimbursement Record</x-nav-link>
                         @endcan
-                        @can('commissions.runs.manage')
-                            <x-nav-link :href="route('commissions.runs')" :active="request()->routeIs('commissions.runs') || request()->routeIs('commissions.run-show')" icon="chart">Commission Runs</x-nav-link>
+                        @can('commissions.open')
+                            <x-nav-link :href="route('commissions.runs')" :active="request()->routeIs('commissions.runs') || request()->routeIs('commissions.run-show')" icon="chart">{{ auth()->user()->can('commissions.runs.manage') ? 'Commission Runs' : 'Release Commission' }}</x-nav-link>
                         @endcan
                         @can('bank_details.approve')
                             <x-nav-link :href="route('bank-details.index')" :active="request()->routeIs('bank-details.*')" icon="money">Bank Details</x-nav-link>
                         @endcan
                     @endif
 
-                    @if (auth()->user()->canAny(['payroll.runs.manage', 'payroll.settings.manage']))
+                    @if (auth()->user()->canAny(['payroll.runs.manage', 'payroll.settings.manage', 'payroll.payslips.send']))
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Payroll</p>
-                        @can('payroll.runs.manage')
-                            <x-nav-link :href="route('payroll.index')" :active="request()->routeIs('payroll.index') || request()->routeIs('payroll.show') || request()->routeIs('payroll.payslip')" icon="money">Run Payroll</x-nav-link>
+                        {{-- Named for what the person opening it can actually
+                             do: somebody who may only release payslips is not
+                             running anything. --}}
+                        @can('payroll.open')
+                            <x-nav-link :href="route('payroll.index')" :active="request()->routeIs('payroll.index') || request()->routeIs('payroll.show') || request()->routeIs('payroll.payslip')" icon="money">{{ auth()->user()->can('payroll.runs.manage') ? 'Run Payroll' : 'Release Payslips' }}</x-nav-link>
                         @endcan
                         @can('payroll.runs.manage')
                             <x-nav-link :href="route('payroll.thirteenth-month')" :active="request()->routeIs('payroll.thirteenth-month')" icon="money">13th Month</x-nav-link>
