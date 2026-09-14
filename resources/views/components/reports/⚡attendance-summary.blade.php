@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Concerns\WithTablePagination;
+use App\Models\AttendanceBreak;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
 use Livewire\Attributes\Layout;
@@ -44,12 +45,39 @@ new #[Layout('layouts.app')] class extends Component
         $summary = $employees->getCollection()->map(function (Employee $employee) use ($days) {
             $employeeDays = $days->get($employee->id, collect());
 
+            /*
+             * Break time split by kind, and how many separate trips.
+             *
+             * The count is the half that answers "who keeps disappearing".
+             * Forty minutes of restroom breaks in one stretch is somebody
+             * unwell; forty minutes across fourteen trips is a different
+             * conversation, and the totals alone cannot tell them apart.
+             */
+            $byKind = array_fill_keys(array_keys(AttendanceBreak::KINDS), 0);
+            $counts = array_fill_keys(array_keys(AttendanceBreak::KINDS), 0);
+
+            foreach ($employeeDays as $day) {
+                foreach ($day->breakMinutesByKind() as $kind => $minutes) {
+                    if (array_key_exists($kind, $byKind)) {
+                        $byKind[$kind] += $minutes;
+                    }
+                }
+
+                foreach ($day->breakCountsByKind() as $kind => $count) {
+                    if (array_key_exists($kind, $counts)) {
+                        $counts[$kind] += $count;
+                    }
+                }
+            }
+
             return (object) [
                 'employee' => $employee,
                 'daysPresent' => $employeeDays->whereNotNull('time_in')->count(),
                 'totalLateMinutes' => $employeeDays->sum(fn (AttendanceDay $d) => $d->lateMinutes() ?? 0),
                 'totalWorkedHours' => round($employeeDays->sum(fn (AttendanceDay $d) => $d->totalWorkedMinutes() ?? 0) / 60, 1),
                 'totalOverBreakMinutes' => $employeeDays->sum(fn (AttendanceDay $d) => $d->overBreakMinutes()),
+                'breakMinutes' => $byKind,
+                'breakCounts' => $counts,
             ];
         });
 
@@ -87,6 +115,11 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Total Late (min)</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Total Worked (hrs)</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">Over-Break (min)</th>
+                        @foreach (\App\Models\AttendanceBreak::KINDS as $kindLabel)
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#778599] dark:text-neutral-400">
+                                {{ \Illuminate\Support\Str::of($kindLabel)->before(' Break') }}
+                            </th>
+                        @endforeach
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -97,9 +130,21 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">{{ $row->totalLateMinutes }}</td>
                             <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">{{ $row->totalWorkedHours }}</td>
                             <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">{{ $row->totalOverBreakMinutes }}</td>
+
+                            {{-- Minutes and trips together. Forty minutes in one
+                                 stretch is somebody unwell; forty across fourteen
+                                 trips is a different conversation. --}}
+                            @foreach (array_keys(\App\Models\AttendanceBreak::KINDS) as $kindKey)
+                                <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">
+                                    {{ $row->breakMinutes[$kindKey] }} min
+                                    @if ($row->breakCounts[$kindKey] > 0)
+                                        <span class="text-xs text-ink-400">({{ $row->breakCounts[$kindKey] }}&times;)</span>
+                                    @endif
+                                </td>
+                            @endforeach
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-4 py-8 text-center font-medium text-[#778599]">No employees yet.</td></tr>
+                        <tr><td colspan="{{ 5 + count(\App\Models\AttendanceBreak::KINDS) }}" class="px-4 py-8 text-center font-medium text-[#778599]">No employees yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>

@@ -61,7 +61,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         abort_unless($this->canCorrect(), 403);
 
-        $this->editBreaks[] = ['start' => '', 'end' => ''];
+        $this->editBreaks[] = ['kind' => '', 'start' => '', 'end' => ''];
     }
 
     public function removeBreak(int $index): void
@@ -104,6 +104,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->editBreaks = $day->breaks
             ->sortBy('break_start')
             ->map(fn ($break) => [
+                'kind' => $break->kind ?? '',
                 'start' => $break->break_start->format('H:i'),
                 'end' => $break->break_end?->format('H:i') ?? '',
             ])
@@ -123,7 +124,8 @@ new #[Layout('layouts.app')] class extends Component
         $this->validate([
             'editTimeIn' => ['nullable', 'date_format:H:i'],
             'editTimeOut' => ['nullable', 'date_format:H:i'],
-            'editBreaks' => ['array', 'max:6'],
+            'editBreaks' => ['array', 'max:8'],
+            'editBreaks.*.kind' => ['nullable', 'in:' . implode(',', array_keys(\App\Models\AttendanceBreak::KINDS))],
             'editBreaks.*.start' => ['nullable', 'date_format:H:i'],
             // An end with no start is meaningless, and would otherwise be
             // dropped without a word.
@@ -270,7 +272,40 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">{{ $day->time_in?->format('g:i A') ?? '—' }}</td>
                             <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">{{ $day->time_out?->format('g:i A') ?? '—' }}</td>
                             <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">{{ $day->lateMinutes() !== null ? $day->lateMinutes() . ' min' : '—' }}</td>
-                            <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">{{ $day->totalBreakMinutes() }} min @if($day->overBreakMinutes() > 0) <span class="text-red-600 dark:text-red-400">(+{{ $day->overBreakMinutes() }} over)</span> @endif</td>
+                            <td class="px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">
+                                <span class="whitespace-nowrap">
+                                    {{ $day->totalBreakMinutes() }} min
+                                    @if($day->overBreakMinutes() > 0)
+                                        <span class="text-red-600 dark:text-red-400">(+{{ $day->overBreakMinutes() }} over)</span>
+                                    @endif
+                                </span>
+
+                                {{-- The split underneath, because "40 minutes"
+                                     and "40 minutes across nine trips" are
+                                     different facts about somebody's day. --}}
+                                @php
+                                    $byKind = $day->breakMinutesByKind();
+                                    $counts = $day->breakCountsByKind();
+                                @endphp
+                                @if ($day->totalBreakMinutes() > 0)
+                                    <span class="mt-1 block text-xs font-medium leading-relaxed text-ink-500 dark:text-ink-500">
+                                        @foreach (\App\Models\AttendanceBreak::KINDS as $kindKey => $kindLabel)
+                                            @continue (($byKind[$kindKey] ?? 0) <= 0)
+
+                                            <span class="mr-2 inline-block whitespace-nowrap">
+                                                {{ \Illuminate\Support\Str::of($kindLabel)->before(' Break') }} {{ $byKind[$kindKey] }}m
+                                                @if ($counts[$kindKey] > 1)
+                                                    <span class="text-amber-700 dark:text-amber-400">&times;{{ $counts[$kindKey] }}</span>
+                                                @endif
+                                            </span>
+                                        @endforeach
+
+                                        @if (($byKind['unlabelled'] ?? 0) > 0)
+                                            <span class="mr-2 inline-block whitespace-nowrap">Unlabelled {{ $byKind['unlabelled'] }}m</span>
+                                        @endif
+                                    </span>
+                                @endif
+                            </td>
                             <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599] dark:text-neutral-400">
                                 {{ $day->totalWorkedMinutes() !== null ? number_format($day->totalWorkedMinutes() / 60, 1) . ' hrs' : '—' }}
                                 @if (($correctionCounts[$day->id] ?? 0) > 0)
@@ -352,6 +387,15 @@ new #[Layout('layouts.app')] class extends Component
             <div class="mt-2 space-y-2">
                 @forelse ($editBreaks as $index => $break)
                     <div class="flex flex-wrap items-start gap-2" wire:key="break-row-{{ $index }}">
+                        <div>
+                            <span class="block text-[11px] font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400">Kind</span>
+                            <x-select wire:model.blur="editBreaks.{{ $index }}.kind" class="!w-44">
+                                <option value="">Not recorded</option>
+                                @foreach (\App\Models\AttendanceBreak::KINDS as $kindKey => $kindLabel)
+                                    <option value="{{ $kindKey }}">{{ $kindLabel }}</option>
+                                @endforeach
+                            </x-select>
+                        </div>
                         <div>
                             <span class="block text-[11px] font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400">Started</span>
                             <x-input wire:model.blur="editBreaks.{{ $index }}.start" type="time" class="!w-36" />

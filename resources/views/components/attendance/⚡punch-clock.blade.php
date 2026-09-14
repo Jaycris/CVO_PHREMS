@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Concerns\WithTablePagination;
+use App\Models\AttendanceBreak;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
 use App\Services\Attendance\PunchLocationPolicy;
@@ -211,9 +212,26 @@ new #[Layout('layouts.app')] class extends Component
         $this->errorMessage = null;
     }
 
-    public function startBreak(): void
+    /**
+     * Starts a break of a named kind.
+     *
+     * The kind is recorded but changes nothing about pay: the allowance is
+     * still lunch plus coffee and every minute over it is deducted exactly as
+     * before. Restroom trips were already counted in that total when every
+     * break was just "a break" — this only puts a name on them.
+     *
+     * An unrecognised kind is refused rather than stored, so a crafted request
+     * cannot invent a fourth kind that no report knows how to show.
+     */
+    public function startBreak(string $kind = AttendanceBreak::COFFEE): void
     {
         if (! $this->usesPunchClock() || ! $this->atAllowedLocation()) {
+            return;
+        }
+
+        if (! AttendanceBreak::isKind($kind)) {
+            $this->errorMessage = 'Choose which kind of break you are taking.';
+
             return;
         }
 
@@ -231,7 +249,11 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
-        $day->breaks()->create(['break_start' => now('Asia/Manila')]);
+        $day->breaks()->create([
+            'kind' => $kind,
+            'break_start' => now('Asia/Manila'),
+        ]);
+
         $this->errorMessage = null;
     }
 
@@ -550,15 +572,20 @@ new #[Layout('layouts.app')] class extends Component
                         </x-button>
                     @else
                         @if (! $onBreak)
-                            <x-button wire:click="startBreak" variant="secondary" class="h-12 rounded-xl px-6">
-                                Start Break
-                            </x-button>
+                            {{-- One button per kind rather than a button and a
+                                 dropdown: somebody stepping away for two minutes
+                                 should be one tap, not three. --}}
+                            @foreach (\App\Models\AttendanceBreak::KINDS as $kind => $label)
+                                <x-button wire:click="startBreak('{{ $kind }}')" variant="secondary" class="h-12 rounded-xl px-5">
+                                    {{ $label }}
+                                </x-button>
+                            @endforeach
                             <x-button wire:click="timeOut" variant="danger" class="h-12 rounded-xl px-6">
                                 Time Out
                             </x-button>
                         @else
                             <x-button wire:click="endBreak" class="h-12 rounded-xl px-6">
-                                End Break
+                                End {{ $day?->openBreak()?->kindLabel() ?? 'Break' }}
                             </x-button>
                         @endif
                     @endif

@@ -2,6 +2,7 @@
 
 namespace App\Services\Attendance;
 
+use App\Models\AttendanceBreak;
 use App\Models\AttendanceCorrection;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
@@ -171,6 +172,10 @@ class AttendanceCorrectionService
             }
 
             $day->breaks()->create([
+                // An unrecognised kind is stored as none rather than refused:
+                // the times are what decide pay, and losing a correction over
+                // a label would be the wrong trade.
+                'kind' => AttendanceBreak::isKind($break['kind'] ?? null) ? $break['kind'] : null,
                 'break_start' => $start,
                 // Left open when there is no end time — which is what an
                 // employee still on break looks like, and HR may be correcting
@@ -218,6 +223,7 @@ class AttendanceCorrectionService
 
         return $day->breaks
             ->map(fn ($break) => [
+                'kind' => $break->kind,
                 'start' => $break->break_start->format('H:i'),
                 'end' => $break->break_end?->format('H:i'),
             ])

@@ -129,6 +129,81 @@ class AttendanceCorrectionTest extends TestCase
     }
 
     #[Test]
+    public function each_break_keeps_what_kind_it_was(): void
+    {
+        /*
+         * A label, not a rule. Pay still works from the day's total against the
+         * schedule's allowance exactly as it did when every break was just "a
+         * break" — restroom trips were always counted in that total. This only
+         * lets somebody answer "what was that forty minutes?".
+         */
+        $day = AttendanceDay::create([
+            'employee_id' => $this->employee->id,
+            'work_date' => '2026-08-26',
+            'time_in' => '2026-08-26 21:00:00',
+            'time_out' => '2026-08-27 06:00:00',
+        ]);
+
+        $this->corrections->apply(
+            $this->employee, '2026-08-26', '21:00', '06:00',
+            'Breaks logged from the supervisor sheet', $this->admin,
+            breaks: [
+                ['kind' => AttendanceBreak::LUNCH, 'start' => '23:00', 'end' => '00:00'],
+                ['kind' => AttendanceBreak::RESTROOM, 'start' => '02:00', 'end' => '02:05'],
+                ['kind' => AttendanceBreak::RESTROOM, 'start' => '04:00', 'end' => '04:07'],
+            ],
+        );
+
+        $fresh = $day->fresh();
+
+        $this->assertSame(72, $fresh->totalBreakMinutes());
+
+        $byKind = $fresh->breakMinutesByKind();
+        $this->assertSame(60, $byKind[AttendanceBreak::LUNCH]);
+        $this->assertSame(12, $byKind[AttendanceBreak::RESTROOM]);
+        $this->assertSame(0, $byKind[AttendanceBreak::COFFEE]);
+
+        // The count is the other half of the story: twelve minutes across two
+        // trips is a different fact from twelve minutes in one.
+        $this->assertSame(2, $fresh->breakCountsByKind()[AttendanceBreak::RESTROOM]);
+    }
+
+    #[Test]
+    public function a_kind_nobody_offers_is_stored_as_none_rather_than_losing_the_times(): void
+    {
+        // The times decide pay. Losing a correction over a bad label would be
+        // the wrong trade.
+        $day = $this->accidentalPunch();
+
+        $this->corrections->apply(
+            $this->employee, '2026-08-26', '21:00', null,
+            'Break times from the supervisor', $this->admin,
+            breaks: [['kind' => 'smoke', 'start' => '23:00', 'end' => '23:10']],
+        );
+
+        $break = $day->fresh()->breaks->sole();
+
+        $this->assertNull($break->kind);
+        $this->assertSame(10, $day->fresh()->totalBreakMinutes());
+    }
+
+    #[Test]
+    public function breaks_punched_before_kinds_existed_are_left_unlabelled(): void
+    {
+        // Filling one in would be inventing evidence about somebody's day.
+        $day = $this->accidentalPunch();
+
+        AttendanceBreak::create([
+            'attendance_day_id' => $day->id,
+            'break_start' => '2026-08-26 05:33:00',
+            'break_end' => '2026-08-26 06:03:00',
+        ]);
+
+        $this->assertSame(30, $day->fresh()->breakMinutesByKind()['unlabelled']);
+        $this->assertSame('Break', $day->fresh()->breaks->sole()->kindLabel());
+    }
+
+    #[Test]
     public function a_lunch_and_a_coffee_break_both_survive(): void
     {
         // The schedules carry both, so collapsing a day to one stretch would
@@ -176,7 +251,7 @@ class AttendanceCorrectionTest extends TestCase
         $correction = AttendanceCorrection::latest('id')->first();
 
         $this->assertSame(120, $correction->before['break_minutes']);
-        $this->assertSame([['start' => '05:33', 'end' => '07:33']], $correction->before['breaks']);
+        $this->assertSame([['kind' => null, 'start' => '05:33', 'end' => '07:33']], $correction->before['breaks']);
         $this->assertSame(0, $correction->after['break_minutes']);
         $this->assertSame(0, $day->fresh()->totalBreakMinutes());
     }

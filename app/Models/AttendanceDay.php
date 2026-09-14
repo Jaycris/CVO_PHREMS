@@ -126,11 +126,43 @@ class AttendanceDay extends Model
 
     public function totalBreakMinutes(): int
     {
-        return $this->breaks->sum(function (AttendanceBreak $break) {
-            $end = $break->break_end ?? now();
+        return $this->breaks->sum(fn (AttendanceBreak $break) => $break->minutes());
+    }
 
-            return (int) floor($break->break_start->diffInMinutes($end));
-        });
+    /**
+     * The day's break split by what it was for.
+     *
+     * Every kind is present even at zero, so a row of figures lines up across
+     * employees and an empty column reads as "none" rather than as missing.
+     * Breaks punched before kinds existed land under null.
+     *
+     * @return array<string, int> kind => minutes, plus null for unlabelled
+     */
+    public function breakMinutesByKind(): array
+    {
+        $totals = array_fill_keys(array_keys(AttendanceBreak::KINDS), 0);
+
+        foreach ($this->breaks as $break) {
+            $key = AttendanceBreak::isKind($break->kind) ? $break->kind : 'unlabelled';
+
+            $totals[$key] = ($totals[$key] ?? 0) + $break->minutes();
+        }
+
+        return $totals;
+    }
+
+    /** How many separate times they went, by kind — the count, not the length. */
+    public function breakCountsByKind(): array
+    {
+        $counts = array_fill_keys(array_keys(AttendanceBreak::KINDS), 0);
+
+        foreach ($this->breaks as $break) {
+            $key = AttendanceBreak::isKind($break->kind) ? $break->kind : 'unlabelled';
+
+            $counts[$key] = ($counts[$key] ?? 0) + 1;
+        }
+
+        return $counts;
     }
 
     public function allowedBreakMinutes(?EmployeeScheduleAssignment $assignment = null): ?int
