@@ -168,25 +168,41 @@ class SmsNotificationTest extends TestCase
     }
 
     #[Test]
-    public function only_important_announcements_are_texted(): void
+    public function an_announcement_is_texted_only_when_somebody_asked_for_it(): void
     {
+        /*
+         * The tick on the notice decides, not the kind. Inferring it from
+         * "Important" was worse: a kind gets set once out of habit, whereas a
+         * box ticked next to the character count and the reach is a decision
+         * somebody actually made.
+         */
         $this->switchOn(SmsGateway::URGENT_ANNOUNCEMENT);
 
-        $ordinary = Announcement::factory()->create(['kind' => Announcement::NEWS]);
-        $urgent = Announcement::factory()->create(['kind' => Announcement::URGENT]);
+        $announcement = Announcement::factory()->create(['kind' => Announcement::URGENT]);
 
-        $this->assertNotContains(SmsChannel::class, (new AnnouncementPosted($ordinary))->via($this->user));
-        $this->assertContains(SmsChannel::class, (new AnnouncementPosted($urgent))->via($this->user));
+        $this->assertNotContains(SmsChannel::class, (new AnnouncementPosted($announcement))->via($this->user));
+        $this->assertContains(SmsChannel::class, (new AnnouncementPosted($announcement, bySms: true))->via($this->user));
     }
 
     #[Test]
-    public function an_important_announcement_is_not_texted_while_the_setting_is_off(): void
+    public function the_kind_of_notice_no_longer_decides_anything(): void
     {
-        // Both switches have to agree. Marking something Important must not be
-        // enough on its own, or everything becomes Important.
-        $urgent = Announcement::factory()->create(['kind' => Announcement::URGENT]);
+        // Ordinary news can be texted if somebody asks for it — the company
+        // decides what is worth a text, not a dropdown.
+        $this->switchOn(SmsGateway::URGENT_ANNOUNCEMENT);
 
-        $this->assertNotContains(SmsChannel::class, (new AnnouncementPosted($urgent))->via($this->user));
+        $ordinary = Announcement::factory()->create(['kind' => Announcement::NEWS]);
+
+        $this->assertContains(SmsChannel::class, (new AnnouncementPosted($ordinary, bySms: true))->via($this->user));
+    }
+
+    #[Test]
+    public function asking_for_a_text_does_nothing_while_the_setting_is_off(): void
+    {
+        // Both switches still have to agree. The company-wide one is the brake.
+        $announcement = Announcement::factory()->create(['kind' => Announcement::URGENT]);
+
+        $this->assertNotContains(SmsChannel::class, (new AnnouncementPosted($announcement, bySms: true))->via($this->user));
     }
 
     #[Test]

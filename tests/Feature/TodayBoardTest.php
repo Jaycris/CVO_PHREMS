@@ -171,8 +171,24 @@ class TodayBoardTest extends TestCase
     #[Test]
     public function a_pinned_announcement_comes_before_the_others(): void
     {
-        Announcement::factory()->create(['title' => 'Ordinary notice']);
-        Announcement::factory()->pinned()->create(['title' => 'Read this first']);
+        /*
+         * Dated against the board's day rather than the factory default.
+         *
+         * The factory starts a notice today, meaning the real today, while this
+         * board is pinned to 8 September — so once the calendar moved past that
+         * the notices had not started yet and the board was correctly empty.
+         * A test that passes in one week and fails the next is worse than no
+         * test, and the fix is to say which day it means.
+         */
+        Announcement::factory()->create([
+            'title' => 'Ordinary notice',
+            'starts_on' => $this->today->toDateString(),
+        ]);
+
+        Announcement::factory()->pinned()->create([
+            'title' => 'Read this first',
+            'starts_on' => $this->today->copy()->subDay()->toDateString(),
+        ]);
 
         $announcements = $this->board()
             ->where('label', '!=', 'Holiday')

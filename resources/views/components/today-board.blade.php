@@ -10,7 +10,7 @@
 @endphp
 
 <section class="overflow-hidden rounded-lg border border-ink-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-900">
-    <div class="flex flex-col gap-4 bg-brand-50/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:bg-white/[0.03]">
+    <div class="flex flex-col gap-4 bg-[#f5fcf8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:bg-ink-900">
         <div class="flex min-w-0 items-center gap-4">
             <div class="today-board-date flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg bg-brand-700 text-center shadow-sm">
                 <span class="text-[10px] font-bold uppercase tracking-[0.14em] text-brand-100">{{ $today->format('M') }}</span>

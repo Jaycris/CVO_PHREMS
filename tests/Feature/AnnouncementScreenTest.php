@@ -288,6 +288,135 @@ class AnnouncementScreenTest extends TestCase
     }
 
     #[Test]
+    public function ticking_the_text_box_sends_it_by_sms_as_well(): void
+    {
+        $driver = new \Tests\Support\RecordingSmsDriver;
+        $this->app->instance(\App\Services\Sms\SmsDriver::class, $driver);
+
+        \App\Models\AppSetting::flushCache();
+        \App\Models\AppSetting::put(\App\Services\Sms\SmsGateway::URGENT_ANNOUNCEMENT, '1', 'Allow texting');
+
+        $employee = $this->plainEmployee()->employee;
+        $employee->update(['personal_contact_number' => '0917 123 4567']);
+
+        Livewire::actingAs($this->hr)
+            ->test('announcements.index')
+            ->call('create')
+            ->set('title', 'Office closed Monday')
+            ->set('body', 'Burst pipe. Work from home.')
+            ->set('notifyEveryone', true)
+            ->set('notifyBySms', true)
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSee('texted where a mobile number is on file');
+
+        $this->assertSame(1, $driver->count());
+        $this->assertStringContainsString('Office closed Monday', $driver->last()['message']);
+        $this->assertSame('+639171234567', $driver->last()['to']);
+    }
+
+    #[Test]
+    public function leaving_the_text_box_alone_emails_only(): void
+    {
+        // The default, and the safe one. A text costs a credit per person.
+        $driver = new \Tests\Support\RecordingSmsDriver;
+        $this->app->instance(\App\Services\Sms\SmsDriver::class, $driver);
+
+        \App\Models\AppSetting::flushCache();
+        \App\Models\AppSetting::put(\App\Services\Sms\SmsGateway::URGENT_ANNOUNCEMENT, '1', 'Allow texting');
+
+        $employee = $this->plainEmployee()->employee;
+        $employee->update(['personal_contact_number' => '0917 123 4567']);
+
+        Livewire::actingAs($this->hr)
+            ->test('announcements.index')
+            ->call('create')
+            ->set('title', 'Ordinary news')
+            ->set('body', 'Nothing urgent.')
+            ->set('notifyEveryone', true)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame(0, $driver->count());
+    }
+
+    #[Test]
+    public function the_text_option_appears_once_the_email_box_is_ticked(): void
+    {
+        /*
+         * The chain that has to hold for the option to be reachable at all:
+         * posting now, emailing everybody, and the company switch on. Each is
+         * bound live, so ticking one re-renders and reveals the next — and a
+         * stale compiled view is enough to break that invisibly.
+         */
+        \App\Models\AppSetting::flushCache();
+        \App\Models\AppSetting::put(\App\Services\Sms\SmsGateway::URGENT_ANNOUNCEMENT, '1', 'Allow texting');
+
+        Livewire::actingAs($this->hr)
+            ->test('announcements.index')
+            ->call('create')
+            ->assertViewHas('smsAvailable', true)
+            /*
+             * Rendered up front and revealed by Alpine when the email box is
+             * ticked, rather than waiting for a server round-trip — bound only
+             * to wire:model.live it lagged, which reads as a broken checkbox.
+             * The reveal itself is client-side and beyond a Livewire test; what
+             * this can prove is that the markup is there to reveal.
+             */
+            ->assertSee('Text everybody as well')
+            ->set('notifyEveryone', true)
+            ->set('notifyBySms', true)
+            ->assertSee('What the phone will show');
+    }
+
+    #[Test]
+    public function a_text_is_never_armed_by_a_previous_notice(): void
+    {
+        // Left set from the last notice, it would send a blast on the next one
+        // without anybody ticking anything.
+        \App\Models\AppSetting::flushCache();
+        \App\Models\AppSetting::put(\App\Services\Sms\SmsGateway::URGENT_ANNOUNCEMENT, '1', 'Allow texting');
+
+        Livewire::actingAs($this->hr)
+            ->test('announcements.index')
+            ->set('notifyBySms', true)
+            ->call('create')
+            ->assertSet('notifyBySms', false);
+    }
+
+    #[Test]
+    public function the_text_option_is_not_offered_while_the_setting_is_off(): void
+    {
+        \App\Models\AppSetting::flushCache();
+
+        Livewire::actingAs($this->hr)
+            ->test('announcements.index')
+            ->assertViewHas('smsAvailable', false)
+            ->assertDontSee('Text everybody as well');
+    }
+
+    #[Test]
+    public function the_preview_shows_exactly_what_the_phone_will_get(): void
+    {
+        /*
+         * Composed by the same code that sends it, so the character count is
+         * the real one. An en dash in a title would otherwise cut the limit
+         * from 160 to 70 with nothing on screen to say why.
+         */
+        \App\Models\AppSetting::flushCache();
+        \App\Models\AppSetting::put(\App\Services\Sms\SmsGateway::URGENT_ANNOUNCEMENT, '1', 'Allow texting');
+
+        Livewire::actingAs($this->hr)
+            ->test('announcements.index')
+            ->call('create')
+            ->set('title', 'Exhibit Sep 8 – 13')
+            ->set('body', 'Booth staff only.')
+            ->set('notifyEveryone', true)
+            ->set('notifyBySms', true)
+            ->assertViewHas('smsPreview', 'PhremsCVO: Exhibit Sep 8 - 13. Booth staff only.');
+    }
+
+    #[Test]
     public function the_board_shows_on_the_dashboard(): void
     {
         Announcement::factory()->create(['title' => 'Trade exhibit at SMX']);

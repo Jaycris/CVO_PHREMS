@@ -23,15 +23,20 @@ class AnnouncementPosted extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public Announcement $announcement) {}
+    public function __construct(
+        public Announcement $announcement,
+        public bool $bySms = false,
+    ) {}
 
     /**
-     * A text only for the ones marked Important.
+     * A text only when somebody asked for one, on this notice.
      *
-     * Two switches have to agree: SMS for announcements is on, and whoever
-     * wrote this one marked it Important. Ordinary news reaching people by text
-     * is how a company teaches its staff to ignore texts from it, and then the
-     * office-is-closed message goes unread with the rest.
+     * Two switches still have to agree, but the second is now a decision made
+     * per notice rather than inferred from the Important label. Inferring it
+     * was worse: a kind is set once out of habit, whereas a box ticked while
+     * looking at the cost is a choice somebody actually made. Ordinary news
+     * reaching people by text is how a company teaches its staff to ignore its
+     * texts, and then the office-is-closed message goes unread with the rest.
      *
      * @return list<string>
      */
@@ -39,8 +44,7 @@ class AnnouncementPosted extends Notification implements ShouldQueue
     {
         $channels = ['mail', 'database'];
 
-        if ($this->announcement->kind === Announcement::URGENT
-            && SmsGateway::enabledFor(SmsGateway::URGENT_ANNOUNCEMENT)) {
+        if ($this->bySms && SmsGateway::enabledFor(SmsGateway::URGENT_ANNOUNCEMENT)) {
             $channels[] = SmsChannel::class;
         }
 
