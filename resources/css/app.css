@@ -346,6 +346,109 @@
         }
     }
 
+    .dashboard-sky-scene {
+        filter: drop-shadow(0 0 18px rgba(226, 232, 240, 0.12));
+    }
+
+    .dashboard-sun {
+        position: absolute;
+        top: 2px;
+        left: 50%;
+        height: 92px;
+        width: 92px;
+        max-width: none;
+        transform: translateX(-50%);
+        object-fit: contain;
+        opacity: 0.9;
+    }
+
+    .dashboard-moon-phase {
+        position: absolute;
+        top: 5px;
+        left: 50%;
+        display: block;
+        height: 88px;
+        width: 88px;
+        transform: translateX(-50%);
+        overflow: hidden;
+        border-radius: 9999px;
+    }
+
+    .dashboard-moon-phase img {
+        height: 100%;
+        width: 100%;
+        object-fit: contain;
+    }
+
+    .dashboard-moon-phase::after {
+        position: absolute;
+        inset-block: 0;
+        content: '';
+        border-radius: 9999px;
+        background: rgba(2, 6, 23, 0.94);
+    }
+
+    .dashboard-moon-phase--new img {
+        opacity: 0.16;
+    }
+
+    .dashboard-moon-phase--new::after,
+    .dashboard-moon-phase--full::after {
+        display: none;
+    }
+
+    .dashboard-moon-phase--waxing-crescent::after {
+        left: -18%;
+        width: 96%;
+    }
+
+    .dashboard-moon-phase--first-quarter::after {
+        left: 0;
+        width: 50%;
+        border-radius: 9999px 0 0 9999px;
+    }
+
+    .dashboard-moon-phase--waxing-gibbous::after {
+        left: -8%;
+        width: 34%;
+    }
+
+    .dashboard-moon-phase--waning-gibbous::after {
+        right: -8%;
+        width: 34%;
+    }
+
+    .dashboard-moon-phase--last-quarter::after {
+        right: 0;
+        width: 50%;
+        border-radius: 0 9999px 9999px 0;
+    }
+
+    .dashboard-moon-phase--waning-crescent::after {
+        right: -18%;
+        width: 96%;
+    }
+
+    .dashboard-sky-clouds {
+        position: absolute;
+        bottom: -20px;
+        left: 50%;
+        width: 220px;
+        max-width: none;
+        transform: translateX(-50%);
+        animation: dashboard-cloud-drift 16s ease-in-out infinite alternate;
+    }
+
+    @keyframes dashboard-cloud-drift {
+        from {
+            transform: translateX(-53%);
+        }
+
+        to {
+            transform: translateX(-47%);
+        }
+    }
+
     @media (prefers-reduced-motion: reduce) {
         .page-transition,
         .page-loading-bar,
@@ -362,7 +465,8 @@
         [class*='payslip-loader'],
         .today-board-date,
         .today-board-item,
-        .today-board-live-dot {
+        .today-board-live-dot,
+        .dashboard-sky-clouds {
             animation: none;
         }
     }

@@ -35,6 +35,14 @@ return [
         ],
     ],
 
+    'dashboard_weather' => [
+        // Cebu City defaults keep the dashboard useful before production is
+        // configured for a more precise office location.
+        'latitude' => (float) env('DASHBOARD_WEATHER_LATITUDE', 10.3157),
+        'longitude' => (float) env('DASHBOARD_WEATHER_LONGITUDE', 123.8854),
+        'timeout' => (int) env('DASHBOARD_WEATHER_TIMEOUT', 3),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | SMS

@@ -36,8 +36,9 @@
         @endcan
     </div>
 
-    <div class="divide-y divide-ink-100 dark:divide-white/10">
-        @forelse ($items as $item)
+    @if ($items->isNotEmpty())
+        <div class="divide-y divide-ink-100 dark:divide-white/10">
+        @foreach ($items as $item)
             @php
                 $tones = [
                     'green' => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300',
@@ -79,14 +80,7 @@
                     <a href="{{ $url }}" wire:navigate class="absolute inset-0 rounded-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" aria-label="{{ $item['title'] ?? 'Open' }}"></a>
                 @endif
             </div>
-        @empty
-            <div class="px-5 py-10 text-center">
-                <span class="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-ink-100 text-ink-400 dark:bg-white/5 dark:text-ink-500">
-                    <x-icon name="sun" class="h-6 w-6" />
-                </span>
-                <p class="mt-3 text-sm font-bold text-ink-800 dark:text-ink-200">Your board is clear today</p>
-                <p class="mt-1 text-xs font-medium text-ink-500 dark:text-ink-400">There are no holidays, company notices, or scheduled events.</p>
-            </div>
-        @endforelse
-    </div>
+        @endforeach
+        </div>
+    @endif
 </section>

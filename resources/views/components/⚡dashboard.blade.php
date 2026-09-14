@@ -7,6 +7,7 @@ use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Services\TodayBoard;
+use App\Services\DashboardSky;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -43,6 +44,7 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'greeting' => $greeting,
             'today' => $today,
+            'sky' => app(DashboardSky::class)->for($today),
             'isAdminHr' => $isAdminHr,
             // Holidays, notices, off-site days and anniversaries, gathered from
             // where they already live. Nothing here is stored as a board item.
@@ -86,7 +88,8 @@ new #[Layout('layouts.app')] class extends Component
 
         <div class="relative mt-5 overflow-hidden rounded-lg border border-white/10 bg-ink-950 shadow-sm">
             <img src="{{ asset('images/logo-mark.png') }}" alt="" class="pointer-events-none absolute -bottom-16 -left-14 h-56 w-56 object-contain opacity-[0.06]">
-            <div class="relative flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">
+
+            <div class="relative z-10 flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">
                 <a href="{{ route('my-profile') }}" wire:navigate class="group flex min-w-0 items-center gap-4">
                     @if ($employee)
                         <x-avatar :employee="$employee" size="lg" class="!h-16 !w-16 ring-4 ring-white/10 transition group-hover:ring-brand-300/40" />
@@ -103,10 +106,35 @@ new #[Layout('layouts.app')] class extends Component
                     </span>
                 </a>
 
-                <div class="text-left lg:text-right">
-                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-200">Greetings!</p>
-                    <p class="mt-1 text-2xl font-bold text-white">{{ $greeting }}, {{ explode(' ', auth()->user()->name)[0] }}</p>
-                    <p class="mt-1 text-sm font-medium text-ink-300">Have a productive {{ strtolower($today->format('l')) }}.</p>
+                <div class="flex shrink-0 items-center gap-3 lg:ml-auto">
+                    <div
+                        class="dashboard-sky-scene pointer-events-none relative hidden h-24 w-44 shrink-0 xl:block"
+                        title="{{ $sky['is_day'] ? 'Daylight' : $sky['phase_name'] }}{{ $sky['cloud_cover'] !== null ? ' · '.$sky['cloud_cover'].'% cloud cover' : '' }}"
+                        aria-hidden="true"
+                    >
+                        @unless ($sky['is_day'])
+                            <span class="dashboard-moon-phase dashboard-moon-phase--{{ $sky['phase'] }}">
+                                <img src="{{ asset('images/dashboard-moon.webp') }}" alt="">
+                            </span>
+                        @else
+                            <img src="{{ asset('images/dashboard-sun.webp') }}" alt="" class="dashboard-sun">
+                        @endunless
+
+                        @if ($sky['cloudy'])
+                            <img
+                                src="{{ asset('images/dashboard-clouds.webp') }}"
+                                alt=""
+                                class="dashboard-sky-clouds"
+                                style="opacity: {{ min(0.92, 0.48 + ($sky['cloud_cover'] / 220)) }}"
+                            >
+                        @endif
+                    </div>
+
+                    <div class="text-left lg:text-right">
+                        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-200">Greetings!</p>
+                        <p class="mt-1 text-2xl font-bold text-white">{{ $greeting }}, {{ explode(' ', auth()->user()->name)[0] }}</p>
+                        <p class="mt-1 text-sm font-medium text-ink-300">Have a productive {{ strtolower($today->format('l')) }}.</p>
+                    </div>
                 </div>
             </div>
         </div>
