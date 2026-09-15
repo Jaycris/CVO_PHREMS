@@ -114,15 +114,15 @@ new #[Layout('layouts.app')] class extends Component
                     >
                         @unless ($sky['is_day'])
                             <span class="dashboard-moon-phase dashboard-moon-phase--{{ $sky['phase'] }}">
-                                <img src="{{ asset('images/dashboard-moon.webp') }}" alt="">
+                                <img src="{{ asset('images/dashboard-moon.webp') }}?v={{ filemtime(public_path('images/dashboard-moon.webp')) }}" alt="">
                             </span>
                         @else
-                            <img src="{{ asset('images/dashboard-sun.webp') }}" alt="" class="dashboard-sun">
+                            <img src="{{ asset('images/dashboard-sun.webp') }}?v={{ filemtime(public_path('images/dashboard-sun.webp')) }}" alt="" class="dashboard-sun">
                         @endunless
 
                         @if ($sky['cloudy'])
                             <img
-                                src="{{ asset('images/dashboard-clouds.webp') }}"
+                                src="{{ asset('images/dashboard-clouds.webp') }}?v={{ filemtime(public_path('images/dashboard-clouds.webp')) }}"
                                 alt=""
                                 class="dashboard-sky-clouds"
                                 style="opacity: {{ min(0.92, 0.48 + ($sky['cloud_cover'] / 220)) }}"
