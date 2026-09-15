@@ -124,10 +124,28 @@ class AttendanceAggregator
         $from = $employee->hire_date ? max($start->timestamp, $employee->hire_date->startOfDay()->timestamp) : $start->timestamp;
         $to = $employee->separation_date ? min($end->timestamp, $employee->separation_date->endOfDay()->timestamp) : $end->timestamp;
 
+        $skipThirtyFirst = PayrollSetting::flag('payroll_skip_31st', true);
+
+        // Minutes earned on each qualifying night, capped after the loop.
+        $nights = [];
+
         foreach ($dates as $date) {
             $day = Carbon::parse($date);
 
             if ($day->timestamp < $from || $day->timestamp > $to) {
+                continue;
+            }
+
+            /*
+             * Accounting counts every cutoff as 11 days and every month as 22,
+             * so the 31st is not a payroll day at all: no night differential,
+             * no absence, no lateness, no holiday premium. Basic pay is a fixed
+             * half of the salary and already covers it.
+             *
+             * Approved overtime on the 31st is still paid — it is loaded apart
+             * from this loop, and it is extra work somebody signed off on.
+             */
+            if ($skipThirtyFirst && $day->day === 31) {
                 continue;
             }
 
@@ -290,10 +308,44 @@ class AttendanceAggregator
             // shift earns nothing and someone moved onto graveyard mid-cutoff
             // earns it only for the days after the move.
             if ($schedule->qualifiesForNightDifferential()) {
-                $counters['night_diff_days']++;
-                $counters['night_diff_minutes'] += $this->nightMinutes($schedule, $lateMinutes, $undertimeMinutes, $overBreakMinutes);
+                $nights[] = $this->nightMinutes($schedule, $lateMinutes, $undertimeMinutes, $overBreakMinutes);
             }
         }
+
+        /*
+         * Accounting counts every cutoff as exactly 11 days — 22 a month —
+         * whatever the calendar says. Absences always count.
+         *
+         * A cutoff with 12 weekdays loses a day worked: all 12 worked is
+         * 11 / 11, 11 worked and 1 missed is 10 / 11. Night differential loses
+         * the same nights, the shortest first.
+         *
+         * A short cutoff, like 9 weekdays around February, gains days worked:
+         * all 9 worked is 11 / 11, 8 worked and 1 missed is 10 / 11. Night
+         * differential is not topped up — it pays only nights really worked.
+         *
+         * Somebody hired or leaving partway through is not topped up; 3 days
+         * worked in their first cutoff is 3 / 3, not 11 / 11.
+         */
+        $days = (int) PayrollSetting::number('payroll_max_days_per_cutoff', 11);
+        $wholeCutoff = $from === $start->timestamp && $to === $end->timestamp;
+        $extra = 0;
+
+        if ($days > 0 && $counters['days_expected'] > $days) {
+            $extra = $counters['days_expected'] - $days;
+
+            $counters['days_present'] = max(0, $counters['days_present'] - $extra);
+            $counters['days_expected'] = $days;
+        } elseif ($days > 0 && $wholeCutoff && $counters['days_expected'] > 0 && $counters['days_expected'] < $days) {
+            $counters['days_present'] += $days - $counters['days_expected'];
+            $counters['days_expected'] = $days;
+        }
+
+        rsort($nights);
+        $nights = array_slice($nights, 0, max(0, count($nights) - $extra));
+
+        $counters['night_diff_days'] = count($nights);
+        $counters['night_diff_minutes'] = array_sum($nights);
 
         return $counters;
     }

@@ -255,6 +255,162 @@ class AttendanceAggregatorTest extends PayrollTestCase
     }
 
     #[Test]
+    public function the_31st_is_left_out_of_payroll_entirely(): void
+    {
+        // 26 Aug-10 Sep 2026 has 12 weekdays, one of them Monday 31 August.
+        // Accounting counts 11: the 31st earns nothing and costs nothing.
+        $period = $this->period(2026, 9, 'first');
+        $this->assertSame('2026-08-26', $period['start']->toDateString());
+
+        $night = $this->makeEmployee(23000, 'graveyard');
+        $filled = $this->fillAttendance($night, $period);
+        $this->assertContains('2026-08-31', $filled);
+
+        $counters = $this->aggregate($night, $period);
+
+        $this->assertSame(count($filled) - 1, $counters['days_expected']);
+        $this->assertSame(count($filled) - 1, $counters['days_present']);
+        $this->assertSame(count($filled) - 1, $counters['night_diff_days']);
+        $this->assertSame((count($filled) - 1) * 480, $counters['night_diff_minutes']);
+    }
+
+    #[Test]
+    public function missing_the_31st_is_not_an_absence(): void
+    {
+        $period = $this->period(2026, 9, 'first');
+        $employee = $this->makeEmployee();
+        $this->fillAttendance($employee, $period, absentOn: ['2026-08-31']);
+
+        $this->assertSame(0, $this->aggregate($employee, $period)['days_absent']);
+    }
+
+    #[Test]
+    public function the_31st_counts_again_when_the_setting_is_off(): void
+    {
+        $this->setPayrollSetting('payroll_skip_31st', '0');
+        // The 11-day cap would bring it back to 11 on its own.
+        $this->setPayrollSetting('payroll_max_days_per_cutoff', '0');
+
+        $period = $this->period(2026, 9, 'first');
+        $employee = $this->makeEmployee();
+        $filled = $this->fillAttendance($employee, $period);
+
+        $this->assertSame(count($filled), $this->aggregate($employee, $period)['days_expected']);
+    }
+
+    #[Test]
+    public function a_twelve_weekday_cutoff_counts_as_eleven_days(): void
+    {
+        // 26 Jan-10 Feb 2027 has 12 weekdays and its 31st is a Sunday, so the
+        // 31st rule does nothing and the cap is what keeps it to 11.
+        $period = $this->period(2027, 2, 'first');
+        $night = $this->makeEmployee(23000, 'graveyard');
+        $filled = $this->fillAttendance($night, $period);
+        $this->assertCount(12, $filled);
+
+        $counters = $this->aggregate($night, $period);
+
+        $this->assertSame(11, $counters['days_expected']);
+        $this->assertSame(11, $counters['days_present']);
+        $this->assertSame(0, $counters['days_absent']);
+        $this->assertSame(11, $counters['night_diff_days']);
+        $this->assertSame(11 * 480, $counters['night_diff_minutes']);
+    }
+
+    #[Test]
+    public function the_short_night_is_the_one_left_out(): void
+    {
+        $period = $this->period(2027, 2, 'first');
+        $night = $this->makeEmployee(23000, 'graveyard');
+        $filled = $this->fillAttendance($night, $period);
+
+        $day = AttendanceDay::where('employee_id', $night->id)->whereDate('work_date', $filled[3])->sole();
+        $day->update(['time_in' => $day->time_in->copy()->addMinutes(30)]);
+
+        // Eleven full nights are still there to pay.
+        $this->assertSame(11 * 480, $this->aggregate($night, $period)['night_diff_minutes']);
+    }
+
+    #[Test]
+    public function working_eleven_of_twelve_is_ten_of_eleven_with_the_absence(): void
+    {
+        $period = $this->period(2027, 2, 'first');
+        $night = $this->makeEmployee(23000, 'graveyard');
+        $days = $this->workingDays($night, $period);
+        $this->fillAttendance($night, $period, absentOn: [$days[5]]);
+
+        $counters = $this->aggregate($night, $period);
+
+        $this->assertSame(11, $counters['days_expected']);
+        $this->assertSame(10, $counters['days_present']);
+        $this->assertSame(1, $counters['days_absent']);
+        $this->assertSame(10, $counters['night_diff_days']);
+        $this->assertSame(10 * 480, $counters['night_diff_minutes']);
+    }
+
+    #[Test]
+    public function a_short_cutoff_is_filled_up_to_eleven_days_but_not_its_night_differential(): void
+    {
+        // 26 Feb-10 Mar 2027 has only 9 weekdays.
+        $period = $this->period(2027, 3, 'first');
+        $night = $this->makeEmployee(23000, 'graveyard');
+        $filled = $this->fillAttendance($night, $period);
+        $this->assertCount(9, $filled);
+
+        $counters = $this->aggregate($night, $period);
+
+        $this->assertSame(11, $counters['days_expected']);
+        $this->assertSame(11, $counters['days_present']);
+        $this->assertSame(0, $counters['days_absent']);
+        $this->assertSame(9, $counters['night_diff_days']);
+    }
+
+    #[Test]
+    public function missing_one_night_of_a_short_cutoff_is_ten_of_eleven(): void
+    {
+        $period = $this->period(2027, 3, 'first');
+        $night = $this->makeEmployee(23000, 'graveyard');
+        $days = $this->workingDays($night, $period);
+        $this->fillAttendance($night, $period, absentOn: [$days[4]]);
+
+        $counters = $this->aggregate($night, $period);
+
+        $this->assertSame(11, $counters['days_expected']);
+        $this->assertSame(10, $counters['days_present']);
+        $this->assertSame(1, $counters['days_absent']);
+        $this->assertSame(8, $counters['night_diff_days']);
+    }
+
+    #[Test]
+    public function somebody_hired_mid_cutoff_is_not_filled_up(): void
+    {
+        $period = $this->period(2027, 3, 'first');
+        $employee = $this->makeEmployee(20000, 'day', ['hire_date' => '2027-03-08']);
+        $filled = $this->fillAttendance($employee, $period);
+
+        $counters = $this->aggregate($employee, $period);
+
+        $this->assertSame(count($filled), $counters['days_expected']);
+        $this->assertSame(count($filled), $counters['days_present']);
+    }
+
+    #[Test]
+    public function missing_two_of_twelve_is_nine_of_eleven(): void
+    {
+        $period = $this->period(2027, 2, 'first');
+        $night = $this->makeEmployee(23000, 'graveyard');
+        $days = $this->workingDays($night, $period);
+        $this->fillAttendance($night, $period, absentOn: [$days[2], $days[5]]);
+
+        $counters = $this->aggregate($night, $period);
+
+        $this->assertSame(11, $counters['days_expected']);
+        $this->assertSame(9, $counters['days_present']);
+        $this->assertSame(2, $counters['days_absent']);
+        $this->assertSame(9, $counters['night_diff_days']);
+    }
+
+    #[Test]
     public function a_full_graveyard_night_is_eight_night_hours(): void
     {
         // 22:00-07:00, but only 22:00-06:00 is inside the night window.
@@ -353,9 +509,9 @@ class AttendanceAggregatorTest extends PayrollTestCase
         $queries = count(DB::getQueryLog());
         DB::disableQueryLog();
 
-        // Attendance, breaks, schedule assignments, leave, overtime, holidays.
-        // Asking each attendance row for its own schedule instead would be
-        // thousands.
-        $this->assertLessThanOrEqual(8, $queries, "the aggregator issued {$queries} queries");
+        // Attendance, breaks, schedule assignments, leave, overtime, holidays,
+        // and payroll settings loaded once (whether the 31st counts). Asking
+        // each attendance row for its own schedule instead would be thousands.
+        $this->assertLessThanOrEqual(9, $queries, "the aggregator issued {$queries} queries");
     }
 }

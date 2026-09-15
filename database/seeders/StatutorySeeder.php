@@ -187,6 +187,22 @@ class StatutorySeeder extends Seeder
                 'group' => 'Daily and Hourly Rates',
             ],
             [
+                'key' => 'payroll_skip_31st',
+                'value' => '1',
+                'label' => 'Leave the 31st out of payroll',
+                'description' => 'Every cutoff counts 11 days and every month 22. The 31st earns no night differential and is never an absence or late, even when worked. Approved overtime on the 31st is still paid.',
+                'type' => 'boolean',
+                'group' => 'Daily and Hourly Rates',
+            ],
+            [
+                'key' => 'payroll_max_days_per_cutoff',
+                'value' => '11',
+                'label' => 'Days counted in every cutoff',
+                'description' => 'Every cutoff counts exactly this many days, so a month is 22. A 12-weekday cutoff drops a day worked and its night differential; a short one is filled up to this many days, but night differential still pays only nights worked. Absences always count. Not applied to somebody hired or leaving mid-cutoff. 0 turns it off.',
+                'type' => 'decimal',
+                'group' => 'Daily and Hourly Rates',
+            ],
+            [
                 'key' => 'hours_per_day',
                 'value' => '8',
                 'label' => 'Hours in a working day',
