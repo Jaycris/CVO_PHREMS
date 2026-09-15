@@ -114,6 +114,28 @@ new #[Layout('layouts.app')] class extends Component
         });
     }
 
+    /**
+     * Throws away a run that has not been finalized, computed or not.
+     *
+     * The service gives back everything the compute took — cash advance
+     * repayments, overtime, leave conversions, expense claims — so the same
+     * cutoff can be opened again from nothing. A finalized run has to be
+     * reopened first, which is what keeps this from undoing released pay.
+     */
+    public function cancelRun(PayrollService $service): void
+    {
+        $this->attempt(function () use ($service) {
+            abort_unless(Auth::user()->can('payroll.runs.manage'), 403, 'You cannot cancel a payroll run.');
+
+            $run = $this->run();
+            $label = $run->periodLabel();
+            $service->cancel($run);
+
+            session()->flash('payroll.status', 'Payroll run for ' . $label . ' cancelled.');
+            $this->redirectRoute('payroll.index', navigate: true);
+        });
+    }
+
     public function with(PayrollService $service): array
     {
         $run = $this->run();
@@ -250,6 +272,17 @@ new #[Layout('layouts.app')] class extends Component
                  different thing from sending each person their own payslip. --}}
             @if ($payslips->isNotEmpty() && $canManageRuns)
                 <x-button as="a" href="{{ route('payroll.export', $run) }}" variant="secondary">Download Register</x-button>
+            @endif
+
+            {{-- Finalized and paid runs are left out on purpose: reopen first. --}}
+            @if ($run->isMutable() && $canManageRuns)
+                <x-button type="button" variant="danger" wire:click="cancelRun"
+                          wire:confirm="{{ $run->status === 'draft'
+                              ? 'Cancel this payroll run? Nothing has been computed yet.'
+                              : 'Cancel this payroll run? Every payslip in it is deleted, including any adjustments typed in, and cash advance repayments, overtime, leave conversions and expense claims it paid are given back. You can start the cutoff again afterwards.' }}">
+                    <span wire:loading.remove wire:target="cancelRun">Cancel Run</span>
+                    <span wire:loading wire:target="cancelRun">Cancelling…</span>
+                </x-button>
             @endif
         </div>
 

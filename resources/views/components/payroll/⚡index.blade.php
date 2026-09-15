@@ -23,6 +23,9 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->year = (int) now()->year;
         $this->month = (int) now()->month;
+
+        // Set by the run page when a run is cancelled from there.
+        $this->statusMessage = session('payroll.status');
     }
 
     /**
@@ -65,8 +68,10 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->guardManage();
 
-        $service->cancel(PayrollRun::findOrFail($id));
-        $this->statusMessage = 'Draft discarded.';
+        $run = PayrollRun::findOrFail($id);
+        $label = $run->periodLabel();
+        $service->cancel($run);
+        $this->statusMessage = 'Payroll run for ' . $label . ' cancelled.';
     }
 
     public function with(): array
@@ -136,9 +141,12 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="px-4 py-3 text-right">
                                 <div class="flex justify-end gap-3">
                                     <a href="{{ route('payroll.show', $run) }}" wire:navigate class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Open</a>
-                                    @if ($run->status === 'draft' && $canManageRuns)
-                                        <button wire:click="cancelRun({{ $run->id }})" wire:confirm="Discard this draft? Nothing has been computed yet."
-                                                class="font-medium text-red-600 hover:text-red-700 dark:text-red-400">Discard</button>
+                                    @if ($run->isMutable() && $canManageRuns)
+                                        <button wire:click="cancelRun({{ $run->id }})"
+                                                wire:confirm="{{ $run->status === 'draft'
+                                                    ? 'Cancel this payroll run? Nothing has been computed yet.'
+                                                    : 'Cancel this computed payroll run? Its payslips and any adjustments are deleted, and what it deducted or paid is given back.' }}"
+                                                class="font-medium text-red-600 hover:text-red-700 dark:text-red-400">Cancel</button>
                                     @endif
                                 </div>
                             </td>
