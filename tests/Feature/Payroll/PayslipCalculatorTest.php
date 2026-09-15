@@ -36,6 +36,7 @@ class PayslipCalculatorTest extends PayrollTestCase
             'undertime_minutes' => 0,
             'over_break_minutes' => 0,
             'night_diff_days' => 0,
+            'night_diff_minutes' => 0,
             'overtime_hours' => 0,
         ], $overrides);
     }
@@ -143,14 +144,34 @@ class PayslipCalculatorTest extends PayrollTestCase
     }
 
     #[Test]
-    public function night_differential_is_paid_per_qualifying_day(): void
+    public function night_differential_is_paid_per_night_hour(): void
     {
-        $employee = $this->makeEmployee(20000);
+        $employee = $this->makeEmployee(23000);
 
-        // (20,000 / 22) x 10% x 10 days = 909.09.
-        $slip = $this->calculator()->calculate($employee, $this->counters(['night_diff_days' => 10]), 'second');
+        // Accounting's sheet: 23,000 / 22 / 8 = 130.68 an hour, 10% = 13.07,
+        // 8 hours x 11 nights = 88 hours = 1,150.00.
+        $slip = $this->calculator()->calculate(
+            $employee,
+            $this->counters(['night_diff_days' => 11, 'night_diff_minutes' => 88 * 60]),
+            'second'
+        );
 
-        $this->assertSame(909.09, $slip['night_differential_pay']);
+        $this->assertSame(1150.00, $slip['night_differential_pay']);
+    }
+
+    #[Test]
+    public function a_short_night_earns_less_night_differential(): void
+    {
+        $employee = $this->makeEmployee(23000);
+
+        // Half an hour late on one of 11 nights: 87.5 hours x 13.0682 = 1,143.47.
+        $slip = $this->calculator()->calculate(
+            $employee,
+            $this->counters(['night_diff_days' => 11, 'night_diff_minutes' => 88 * 60 - 30]),
+            'second'
+        );
+
+        $this->assertSame(1143.47, $slip['night_differential_pay']);
     }
 
     #[Test]
@@ -220,7 +241,7 @@ class PayslipCalculatorTest extends PayrollTestCase
             $employee,
             $this->counters([
                 'days_present' => 9, 'days_absent' => 2,
-                'late_minutes' => 37, 'overtime_hours' => 4.5, 'night_diff_days' => 6,
+                'late_minutes' => 37, 'overtime_hours' => 4.5, 'night_diff_days' => 6, 'night_diff_minutes' => 6 * 480 - 37,
             ]),
             'second'
         );

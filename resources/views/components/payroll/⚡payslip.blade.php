@@ -125,7 +125,11 @@ new #[Layout('layouts.app')] class extends Component
                 'Absent' => $payslip->days_absent,
                 'Late' => $payslip->late_minutes . ' min',
                 'Overtime' => rtrim(rtrim(number_format((float) $payslip->overtime_hours, 2), '0'), '.') . ' h',
-                'Night shift days' => $payslip->night_diff_days,
+                // Payslips from before night differential went per hour only
+                // recorded nights, so they keep showing that.
+                'Night hours' => (float) $payslip->night_diff_hours > 0
+                    ? rtrim(rtrim(number_format((float) $payslip->night_diff_hours, 2), '0'), '.') . ' h / ' . $payslip->night_diff_days . ' nights'
+                    : $payslip->night_diff_days . ' nights',
             ] as $label => $value)
                 <div>
                     <p class="text-xs font-medium text-[#778599]">{{ $label }}</p>

@@ -78,20 +78,29 @@ class WorkSchedule extends Model
      */
     public function overlapsNightWindow(string $windowStart = self::NIGHT_WINDOW_START, string $windowEnd = self::NIGHT_WINDOW_END): bool
     {
+        return $this->nightWindowMinutes($windowStart, $windowEnd) > 0;
+    }
+
+    /**
+     * How many minutes of the shift fall inside the night window. A 22:00-06:00
+     * graveyard is 480; a 09:00-18:00 day shift is 0.
+     */
+    public function nightWindowMinutes(string $windowStart = self::NIGHT_WINDOW_START, string $windowEnd = self::NIGHT_WINDOW_END): int
+    {
         $toMinutes = fn (string $time): int => (int) substr($time, 0, 2) * 60 + (int) substr($time, 3, 2);
 
         $shift = $this->spanToRanges($toMinutes($this->start_time->format('H:i')), $toMinutes($this->end_time->format('H:i')));
         $window = $this->spanToRanges($toMinutes($windowStart), $toMinutes($windowEnd));
 
+        $minutes = 0;
+
         foreach ($shift as [$shiftStart, $shiftEnd]) {
             foreach ($window as [$winStart, $winEnd]) {
-                if ($shiftStart < $winEnd && $winStart < $shiftEnd) {
-                    return true;
-                }
+                $minutes += max(0, min($shiftEnd, $winEnd) - max($shiftStart, $winStart));
             }
         }
 
-        return false;
+        return $minutes;
     }
 
     /**

@@ -9,6 +9,8 @@ use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\OffsiteAssignment;
 use App\Models\OvertimeRequest;
+use App\Models\PayrollSetting;
+use App\Models\WorkSchedule;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -110,6 +112,8 @@ class AttendanceAggregator
             'undertime_minutes' => 0,
             'over_break_minutes' => 0,
             'night_diff_days' => 0,
+            // Night differential is paid per hour, so this is what prices it.
+            'night_diff_minutes' => 0,
             'overtime_hours' => round($approvedOvertimeHours, 2),
             'unclosed_days' => [],
             'unscheduled_days' => [],
@@ -274,19 +278,48 @@ class AttendanceAggregator
                 $counters['unclosed_days'][] = $date;
             }
 
-            $counters['late_minutes'] += (int) ($row->lateMinutes($assignment) ?? 0);
-            $counters['undertime_minutes'] += (int) ($row->undertimeMinutes($assignment) ?? 0);
-            $counters['over_break_minutes'] += $row->overBreakMinutes($assignment);
+            $lateMinutes = (int) ($row->lateMinutes($assignment) ?? 0);
+            $undertimeMinutes = (int) ($row->undertimeMinutes($assignment) ?? 0);
+            $overBreakMinutes = $row->overBreakMinutes($assignment);
+
+            $counters['late_minutes'] += $lateMinutes;
+            $counters['undertime_minutes'] += $undertimeMinutes;
+            $counters['over_break_minutes'] += $overBreakMinutes;
 
             // Only days actually worked on a qualifying shift earn it, so a day
             // shift earns nothing and someone moved onto graveyard mid-cutoff
             // earns it only for the days after the move.
             if ($schedule->qualifiesForNightDifferential()) {
                 $counters['night_diff_days']++;
+                $counters['night_diff_minutes'] += $this->nightMinutes($schedule, $lateMinutes, $undertimeMinutes, $overBreakMinutes);
             }
         }
 
         return $counters;
+    }
+
+    /**
+     * The minutes of one night shift that earn night differential.
+     *
+     * Accounting pays it per hour and counts a full graveyard night as eight
+     * hours, breaks included. Time already taken off pay comes off the night
+     * hours too — lateness always, undertime and over-break only when those
+     * deductions are switched on — so nobody earns a night premium for time
+     * they were not there.
+     */
+    protected function nightMinutes(WorkSchedule $schedule, int $late, int $undertime, int $overBreak): int
+    {
+        $fullDay = (int) round(PayrollSetting::number('hours_per_day', 8) * 60);
+
+        // A schedule HR marked as earning it by hand can sit outside the window
+        // entirely; it still earns a full day's worth rather than nothing.
+        $scheduled = $schedule->nightWindowMinutes() ?: $fullDay;
+
+        $lost = $late
+            + (PayrollSetting::flag('undertime_deduction_enabled') ? $undertime : 0)
+            + (PayrollSetting::flag('overbreak_deduction_enabled') ? $overBreak : 0);
+
+        return max(0, min($scheduled, $fullDay) - $lost);
     }
 
     /**

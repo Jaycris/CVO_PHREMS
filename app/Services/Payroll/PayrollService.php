@@ -409,6 +409,7 @@ class PayrollService
             'days_holiday' => $counters['days_holiday'] ?? 0,
             'days_holiday_worked' => $counters['days_holiday_worked'] ?? 0,
             'night_diff_days' => $counters['night_diff_days'] ?? 0,
+            'night_diff_hours' => round(($counters['night_diff_minutes'] ?? 0) / 60, 2),
             'late_minutes' => $counters['late_minutes'] ?? 0,
             'undertime_minutes' => $counters['undertime_minutes'] ?? 0,
             'over_break_minutes' => $counters['over_break_minutes'] ?? 0,
@@ -657,7 +658,9 @@ class PayrollService
         $add('earning', 'Absences', -(float) $payslip->absence_deduction,
             ($payslip->days_absent + $payslip->days_lwop) . ' day(s)');
         $add('earning', 'Overtime', (float) $payslip->overtime_pay, $payslip->overtime_hours . ' hour(s)');
-        $add('earning', 'Night differential', (float) $payslip->night_differential_pay, $payslip->night_diff_days . ' day(s)');
+        $add('earning', 'Night differential', (float) $payslip->night_differential_pay,
+            rtrim(rtrim(number_format((float) $payslip->night_diff_hours, 2), '0'), '.') . ' hour(s) over '
+            . $payslip->night_diff_days . ' night(s)');
         $add('earning', 'Holiday premium', (float) $payslip->holiday_premium_pay,
             $payslip->days_holiday_worked . ' holiday(s) worked');
         $add('earning', 'Allowance', (float) $payslip->allowance);

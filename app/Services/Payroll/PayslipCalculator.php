@@ -184,29 +184,31 @@ class PayslipCalculator
     }
 
     /**
-     * A flat amount for each day worked on a shift overlapping the night
-     * window. Day shifts earn nothing.
+     * Paid per night hour, the way accounting works it out: ₱23,000 ÷ 22 ÷ 8
+     * is ₱130.68 an hour, 10% of that is ₱13.07, times the night hours worked.
+     * A full graveyard night is 8 hours, so 11 full nights is ₱1,150.00.
      *
-     * The divisor is a setting rather than a constant because the company's
-     * spreadsheet and this formula do not yet agree to the centavo — see the
-     * note on night_diff_divisor in Payroll Settings.
+     * The hour is priced over night_diff_divisor rather than the cutoff's
+     * scheduled days, because that is how accounting's sheet prices it. Late
+     * minutes are already off the night hours by the time they reach here.
      */
     protected function nightDifferentialPay(Employee $employee, array $counters): float
     {
-        $days = $counters['night_diff_days'] ?? 0;
+        $minutes = (int) ($counters['night_diff_minutes'] ?? 0);
 
-        if ($days === 0) {
+        if ($minutes <= 0) {
             return 0.0;
         }
 
         $divisor = PayrollSetting::number('night_diff_divisor', 22);
+        $hoursPerDay = PayrollSetting::number('hours_per_day', 8);
         $rate = PayrollSetting::number('night_diff_rate', 0.10);
 
-        if ($divisor <= 0) {
+        if ($divisor <= 0 || $hoursPerDay <= 0) {
             return 0.0;
         }
 
-        return round(((float) $employee->basic_salary / $divisor) * $rate * $days, 2);
+        return round((float) $employee->basic_salary / $divisor / $hoursPerDay * $rate * ($minutes / 60), 2);
     }
 
     /**

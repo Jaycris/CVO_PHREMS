@@ -251,6 +251,40 @@ class AttendanceAggregatorTest extends PayrollTestCase
 
         $this->assertGreaterThan(0, $this->aggregate($night, $period)['night_diff_days']);
         $this->assertSame(0, $this->aggregate($day, $period)['night_diff_days']);
+        $this->assertSame(0, $this->aggregate($day, $period)['night_diff_minutes']);
+    }
+
+    #[Test]
+    public function a_full_graveyard_night_is_eight_night_hours(): void
+    {
+        // 22:00-07:00, but only 22:00-06:00 is inside the night window.
+        $period = $this->period();
+        $night = $this->makeEmployee(23000, 'graveyard');
+        $filled = $this->fillAttendance($night, $period);
+
+        $counters = $this->aggregate($night, $period);
+
+        $this->assertSame(count($filled), $counters['night_diff_days']);
+        $this->assertSame(count($filled) * 480, $counters['night_diff_minutes']);
+    }
+
+    #[Test]
+    public function lateness_comes_off_the_night_hours(): void
+    {
+        // Accounting's rule: somebody late is not paid night differential for
+        // the time they were not there.
+        $period = $this->period();
+        $night = $this->makeEmployee(23000, 'graveyard');
+        $filled = $this->fillAttendance($night, $period);
+
+        $day = AttendanceDay::where('employee_id', $night->id)->whereDate('work_date', $filled[0])->sole();
+        $day->update(['time_in' => $day->time_in->copy()->addMinutes(30)]);
+
+        $counters = $this->aggregate($night, $period);
+
+        $this->assertSame(30, $counters['late_minutes']);
+        $this->assertSame(count($filled), $counters['night_diff_days']);
+        $this->assertSame(count($filled) * 480 - 30, $counters['night_diff_minutes']);
     }
 
     #[Test]
