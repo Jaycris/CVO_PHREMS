@@ -3,6 +3,7 @@
 use App\Http\Controllers\CashLedgerExportController;
 use App\Http\Controllers\CommissionSlipPdfController;
 use App\Http\Controllers\EmployeeExportController;
+use App\Http\Controllers\AgentPaySlipPdfController;
 use App\Http\Controllers\MyPayslipPdfController;
 use App\Http\Controllers\PayrollRegisterExportController;
 use Illuminate\Support\Facades\Route;
@@ -43,6 +44,10 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::livewire('/my-payslips', 'my-payslips')->name('my-payslips');
     Route::livewire('/my-payslips/{payslip}', 'my-payslips')->name('my-payslips.show');
     Route::get('/my-payslips/{payslip}/download', MyPayslipPdfController::class)->name('my-payslips.download');
+
+    // An agent's own pay slip for pay made outside payroll. The controller
+    // checks it is theirs, same as the payslip download above.
+    Route::get('/my-payslips/agent/{agentPayment}/download', [AgentPaySlipPdfController::class, 'download'])->name('my-payslips.agent-download');
 
     // Commission figures come from the CRM. The page shows the signer's own
     // slip, so it needs no permission — same reasoning as My Payslips.
@@ -142,6 +147,11 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     Route::middleware('can:reimbursements.view_all')->group(function () {
         Route::livewire('/reimbursements', 'reimbursements.index')->name('reimbursements.index');
+    });
+
+    // Pay for sales agents kept out of payroll runs. CEO/COO only.
+    Route::middleware('can:payroll.agent_pay.manage')->group(function () {
+        Route::livewire('/payroll/agent-pay', 'payroll.agent-pay')->name('payroll.agent-pay');
     });
 
     Route::middleware('can:payroll.settings.manage')->group(function () {

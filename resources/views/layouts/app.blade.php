@@ -165,7 +165,7 @@
                         @endcan
                     @endif
 
-                    @if (auth()->user()->canAny(['payroll.runs.manage', 'payroll.settings.manage', 'payroll.payslips.send']))
+                    @if (auth()->user()->canAny(['payroll.runs.manage', 'payroll.settings.manage', 'payroll.payslips.send', 'payroll.agent_pay.manage']))
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Payroll</p>
                         {{-- Named for what the person opening it can actually
                              do: somebody who may only release payslips is not
@@ -175,6 +175,9 @@
                         @endcan
                         @can('payroll.runs.manage')
                             <x-nav-link :href="route('payroll.thirteenth-month')" :active="request()->routeIs('payroll.thirteenth-month')" icon="money">13th Month</x-nav-link>
+                        @endcan
+                        @can('payroll.agent_pay.manage')
+                            <x-nav-link :href="route('payroll.agent-pay')" :active="request()->routeIs('payroll.agent-pay')" icon="money">Agent Pay</x-nav-link>
                         @endcan
                         @can('payroll.settings.manage')
                             <x-nav-link :href="route('payroll.settings')" :active="request()->routeIs('payroll.settings')" icon="tag">Payroll Settings</x-nav-link>
@@ -242,6 +245,7 @@
                         request()->routeIs('payroll.settings') => 'Payroll Settings',
                         request()->routeIs('payroll.thirteenth-month') => '13th Month Pay',
                         request()->routeIs('payroll.payslip') => 'Payslip',
+                        request()->routeIs('payroll.agent-pay') => 'Agent Pay',
                         request()->routeIs('payroll.*') => 'Payroll',
                         request()->routeIs('reports.attendance-summary') => 'Attendance Summary',
                         request()->routeIs('settings') => 'System Settings',

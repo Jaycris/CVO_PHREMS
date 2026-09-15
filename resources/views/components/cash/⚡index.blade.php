@@ -92,6 +92,13 @@ new #[Layout('layouts.app')] class extends Component
     {
         $entry = CashEntry::findOrFail($id);
 
+        if ($this->lockedByAgentPay($entry)) {
+            $this->showForm = false;
+            $this->statusMessage = 'That entry was written by Agent Pay. Change the payment there, and this entry follows.';
+
+            return;
+        }
+
         $this->editingId = $entry->id;
         $this->direction = $entry->direction;
         $this->entryDate = $entry->entry_date->toDateString();
@@ -107,6 +114,13 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save(): void
     {
+        // The edit button is hidden and edit() refuses, but a crafted request
+        // can still arrive with an id — and that is the path by which the entry
+        // and its agent payment would start to disagree.
+        if ($this->editingId && ($existing = CashEntry::find($this->editingId)) && $this->lockedByAgentPay($existing)) {
+            abort(403, 'That entry was written by Agent Pay. Change the payment there instead.');
+        }
+
         $data = $this->validate([
             'entryDate' => ['required', 'date'],
             'direction' => ['required', 'in:in,out'],
@@ -144,9 +158,29 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
-        CashEntry::findOrFail($id)->delete();
+        $entry = CashEntry::findOrFail($id);
+
+        if ($this->lockedByAgentPay($entry)) {
+            $this->statusMessage = 'That entry was written by Agent Pay. Delete the payment there, and this entry goes with it.';
+
+            return;
+        }
+
+        $entry->delete();
 
         $this->statusMessage = 'Entry removed.';
+    }
+
+    /**
+     * Whether an entry belongs to an agent payment.
+     *
+     * Those are changed from Agent Pay, never from here. The payment is the
+     * source of truth; editing its entry on this screen would leave two records
+     * of the same money that disagree, with nothing to say which is right.
+     */
+    protected function lockedByAgentPay(CashEntry $entry): bool
+    {
+        return $entry->source_type === \App\Services\Payroll\AgentPayService::LEDGER_SOURCE;
     }
 
     protected function periodStart(): Carbon
@@ -349,13 +383,19 @@ new #[Layout('layouts.app')] class extends Component
                                 {{ $entry->isIn() ? '—' : $peso($entry->amount) }}
                             </td>
                             <td class="px-4 py-3 text-right">
-                                <div class="flex flex-wrap justify-end gap-2">
-                                    <x-button wire:click="edit({{ $entry->id }})" @click="$wire.showForm = true"
-                                              variant="secondary" class="h-9 px-3 text-xs">Edit</x-button>
-                                    <x-button wire:click="delete({{ $entry->id }})"
-                                              wire:confirm="Remove this entry? It comes straight out of the totals."
-                                              variant="secondary" class="h-9 px-3 text-xs">Delete</x-button>
-                                </div>
+                                @if ($entry->source_type === \App\Services\Payroll\AgentPayService::LEDGER_SOURCE)
+                                    {{-- Changed from Agent Pay, never here, so the entry
+                                         and its payment cannot disagree. --}}
+                                    <span class="text-xs font-semibold text-ink-500 dark:text-ink-400">From Agent Pay</span>
+                                @else
+                                    <div class="flex flex-wrap justify-end gap-2">
+                                        <x-button wire:click="edit({{ $entry->id }})" @click="$wire.showForm = true"
+                                                  variant="secondary" class="h-9 px-3 text-xs">Edit</x-button>
+                                        <x-button wire:click="delete({{ $entry->id }})"
+                                                  wire:confirm="Remove this entry? It comes straight out of the totals."
+                                                  variant="secondary" class="h-9 px-3 text-xs">Delete</x-button>
+                                    </div>
+                                @endif
                             </td>
                         </tr>
                     @empty

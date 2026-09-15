@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Concerns\WithTablePagination;
+use App\Models\AgentPayment;
 use App\Models\Payslip;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -13,6 +14,10 @@ new #[Layout('layouts.app')] class extends Component
 
     #[Locked]
     public ?int $openId = null;
+
+    // An agent pay slip open in the same kind of window a payslip gets.
+    #[Locked]
+    public ?int $openAgentSlipId = null;
 
     public string $year = '';
 
@@ -46,11 +51,34 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->authorizeOwn(Payslip::with('payrollRun')->findOrFail($id));
         $this->openId = $id;
+        $this->openAgentSlipId = null;
     }
 
     public function closePayslip(): void
     {
         $this->openId = null;
+    }
+
+    /**
+     * Opens an agent pay slip, but only the signer's own.
+     *
+     * No release step like a payslip has: an agent payment is final the moment
+     * the CEO or COO record it, so there is no draft figure to hide.
+     */
+    public function openAgentSlip(int $id): void
+    {
+        $employee = Auth::user()?->employee;
+        $slip = AgentPayment::findOrFail($id);
+
+        abort_unless($employee && $slip->employee_id === $employee->id, 403, 'That pay slip is not yours.');
+
+        $this->openAgentSlipId = $slip->id;
+        $this->openId = null;
+    }
+
+    public function closeAgentSlip(): void
+    {
+        $this->openAgentSlipId = null;
     }
 
 
@@ -109,6 +137,15 @@ new #[Layout('layouts.app')] class extends Component
             'displayGrossPay' => round((float) $earnings->sum('amount'), 2),
             'displayTotalDeductions' => round((float) $deductions->sum('amount'), 2),
             'hasEmployee' => $employee !== null,
+            // Pay recorded outside payroll runs, for agents paid by hand.
+            'agentSlips' => $employee
+                ? AgentPayment::where('employee_id', $employee->id)->orderByDesc('paid_on')->orderByDesc('id')->get()
+                : collect(),
+            // Looked up with the owner check built in, so a stale id for
+            // somebody else's slip simply finds nothing.
+            'openAgentSlip' => $employee && $this->openAgentSlipId
+                ? AgentPayment::where('employee_id', $employee->id)->find($this->openAgentSlipId)
+                : null,
         ];
     }
 };
@@ -243,6 +280,51 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             @endif
         </x-card>
+
+        {{-- Only shown to somebody who has one, so everybody paid through
+             payroll sees exactly the page they always did. --}}
+        @if ($agentSlips->isNotEmpty())
+            <x-card :padding="false">
+                <div class="border-b border-ink-200 px-6 py-4 dark:border-white/10">
+                    <h2 class="text-base font-bold text-ink-950 dark:text-white">Pay Slips</h2>
+                    <p class="mt-0.5 text-sm font-medium text-ink-500 dark:text-ink-400">Pay recorded outside the regular payroll run.</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="directory-table">
+                        <thead class="directory-table-head">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">For</th>
+                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Description</th>
+                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Paid On</th>
+                                <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-ink-600 dark:text-ink-300">Amount</th>
+                                <th class="px-6 py-4"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="directory-table-body">
+                            @foreach ($agentSlips as $slip)
+                                <tr wire:key="agent-slip-{{ $slip->id }}"
+                                    wire:click="openAgentSlip({{ $slip->id }})"
+                                    wire:loading.class="opacity-70"
+                                    wire:target="openAgentSlip({{ $slip->id }})"
+                                    class="directory-row cursor-pointer">
+                                    <td class="whitespace-nowrap px-6 py-4 font-bold text-ink-800 dark:text-white">{{ $slip->monthLabel() }}</td>
+                                    <td class="px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $slip->description }}</td>
+                                    <td class="whitespace-nowrap px-4 py-4 font-medium text-ink-600 dark:text-ink-300">{{ $slip->paid_on->format('M j, Y') }}</td>
+                                    <td class="whitespace-nowrap px-4 py-4 text-right font-bold text-ink-950 tabular-nums dark:text-white">₱{{ number_format((float) $slip->amount, 2) }}</td>
+                                    {{-- The download must not also open the window. --}}
+                                    <td class="whitespace-nowrap px-6 py-4 text-right" onclick="event.stopPropagation()">
+                                        <a href="{{ route('my-payslips.agent-download', $slip) }}"
+                                           class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 text-xs font-bold text-ink-600 shadow-sm transition hover:bg-ink-50 dark:border-white/10 dark:bg-ink-900 dark:text-ink-300 dark:hover:bg-white/10">
+                                            <x-icon name="download" class="h-4 w-4" /> PDF
+                                        </a>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </x-card>
+        @endif
     @endunless
 
     <x-modal :show="(bool) $open" onClose="closePayslip" maxWidth="2xl">
@@ -330,6 +412,81 @@ new #[Layout('layouts.app')] class extends Component
 
                 <div class="mt-5 flex gap-2">
                     <x-button variant="secondary" x-on:click="$dispatch('close-modal-visual'); setTimeout(() => $wire.closePayslip(), 120)">Close</x-button>
+                </div>
+            </div>
+        @endif
+    </x-modal>
+
+    {{-- The same window a regular payslip opens in, so an agent paid outside
+         payroll reads their pay the same way everybody else does. --}}
+    <x-modal :show="(bool) $openAgentSlip" onClose="closeAgentSlip" maxWidth="2xl">
+        @if ($openAgentSlip)
+            <div
+                x-data="{ ready: false }"
+                x-init="requestAnimationFrame(() => ready = true)"
+                x-show="ready"
+                x-transition:enter="ease-out duration-200"
+                x-transition:enter-start="opacity-0 translate-y-3 scale-[0.98]"
+                x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+            >
+                <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h2 class="text-lg font-bold text-[#0f172a] dark:text-white">{{ $openAgentSlip->monthLabel() }}</h2>
+                        <p class="text-sm font-medium text-[#778599]">Paid {{ $openAgentSlip->paid_on->format('F j, Y') }}</p>
+                    </div>
+                    <x-badge color="green">Paid</x-badge>
+                </div>
+
+                <div class="mb-5 grid grid-cols-2 gap-3 rounded-lg bg-[#f8fafc] p-3 text-sm sm:grid-cols-3 dark:bg-neutral-800/50">
+                    @foreach ([
+                        'Paid' => 'Outside payroll',
+                        'MTD sales' => $openAgentSlip->mtd_usd !== null ? 'USD ' . number_format((float) $openAgentSlip->mtd_usd, 2) : '—',
+                        'Reference' => $openAgentSlip->reference ?: $openAgentSlip->referenceCode(),
+                    ] as $label => $value)
+                        <div>
+                            <p class="text-xs font-medium text-[#778599]">{{ $label }}</p>
+                            <p class="mt-0.5 font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $value }}</p>
+                        </div>
+                    @endforeach
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Earnings</p>
+                        <div class="mt-2 divide-y divide-neutral-100 dark:divide-neutral-800">
+                            <div class="flex items-baseline justify-between gap-4 py-2">
+                                <span class="text-sm font-medium text-[#65758c] dark:text-neutral-300">{{ $openAgentSlip->description }}</span>
+                                <span class="text-sm font-medium text-[#0f172a] tabular-nums dark:text-white">₱{{ number_format((float) $openAgentSlip->amount, 2) }}</span>
+                            </div>
+                            <div class="flex items-baseline justify-between gap-4 py-2">
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white">Gross pay</span>
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $openAgentSlip->amount, 2) }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Deductions</p>
+                        <div class="mt-2 divide-y divide-neutral-100 dark:divide-neutral-800">
+                            <p class="py-2 text-sm font-medium text-[#778599]">Nothing deducted.</p>
+                            <div class="flex items-baseline justify-between gap-4 py-2">
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white">Total deductions</span>
+                                <span class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-baseline justify-between gap-4 rounded-lg bg-brand-50 px-4 py-3 dark:bg-brand-900/20">
+                        <span class="text-base font-bold text-[#0f172a] dark:text-white">Net Pay</span>
+                        <span class="text-2xl font-bold text-brand-700 dark:text-brand-300 tabular-nums">₱{{ number_format((float) $openAgentSlip->amount, 2) }}</span>
+                    </div>
+                </div>
+
+                <div class="mt-5 flex gap-2">
+                    <x-button variant="secondary" x-on:click="$dispatch('close-modal-visual'); setTimeout(() => $wire.closeAgentSlip(), 120)">Close</x-button>
+                    <x-button as="a" variant="secondary" href="{{ route('my-payslips.agent-download', $openAgentSlip) }}">
+                        <x-icon name="download" class="h-4 w-4" /> Download PDF
+                    </x-button>
                 </div>
             </div>
         @endif

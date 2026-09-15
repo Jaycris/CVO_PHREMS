@@ -41,6 +41,9 @@ class CashCategorySeeder extends Seeder
                 'Staff Welfare',
                 'Repairs and Maintenance',
                 'Other Expense',
+                // Written automatically when the CEO/COO record pay for an agent
+                // kept out of payroll. Listed here so it exists before the first.
+                'Agent Pay',
             ],
         ];
 

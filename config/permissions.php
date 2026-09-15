@@ -117,6 +117,7 @@ return [
              * that changes one stays hidden and refuses if called anyway.
              */
             'payroll.payslips.send' => 'Payroll — send finalized payslips out to employees (does not allow running payroll)',
+            'payroll.agent_pay.manage' => 'Agent Pay — record pay for agents kept out of payroll, and send their pay slip (CEO/COO)',
             'payroll.settings.manage' => 'Payroll Settings — government contribution rates, which cutoff they come out of, and company payroll policy',
         ],
 
