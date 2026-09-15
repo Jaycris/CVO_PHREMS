@@ -198,7 +198,7 @@ class StatutorySeeder extends Seeder
                 'key' => 'payroll_max_days_per_cutoff',
                 'value' => '11',
                 'label' => 'Days counted in every cutoff',
-                'description' => 'Every cutoff counts exactly this many days, so a month is 22. A 12-weekday cutoff drops a day worked and its night differential; a short one is filled up to this many days, but night differential still pays only nights worked. Absences always count. Not applied to somebody hired or leaving mid-cutoff. 0 turns it off.',
+                'description' => 'Every cutoff counts exactly this many days, so a month is 22. Extra weekdays are dropped and short cutoffs filled up; night differential pays only nights worked. Absences always count. 0 turns it off.',
                 'type' => 'decimal',
                 'group' => 'Daily and Hourly Rates',
             ],
