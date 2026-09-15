@@ -89,7 +89,7 @@ new #[Layout('layouts.app')] class extends Component
         <div class="relative mt-5 overflow-hidden rounded-lg border border-white/10 bg-ink-950 shadow-sm">
             <img src="{{ asset('images/logo-mark.png') }}" alt="" class="pointer-events-none absolute -bottom-16 -left-14 h-56 w-56 object-contain opacity-[0.06]">
 
-            <div class="relative z-10 flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div class="relative flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">
                 <a href="{{ route('my-profile') }}" wire:navigate class="group flex min-w-0 items-center gap-4">
                     @if ($employee)
                         <x-avatar :employee="$employee" size="lg" class="!h-16 !w-16 ring-4 ring-white/10 transition group-hover:ring-brand-300/40" />
