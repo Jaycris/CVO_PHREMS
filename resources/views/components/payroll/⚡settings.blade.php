@@ -730,7 +730,8 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="px-5 py-4">
                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">{{ $group }}</p>
                     <div class="mt-3 space-y-4">
-                        @foreach ($items as $setting)
+                        {{-- The choice that decides how a group works reads first. --}}
+                        @foreach ($items->sortBy(fn ($s) => $s->type === 'choice' ? 0 : 1) as $setting)
                             {{-- The fixed divisor is meaningless while the rate follows the calendar. --}}
                             @continue($setting->key === 'daily_rate_divisor' && ($settings['daily_rate_basis'] ?? 'actual') === 'actual')
 
@@ -746,6 +747,11 @@ new #[Layout('layouts.app')] class extends Component
                                         <x-select wire:model.live="settings.{{ $setting->key }}">
                                             <option value="actual">Each month's real working days</option>
                                             <option value="fixed">A fixed number every month</option>
+                                        </x-select>
+                                    @elseif ($setting->type === 'choice' && $setting->key === 'night_diff_basis')
+                                        <x-select wire:model="settings.{{ $setting->key }}">
+                                            <option value="per_hour">Per hour (late minutes come off)</option>
+                                            <option value="per_day">Per day (flat for each night)</option>
                                         </x-select>
                                     @elseif ($setting->type === 'boolean')
                                         <x-select wire:model="settings.{{ $setting->key }}">

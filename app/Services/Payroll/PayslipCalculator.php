@@ -183,23 +183,27 @@ class PayslipCalculator
         return round($hourlyRate * ($counters['overtime_hours'] ?? 0), 2);
     }
 
+    /** Whether night differential is paid per night hour rather than per night. */
+    public static function nightDiffPerHour(): bool
+    {
+        return PayrollSetting::get('night_diff_basis', 'per_hour') !== 'per_day';
+    }
+
     /**
-     * Paid per night hour, the way accounting works it out: ₱23,000 ÷ 22 ÷ 8
-     * is ₱130.68 an hour, 10% of that is ₱13.07, times the night hours worked.
-     * A full graveyard night is 8 hours, so 11 full nights is ₱1,150.00.
+     * Two ways to pay it, chosen in Payroll Settings — only ever one at a time.
      *
-     * The hour is priced over night_diff_divisor rather than the cutoff's
-     * scheduled days, because that is how accounting's sheet prices it. Late
-     * minutes are already off the night hours by the time they reach here.
+     * Per hour, the way accounting works it out: ₱23,000 ÷ 22 ÷ 8 is ₱130.68 an
+     * hour, 10% of that is ₱13.07, times the night hours worked. Late minutes
+     * are already off the night hours by the time they reach here.
+     *
+     * Per day, the earlier way: ₱23,000 ÷ 22 × 10% is ₱104.55 for each night
+     * worked, however long the night was.
+     *
+     * A full graveyard night is 8 hours, so 11 full nights is ₱1,150.00 either
+     * way. They only part company on a short night.
      */
     protected function nightDifferentialPay(Employee $employee, array $counters): float
     {
-        $minutes = (int) ($counters['night_diff_minutes'] ?? 0);
-
-        if ($minutes <= 0) {
-            return 0.0;
-        }
-
         $divisor = PayrollSetting::number('night_diff_divisor', 22);
         $hoursPerDay = PayrollSetting::number('hours_per_day', 8);
         $rate = PayrollSetting::number('night_diff_rate', 0.10);
@@ -208,7 +212,15 @@ class PayslipCalculator
             return 0.0;
         }
 
-        return round((float) $employee->basic_salary / $divisor / $hoursPerDay * $rate * ($minutes / 60), 2);
+        $dayPay = (float) $employee->basic_salary / $divisor;
+
+        if (! self::nightDiffPerHour()) {
+            return round($dayPay * $rate * (int) ($counters['night_diff_days'] ?? 0), 2);
+        }
+
+        $minutes = (int) ($counters['night_diff_minutes'] ?? 0);
+
+        return round($dayPay / $hoursPerDay * $rate * ($minutes / 60), 2);
     }
 
     /**

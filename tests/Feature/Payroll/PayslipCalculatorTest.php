@@ -175,6 +175,24 @@ class PayslipCalculatorTest extends PayrollTestCase
     }
 
     #[Test]
+    public function per_day_pays_a_flat_amount_for_each_night_whatever_its_length(): void
+    {
+        $this->setPayrollSetting('night_diff_basis', 'per_day');
+
+        $employee = $this->makeEmployee(23000);
+
+        // The earlier way: 23,000 / 22 x 10% = 104.55 a night. Ten nights is
+        // 1,045.45, and the half hour late on one of them changes nothing.
+        $slip = $this->calculator()->calculate(
+            $employee,
+            $this->counters(['night_diff_days' => 10, 'night_diff_minutes' => 80 * 60 - 30]),
+            'second'
+        );
+
+        $this->assertSame(1045.45, $slip['night_differential_pay']);
+    }
+
+    #[Test]
     public function undertime_and_over_break_are_counted_but_not_charged_by_default(): void
     {
         $employee = $this->makeEmployee(20000);
