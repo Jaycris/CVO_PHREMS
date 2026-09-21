@@ -33,6 +33,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $quota = '';
     public string $employment_status = 'Probationary';
     public ?int $reports_to_id = null;
+    public bool $welcome_sms = false;
 
     public function mount(): void
     {
@@ -76,6 +77,7 @@ new #[Layout('layouts.app')] class extends Component
             'allowance' => ['nullable', 'numeric', 'min:0'],
             'employment_status' => ['required', 'in:Probationary,Regular,Contract,Training'],
             'reports_to_id' => ['nullable', 'exists:employees,id'],
+            'welcome_sms' => ['boolean'],
             // How often their commission is worked out. Drives which
             // commission run pre-selects them.
             'commission_frequency' => ['required', 'in:none,monthly,biweekly'],
@@ -321,6 +323,15 @@ new #[Layout('layouts.app')] class extends Component
                                 Only employees in supervisory positions are listed. Leave approvals route here.
                             @endif
                         </p>
+                    </div>
+                    <div class="sm:col-span-3">
+                        <label class="flex items-start gap-3 rounded-lg border border-ink-200 bg-ink-50/60 p-4 dark:border-white/10 dark:bg-white/5">
+                            <input type="checkbox" wire:model="welcome_sms" class="mt-0.5 h-4 w-4 rounded border-ink-300 text-brand-700 focus:ring-brand-500">
+                            <span>
+                                <span class="block text-sm font-semibold text-ink-900 dark:text-white">Send a welcome text</span>
+                                <span class="mt-0.5 block text-xs font-medium text-[#778599]">Texted once to their mobile number when onboarding is complete, their password is set, their account is enabled and they are active. Uses 1 SMS credit.</span>
+                            </span>
+                        </label>
                     </div>
                 </div>
             </section>

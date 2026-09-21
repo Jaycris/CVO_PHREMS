@@ -48,6 +48,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $pagibig_number = '';
     public string $workplace_type = '';
     public bool $tracks_attendance = true;
+    public bool $welcome_sms = false;
     public string $employment_type = '';
     public string $company_email = '';
     public string $personal_email = '';
@@ -107,6 +108,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->pagibig_number = (string) $employee->pagibig_number;
         $this->workplace_type = (string) $employee->workplace_type;
         $this->tracks_attendance = (bool) $employee->tracks_attendance;
+        $this->welcome_sms = (bool) $employee->welcome_sms;
         $this->employment_type = (string) $employee->employment_type;
         $this->company_email = (string) $employee->company_email;
         $this->personal_email = (string) $employee->personal_email;
@@ -177,6 +179,7 @@ new #[Layout('layouts.app')] class extends Component
             'philhealth_number' => ['nullable', 'string', 'max:50'],
             'pagibig_number' => ['nullable', 'string', 'max:50'],
             'tracks_attendance' => ['boolean'],
+            'welcome_sms' => ['boolean'],
             'workplace_type' => ['nullable', 'in:Onsite,Hybrid,Remote'],
             'employment_type' => ['nullable', 'in:Full-time,Part-time'],
             // Unique across everyone except this employee, otherwise saving an
@@ -234,6 +237,10 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $this->employee->update($data);
+
+        // Ticked after they finished onboarding and set a password, this is
+        // the last of the three, so it goes now.
+        app(\App\Services\Sms\WelcomeText::class)->sendIfReady($this->employee);
 
         $this->redirect(route('employees.show', $this->employee), navigate: true);
     }
@@ -534,6 +541,19 @@ new #[Layout('layouts.app')] class extends Component
                         @error('reports_to_id') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
                     </div>
+
+                    <label class="flex items-start gap-3 rounded-lg border border-ink-200 bg-ink-50/60 p-4 dark:border-white/10 dark:bg-white/5">
+                        <input type="checkbox" wire:model="welcome_sms" @disabled($employee->welcome_sms_sent_at)
+                               class="mt-0.5 h-4 w-4 rounded border-ink-300 text-brand-700 focus:ring-brand-500 disabled:opacity-60">
+                        <span>
+                            <span class="block text-sm font-semibold text-ink-900 dark:text-white">Send a welcome text</span>
+                            @if ($employee->welcome_sms_sent_at)
+                                <span class="mt-0.5 block text-xs font-semibold text-emerald-700 dark:text-emerald-400">Sent {{ $employee->welcome_sms_sent_at->timezone(config('app.timezone'))->format('M j, Y g:i A') }}.</span>
+                            @else
+                                <span class="mt-0.5 block text-xs font-medium text-[#778599]">Texted once to their mobile number when onboarding is complete, their password is set, their account is enabled and they are active. If all of that is already true, it goes when you save. Uses 1 SMS credit.</span>
+                            @endif
+                        </span>
+                    </label>
                 </div>
             </section>
 

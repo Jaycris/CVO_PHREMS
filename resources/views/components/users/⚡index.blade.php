@@ -85,6 +85,12 @@ new #[Layout('layouts.app')] class extends Component
             if ((bool) $user->is_active !== $active) {
                 $user->update(['is_active' => $active]);
                 $changed++;
+
+                // Enabling can be the last thing a new hire's welcome text
+                // was waiting for.
+                if ($active && $user->employee) {
+                    app(\App\Services\Sms\WelcomeText::class)->sendIfReady($user->employee);
+                }
             }
         }
 

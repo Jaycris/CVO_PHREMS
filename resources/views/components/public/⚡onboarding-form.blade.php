@@ -103,6 +103,10 @@ new #[Layout('layouts.guest')] class extends Component
                 report($e);
             }
         });
+
+        // Their mobile number is only on file from here, so if HR ticked the
+        // welcome text and the password is already set, this is when it goes.
+        app(\App\Services\Sms\WelcomeText::class)->sendIfReady($this->employee);
     }
 
     public function with(): array

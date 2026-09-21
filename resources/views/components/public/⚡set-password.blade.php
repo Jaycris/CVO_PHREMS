@@ -31,6 +31,11 @@ new #[Layout('layouts.guest')] class extends Component
             'password_set_at' => now(),
         ]);
 
+        // Usually the last of the three, so usually where the welcome text goes.
+        if ($employee = $this->user->employee) {
+            app(\App\Services\Sms\WelcomeText::class)->sendIfReady($employee);
+        }
+
         session()->flash('status', 'Password set successfully. You can now log in.');
 
         $this->redirect(route('login'), navigate: true);
