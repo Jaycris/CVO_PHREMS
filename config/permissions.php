@@ -139,6 +139,8 @@ return [
              * administrator changes on somebody's behalf on a Tuesday.
              */
             'app.settings.pagination.manage' => 'Settings — change how many rows every table shows (CEO/COO)',
+            // Whoever holds it also keeps using PHREMS while it is switched off.
+            'app.maintenance.manage' => 'Maintenance — switch PHREMS off for everyone else and back on (CEO/COO)',
         ],
 
     ],

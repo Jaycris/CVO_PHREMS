@@ -356,6 +356,17 @@
                 </div>
 
                 <main id="page-content" class="page-transition flex-1 p-4 sm:p-6">
+                    {{-- Only people let through ever see a page while it is on,
+                         so they are the ones who must not forget it. --}}
+                    @if (\App\Services\MaintenanceMode::isOn())
+                        <div class="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                            <span>Maintenance is on. Everyone else sees the maintenance page.</span>
+                            @can('app.settings.manage')
+                                <a href="{{ route('settings') }}" wire:navigate class="underline underline-offset-2">Turn it off in System Settings</a>
+                            @endcan
+                        </div>
+                    @endif
+
                     {{ $slot }}
                 </main>
 

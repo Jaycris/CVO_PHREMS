@@ -31,6 +31,9 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->web(append: [
             \App\Http\Middleware\RecordLastSeen::class,
+            // Web only, for the same reason: it has to know who is signed in
+            // to let the CEO or COO through. The CRM's API is left running.
+            \App\Http\Middleware\ShowMaintenancePage::class,
         ]);
 
         $middleware->alias([

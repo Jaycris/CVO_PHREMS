@@ -2,6 +2,7 @@
 
 use App\Models\ApiToken;
 use App\Models\AppSetting;
+use App\Services\MaintenanceMode;
 use App\Services\Sms\PhoneNumber;
 use App\Services\Sms\SmsGateway;
 use Livewire\Attributes\Layout;
@@ -27,11 +28,19 @@ new #[Layout('layouts.app')] class extends Component
 
         // Their own mobile, so the obvious first test is one keystroke.
         $this->testNumber = (string) (auth()->user()?->employee?->personal_contact_number ?? '');
+
+        $this->maintenanceNote = MaintenanceMode::message() ?? '';
+    }
+
+    /** Every setting but the maintenance switch, which has its own card. */
+    protected function generalSettings()
+    {
+        return AppSetting::query()->where('group', '<>', MaintenanceMode::GROUP);
     }
 
     protected function loadSettings(): void
     {
-        $this->settings = AppSetting::query()
+        $this->settings = $this->generalSettings()
             ->orderBy('group')
             ->orderBy('id')
             ->pluck('value', 'key')
@@ -59,6 +68,12 @@ new #[Layout('layouts.app')] class extends Component
         ]);
 
         foreach ($this->settings as $key => $value) {
+            // Never through here, whoever is saving. A crafted request could
+            // otherwise switch PHREMS off with nothing but app.settings.manage.
+            if (str_starts_with($key, 'maintenance_')) {
+                continue;
+            }
+
             // The control is not rendered for anybody else, but a crafted
             // request still reaches this loop — and this one setting changes
             // every table for every person in the company.
@@ -76,6 +91,36 @@ new #[Layout('layouts.app')] class extends Component
         AppSetting::flushCache();
 
         $this->statusMessage = 'Settings saved.';
+    }
+
+    /*
+     * Switching PHREMS off for everyone else while it is worked on.
+     */
+
+    public string $maintenanceNote = '';
+
+    public function turnMaintenanceOn(): void
+    {
+        abort_unless(MaintenanceMode::canBypass(auth()->user()), 403);
+
+        $this->validate(
+            ['maintenanceNote' => ['nullable', 'string', 'max:255']],
+            [],
+            ['maintenanceNote' => 'note'],
+        );
+
+        MaintenanceMode::turnOn(auth()->user(), $this->maintenanceNote);
+
+        $this->statusMessage = 'Maintenance is on. Everyone without the maintenance permission now sees the maintenance page.';
+    }
+
+    public function turnMaintenanceOff(): void
+    {
+        abort_unless(MaintenanceMode::canBypass(auth()->user()), 403);
+
+        MaintenanceMode::turnOff();
+
+        $this->statusMessage = 'Maintenance is off. PHREMS is open to everyone again.';
     }
 
     /*
@@ -178,7 +223,11 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         return [
-            'groups' => AppSetting::query()
+            'canManageMaintenance' => MaintenanceMode::canBypass(auth()->user()),
+            'maintenanceOn' => MaintenanceMode::isOn(),
+            'maintenanceSince' => MaintenanceMode::startedAt(),
+            'maintenanceBy' => MaintenanceMode::startedBy(),
+            'groups' => $this->generalSettings()
                 ->orderBy('group')
                 ->orderBy('id')
                 ->get()
@@ -205,6 +254,57 @@ new #[Layout('layouts.app')] class extends Component
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
             {{ $statusMessage }}
         </div>
+    @endif
+
+    @if ($canManageMaintenance)
+        <x-card :padding="false">
+            <div class="flex flex-wrap items-start justify-between gap-4 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                <div class="max-w-xl">
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#526783] dark:text-neutral-300">Maintenance</p>
+                    <h2 class="mt-1 text-base font-bold text-[#0f172a] dark:text-white">Switch PHREMS off for everyone else</h2>
+                    <p class="mt-1 text-xs font-medium text-[#778599]">
+                        While it is on, staff see the maintenance page instead of PHREMS. You, and anybody else with the maintenance permission, keep working as normal.
+                        The CRM connection keeps running.
+                    </p>
+                </div>
+
+                @if ($maintenanceOn)
+                    <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">On</span>
+                @else
+                    <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">Off — PHREMS is open</span>
+                @endif
+            </div>
+
+            <div class="space-y-4 px-5 py-4">
+                @if ($maintenanceOn && $maintenanceSince)
+                    <p class="text-sm font-medium text-[#65758c] dark:text-neutral-300">
+                        On since {{ $maintenanceSince->timezone(config('app.timezone'))->format('M j, g:i A') }}{{ $maintenanceBy ? ', switched on by ' . $maintenanceBy : '' }}.
+                    </p>
+                @endif
+
+                <div>
+                    <label for="maintenance-note" class="text-sm font-medium text-[#65758c] dark:text-white">Note for staff <span class="text-[#778599]">(optional)</span></label>
+                    <x-input id="maintenance-note" wire:model="maintenanceNote" type="text" maxlength="255"
+                             placeholder="e.g. Back by 3:00 PM. Payroll is being updated." />
+                    @error('maintenanceNote')
+                        <p class="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    @if ($maintenanceOn)
+                        <x-button type="button" wire:click="turnMaintenanceOff">Turn maintenance off</x-button>
+                        <x-button type="button" variant="secondary" wire:click="turnMaintenanceOn">Update the note</x-button>
+                    @else
+                        <x-button type="button" variant="danger" wire:click="turnMaintenanceOn"
+                                  wire:confirm="Switch PHREMS off for everyone else? Staff who are signed in are stopped at their next click.">
+                            Turn maintenance on
+                        </x-button>
+                    @endif
+                    <x-button as="a" href="{{ route('maintenance.preview') }}" target="_blank" variant="secondary">Preview the page</x-button>
+                </div>
+            </div>
+        </x-card>
     @endif
 
     <x-card :padding="false">

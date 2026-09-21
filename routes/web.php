@@ -3,6 +3,7 @@
 use App\Http\Controllers\CashLedgerExportController;
 use App\Http\Controllers\CommissionSlipPdfController;
 use App\Http\Controllers\EmployeeExportController;
+use App\Http\Controllers\MaintenancePreviewController;
 use App\Http\Controllers\AgentPaySlipPdfController;
 use App\Http\Controllers\MyPayslipPdfController;
 use App\Http\Controllers\PayrollRegisterExportController;
@@ -187,6 +188,10 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::middleware('can:app.settings.manage')->group(function () {
         Route::livewire('/settings', 'settings')->name('settings');
     });
+
+    Route::get('/maintenance/preview', MaintenancePreviewController::class)
+        ->middleware('can:app.maintenance.manage')
+        ->name('maintenance.preview');
 
     Route::middleware('can:reports.view')->group(function () {
         Route::livewire('/reports/attendance-summary', 'reports.attendance-summary')->name('reports.attendance-summary');
