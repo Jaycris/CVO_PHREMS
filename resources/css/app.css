@@ -386,7 +386,7 @@
         content: '';
         border-radius: 50%;
         background: rgba(2, 6, 23, 0.9);
-        filter: blur(0.6px);
+        mix-blend-mode: multiply;
     }
 
     .dashboard-moon-phase--new img {
@@ -398,27 +398,51 @@
     }
 
     .dashboard-moon-phase--waxing-crescent::after {
-        transform: translateX(-18%);
+        background: radial-gradient(
+            ellipse 20% 140% at 100% 50%,
+            transparent 0 92%,
+            rgba(2, 6, 23, 0.82) 100%
+        );
     }
 
     .dashboard-moon-phase--first-quarter::after {
-        clip-path: inset(0 50% 0 0);
+        background: linear-gradient(
+            to right,
+            rgba(2, 6, 23, 0.82) 0 47%,
+            transparent 53% 100%
+        );
     }
 
     .dashboard-moon-phase--waxing-gibbous::after {
-        transform: translateX(-72%);
+        background: radial-gradient(
+            ellipse 78% 140% at 100% 50%,
+            transparent 0 96%,
+            rgba(2, 6, 23, 0.82) 100%
+        );
     }
 
     .dashboard-moon-phase--waning-gibbous::after {
-        transform: translateX(72%);
+        background: radial-gradient(
+            ellipse 78% 140% at 0 50%,
+            transparent 0 96%,
+            rgba(2, 6, 23, 0.82) 100%
+        );
     }
 
     .dashboard-moon-phase--last-quarter::after {
-        clip-path: inset(0 0 0 50%);
+        background: linear-gradient(
+            to left,
+            rgba(2, 6, 23, 0.82) 0 47%,
+            transparent 53% 100%
+        );
     }
 
     .dashboard-moon-phase--waning-crescent::after {
-        transform: translateX(18%);
+        background: radial-gradient(
+            ellipse 20% 140% at 0 50%,
+            transparent 0 92%,
+            rgba(2, 6, 23, 0.82) 100%
+        );
     }
 
     .dashboard-sky-clouds {
