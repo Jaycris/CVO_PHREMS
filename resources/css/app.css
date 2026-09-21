@@ -382,51 +382,43 @@
 
     .dashboard-moon-phase::after {
         position: absolute;
-        inset-block: 0;
+        inset: 0;
         content: '';
-        border-radius: 9999px;
-        background: rgba(2, 6, 23, 0.94);
+        border-radius: 50%;
+        background: rgba(2, 6, 23, 0.9);
+        filter: blur(0.6px);
     }
 
     .dashboard-moon-phase--new img {
         opacity: 0.16;
     }
 
-    .dashboard-moon-phase--new::after,
     .dashboard-moon-phase--full::after {
         display: none;
     }
 
     .dashboard-moon-phase--waxing-crescent::after {
-        left: -18%;
-        width: 96%;
+        transform: translateX(-18%);
     }
 
     .dashboard-moon-phase--first-quarter::after {
-        left: 0;
-        width: 50%;
-        border-radius: 9999px 0 0 9999px;
+        clip-path: inset(0 50% 0 0);
     }
 
     .dashboard-moon-phase--waxing-gibbous::after {
-        left: -8%;
-        width: 34%;
+        transform: translateX(-72%);
     }
 
     .dashboard-moon-phase--waning-gibbous::after {
-        right: -8%;
-        width: 34%;
+        transform: translateX(72%);
     }
 
     .dashboard-moon-phase--last-quarter::after {
-        right: 0;
-        width: 50%;
-        border-radius: 0 9999px 9999px 0;
+        clip-path: inset(0 0 0 50%);
     }
 
     .dashboard-moon-phase--waning-crescent::after {
-        right: -18%;
-        width: 96%;
+        transform: translateX(18%);
     }
 
     .dashboard-sky-clouds {
