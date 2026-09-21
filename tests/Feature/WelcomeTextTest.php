@@ -178,5 +178,8 @@ class WelcomeTextTest extends TestCase
         // The gateway cuts anything longer than one text and adds "...".
         $this->assertSame(WelcomeText::body(), app(SmsGateway::class)->compose(WelcomeText::body()));
         $this->assertLessThanOrEqual(SmsGateway::SEGMENT, mb_strlen(WelcomeText::body()));
+
+        // Opens with the welcome, not "PhremsCVO:".
+        $this->assertStringStartsWith('Welcome to CreatiVision Outsourcing!', WelcomeText::body());
     }
 }

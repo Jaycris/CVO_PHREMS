@@ -17,16 +17,19 @@ class WelcomeText
 {
     /**
      * One text, not two. The gateway cuts everything to 160 characters to keep
-     * each message to one credit, and with "PhremsCVO: " in front this is 155.
+     * each message to one credit; this is 149.
+     *
+     * No "PhremsCVO:" in front, unlike the other texts — the company asked for
+     * it to open with the welcome. The sender name already shows as PhremsCVO.
      */
-    public const MESSAGE = 'Welcome to CreatiVision Outsourcing! This is the official PHREMS HR channel. '
+    public const MESSAGE = 'Welcome to CreatiVision Outsourcing! This is the official PHREMS channel for SMS. '
         . "You'll get announcements, HR updates, reminders and schedules here.";
 
     public function __construct(protected SmsGateway $gateway) {}
 
     public static function body(): string
     {
-        return SmsGateway::SENDER . ': ' . self::MESSAGE;
+        return self::MESSAGE;
     }
 
     /** Whether everything is in place and it has not gone yet. */
