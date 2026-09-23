@@ -37,4 +37,20 @@ class DashboardSkyTest extends TestCase
 
         $this->assertTrue($sky['is_day']);
     }
+
+    public function test_every_resolved_phase_has_its_own_rendered_moon_asset(): void
+    {
+        foreach ([
+            'new',
+            'waxing-crescent',
+            'first-quarter',
+            'waxing-gibbous',
+            'full',
+            'waning-gibbous',
+            'last-quarter',
+            'waning-crescent',
+        ] as $phase) {
+            $this->assertFileExists(public_path("images/dashboard-moon-{$phase}.webp"));
+        }
+    }
 }

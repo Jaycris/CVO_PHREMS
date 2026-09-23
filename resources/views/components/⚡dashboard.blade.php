@@ -113,8 +113,9 @@ new #[Layout('layouts.app')] class extends Component
                         aria-hidden="true"
                     >
                         @unless ($sky['is_day'])
-                            <span class="dashboard-moon-phase dashboard-moon-phase--{{ $sky['phase'] }}">
-                                <img src="{{ asset('images/dashboard-moon.webp') }}?v={{ filemtime(public_path('images/dashboard-moon.webp')) }}" alt="">
+                            @php($moonAsset = "images/dashboard-moon-{$sky['phase']}.webp")
+                            <span class="dashboard-moon-phase">
+                                <img src="{{ asset($moonAsset) }}?v={{ filemtime(public_path($moonAsset)) }}" alt="">
                             </span>
                         @else
                             <img src="{{ asset('images/dashboard-sun.webp') }}?v={{ filemtime(public_path('images/dashboard-sun.webp')) }}" alt="" class="dashboard-sun">
