@@ -185,6 +185,7 @@ new #[Layout('layouts.app')] class extends Component
                 Auth::user()->employee,
                 $approved,
                 $this->decisionNote ?: null,
+                Auth::user(),
             );
         } catch (\Throwable $e) {
             $this->errorMessage = $e->getMessage();
@@ -201,6 +202,7 @@ new #[Layout('layouts.app')] class extends Component
         $user = Auth::user();
         $employee = $user->employee;
         $seesAll = $user->can('requests.view_all');
+        $decidesAnything = $user->can('requests.decide_any');
 
         $empty = fn (string $name) => new LengthAwarePaginator([], 0, $this->perPage(), 1, ['pageName' => $name]);
 
@@ -208,12 +210,14 @@ new #[Layout('layouts.app')] class extends Component
         // ones when they oversee requests company-wide.
         $queue = $empty('queue');
 
-        if ($employee) {
+        if ($employee || $decidesAnything) {
             $queue = EmployeeRequest::with(['employee', 'type', 'days'])
                 ->pending()
-                ->where(fn ($q) => $q
-                    ->where('manager_id', $employee->id)
-                    ->when($seesAll, fn ($w) => $w->orWhereNull('manager_id')))
+                // The CEO or COO see everything still waiting, whoever it went
+                // to. They need no employee record of their own for that.
+                ->unless($decidesAnything, fn ($q) => $q->where(fn ($w) => $w
+                    ->where('manager_id', $employee?->id)
+                    ->when($seesAll, fn ($x) => $x->orWhereNull('manager_id'))))
                 ->oldest()
                 ->paginate($this->perPage(), pageName: 'queue');
         }
@@ -231,12 +235,13 @@ new #[Layout('layouts.app')] class extends Component
                     ->paginate($this->perPage(), pageName: 'mine')
                 : $empty('mine'),
             'all' => $seesAll
-                ? EmployeeRequest::with(['employee', 'type', 'days'])->latest()
+                ? EmployeeRequest::with(['employee', 'type', 'days', 'decidedBy'])->latest()
                     ->paginate($this->perPage(), pageName: 'all')
                 : $empty('all'),
             'deciding' => $deciding,
             'coverage' => $deciding ? $service->coverageFor($deciding) : [],
             'seesAll' => $seesAll,
+            'decidesAnything' => $decidesAnything,
             'hasEmployee' => $employee !== null,
         ];
     }
@@ -280,6 +285,11 @@ new #[Layout('layouts.app')] class extends Component
         <x-card :padding="false">
             <div class="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
                 <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Awaiting Your Approval</h2>
+                @if ($decidesAnything)
+                    <p class="mt-1 text-xs font-medium text-[#778599]">
+                        Everything still waiting, including requests routed to a manager. Deciding one tells that manager.
+                    </p>
+                @endif
             </div>
 
             <div class="overflow-x-auto">
@@ -411,7 +421,7 @@ new #[Layout('layouts.app')] class extends Component
                                 <td class="px-4 py-3 font-medium text-[#778599]">{{ $request->dateLabel() }}</td>
                                 <td class="px-4 py-3"><x-badge :color="$request->statusColor()">{{ $request->statusLabel() }}</x-badge></td>
                                 <td class="px-4 py-3 font-medium text-[#778599]">
-                                    {{ $request->manager?->fullName() ?: '—' }}
+                                    {{ $request->decidedBy?->name ?: ($request->manager?->fullName() ?: '—') }}
                                     @if ($request->decided_at)
                                         <span class="block text-xs">{{ $request->decided_at->format('M j, Y') }}</span>
                                     @endif

@@ -18,7 +18,7 @@ class EmployeeRequest extends Model
 {
     protected $fillable = [
         'employee_id', 'request_type_id', 'details', 'status',
-        'manager_id', 'decided_at', 'decision_note',
+        'manager_id', 'decided_by_user_id', 'decided_at', 'decision_note',
     ];
 
     protected function casts(): array
@@ -39,6 +39,12 @@ class EmployeeRequest extends Model
     public function manager(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'manager_id');
+    }
+
+    /** Whoever made the decision, which is not always the manager it went to. */
+    public function decidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'decided_by_user_id');
     }
 
     public function days(): HasMany

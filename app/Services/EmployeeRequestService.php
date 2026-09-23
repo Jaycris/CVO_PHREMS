@@ -7,6 +7,7 @@ use App\Models\EmployeeRequest;
 use App\Models\RequestType;
 use App\Models\User;
 use App\Notifications\EmployeeRequestActionNeeded;
+use App\Notifications\EmployeeRequestDecidedForYou;
 use App\Notifications\EmployeeRequestStatusUpdated;
 use App\Services\Concerns\SerialisesConcurrentWrites;
 use Illuminate\Support\Carbon;
@@ -98,19 +99,33 @@ class EmployeeRequestService
 
     public function decide(
         EmployeeRequest $request,
-        Employee $actor,
+        ?Employee $actor,
         bool $approved,
         ?string $note = null,
+        ?User $decidedBy = null,
     ): void {
         abort_unless($request->isPending(), 403, 'This request has already been decided.');
 
-        $isAssignedManager = $request->manager_id !== null && $request->manager_id === $actor->id;
+        // The CEO or COO need not have an employee record of their own, so who
+        // is deciding is a user question, not an org-chart one.
+        $decidedBy ??= $actor?->user;
+
+        $isAssignedManager = $actor !== null
+            && $request->manager_id !== null
+            && $request->manager_id === $actor->id;
         $isFallbackApprover = $request->manager_id === null
-            && (bool) $actor->user?->can('requests.view_all');
+            && (bool) $decidedBy?->can('requests.view_all');
+        // Decides anything, including what is sitting with a manager who is
+        // away. That manager is told once it is done.
+        $decidesAnything = (bool) $decidedBy?->can('requests.decide_any');
 
-        abort_unless($isAssignedManager || $isFallbackApprover, 403, 'You cannot decide this request.');
+        abort_unless(
+            $isAssignedManager || $isFallbackApprover || $decidesAnything,
+            403,
+            'You cannot decide this request.',
+        );
 
-        DB::transaction(function () use ($request, $actor, $approved, $note) {
+        DB::transaction(function () use ($request, $actor, $approved, $note, $decidedBy, $isAssignedManager) {
             // The status above was read off a copy loaded before the click.
             // Re-read it under the lock so a second approver is turned away
             // rather than overwriting the first decision and its note.
@@ -120,12 +135,21 @@ class EmployeeRequestService
 
             $locked->update([
                 'status' => $approved ? 'approved' : 'declined',
-                'manager_id' => $locked->manager_id ?? $actor->id,
+                'manager_id' => $locked->manager_id ?? $actor?->id,
+                'decided_by_user_id' => $decidedBy?->id,
                 'decided_at' => now(),
                 'decision_note' => $note,
             ]);
 
-            $this->notifyRequestor($locked->fresh(['employee', 'type', 'manager', 'days']));
+            $decided = $locked->fresh(['employee', 'type', 'manager', 'days']);
+
+            $this->notifyRequestor($decided);
+
+            // Decided over the manager's head, so the manager hears it from
+            // PHREMS rather than from the employee.
+            if (! $isAssignedManager) {
+                $this->notifyManagerOfDecision($decided, $decidedBy);
+            }
         });
 
         $request->refresh();
@@ -241,6 +265,27 @@ class EmployeeRequestService
             $request,
             $message,
             'Your ' . strtolower($request->typeName()) . ' request was ' . ($approved ? 'approved' : 'declined'),
+        ));
+    }
+
+    protected function notifyManagerOfDecision(EmployeeRequest $request, ?User $decidedBy): void
+    {
+        $manager = $request->manager?->user;
+
+        // Nobody tells themselves, and a request with no manager had nobody
+        // waiting on it in the first place.
+        if (! $manager || ($decidedBy && $manager->is($decidedBy))) {
+            return;
+        }
+
+        $who = $decidedBy?->name ?: 'Management';
+        $name = $request->employee?->fullName() ?: 'An employee';
+        $outcome = $request->status === 'approved' ? 'approved' : 'declined';
+
+        $this->safeNotify($manager, new EmployeeRequestDecidedForYou(
+            $request,
+            $who . ' ' . $outcome . ' ' . $name . "'s " . strtolower($request->typeName())
+                . ' request that was waiting on you.',
         ));
     }
 

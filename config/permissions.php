@@ -59,6 +59,10 @@ return [
         'Requests' => [
             'requests.view_all' => 'Requests — view every request, and decide those from employees with no manager',
             'requests.types.manage' => 'Request Types — add and edit the kinds of request employees can file',
+            // For the manager who is away, or simply slow. Their name still
+            // shows as the manager; the decision records who really made it,
+            // and they are told it happened.
+            'requests.decide_any' => 'Requests — decide any request, including ones waiting on a manager (CEO/COO)',
         ],
 
         'Leave' => [
