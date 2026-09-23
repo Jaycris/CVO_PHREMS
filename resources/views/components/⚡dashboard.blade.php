@@ -112,14 +112,16 @@ new #[Layout('layouts.app')] class extends Component
                         title="{{ $sky['is_day'] ? 'Daylight' : $sky['phase_name'] }}{{ $sky['cloud_cover'] !== null ? ' · '.$sky['cloud_cover'].'% cloud cover' : '' }}"
                         aria-hidden="true"
                     >
-                        @unless ($sky['is_day'])
-                            @php($moonAsset = "images/dashboard-moon-{$sky['phase']}.webp")
+                        @if (! $sky['is_day'])
+                            @php
+                                $moonAsset = 'images/dashboard-moon-'.$sky['phase'].'.webp';
+                            @endphp
                             <span class="dashboard-moon-phase">
                                 <img src="{{ asset($moonAsset) }}?v={{ filemtime(public_path($moonAsset)) }}" alt="">
                             </span>
                         @else
                             <img src="{{ asset('images/dashboard-sun.webp') }}?v={{ filemtime(public_path('images/dashboard-sun.webp')) }}" alt="" class="dashboard-sun">
-                        @endunless
+                        @endif
 
                         @if ($sky['cloudy'])
                             <img
