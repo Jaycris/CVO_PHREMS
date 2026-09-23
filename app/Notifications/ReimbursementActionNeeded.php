@@ -29,10 +29,12 @@ class ReimbursementActionNeeded extends Notification implements ShouldQueue
 
         return (new MailMessage)
             ->subject("Reimbursement claim to review - {$name}")
-            ->line("{$name} is claiming back PHP " . number_format((float) $claim->amount_requested, 2) . '.')
-            ->line('For: ' . $claim->categoryLabel() . ' on ' . $claim->expense_date->format('M j, Y'))
-            ->line($claim->description)
-            ->action('Review Claim', url('/reimbursements'));
+            ->view('emails.reimbursement-action-needed', [
+                'claim' => $claim,
+                'employeeName' => $name,
+                'recipientName' => $notifiable->name ?: 'there',
+                'url' => url('/reimbursements'),
+            ]);
     }
 
     /** @return array<string, mixed> */

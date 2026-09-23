@@ -3,10 +3,10 @@
     $month = $slip->monthLabel();
     $netCommission = $slip->net_commission === null ? null : 'PHP ' . number_format((float) $slip->net_commission, 2);
     $transactionCount = (int) $slip->transaction_count;
-    $logoPath = public_path('images/CreativeVision-LOGO-v2-01.png');
+    $logoPath = public_path('images/CreativeVision-email-logo.png');
     $logoSrc = isset($message) && file_exists($logoPath)
         ? $message->embed($logoPath)
-        : asset('images/CreativeVision-LOGO-v2-01.png');
+        : asset('images/CreativeVision-email-logo.png');
 @endphp
 
 <!DOCTYPE html>

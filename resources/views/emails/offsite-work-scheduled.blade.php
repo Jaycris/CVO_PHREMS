@@ -1,10 +1,10 @@
 @php
     $removed = $change === \App\Notifications\OffsiteWorkScheduled::REMOVED;
     $changed = $change === \App\Notifications\OffsiteWorkScheduled::CHANGED;
-    $logoPath = public_path('images/CreativeVision-LOGO-v2-01.png');
+    $logoPath = public_path('images/CreativeVision-email-logo.png');
     $logoSrc = isset($message) && file_exists($logoPath)
         ? $message->embed($logoPath)
-        : asset('images/CreativeVision-LOGO-v2-01.png');
+        : asset('images/CreativeVision-email-logo.png');
 
     $headline = $removed
         ? 'Clock-in required'

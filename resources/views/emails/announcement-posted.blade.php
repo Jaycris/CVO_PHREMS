@@ -1,9 +1,9 @@
 @php
     $urgent = $announcement->kind === \App\Models\Announcement::URGENT;
-    $logoPath = public_path('images/CreativeVision-LOGO-v2-01.png');
+    $logoPath = public_path('images/CreativeVision-email-logo.png');
     $logoSrc = isset($message) && file_exists($logoPath)
         ? $message->embed($logoPath)
-        : asset('images/CreativeVision-LOGO-v2-01.png');
+        : asset('images/CreativeVision-email-logo.png');
 
     $accent = $urgent ? '#dc2626' : '#157a52';
     $eyebrowColor = $urgent ? '#fecaca' : '#a7f3d0';

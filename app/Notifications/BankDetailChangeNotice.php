@@ -36,24 +36,18 @@ class BankDetailChangeNotice extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $name = $this->request->employee?->fullName() ?? 'An employee';
+        $url = url('/bank-details');
 
-        $mail = (new MailMessage)
+        return (new MailMessage)
             ->subject($this->subject)
-            ->line($this->message)
-            ->line('From: ' . ($this->request->previous_bank_name ?: '—') . ' ' . $this->request->maskedPreviousAccount())
-            ->line('To: ' . $this->request->bank_name . ' ' . $this->request->maskedAccount());
-
-        if ($this->request->reason) {
-            $mail->line('Reason given: ' . $this->request->reason);
-        }
-
-        if ($this->request->decision_note) {
-            $mail->line('Note from the approver: ' . $this->request->decision_note);
-        }
-
-        return $mail
-            ->line('This is for your records — no action is needed from you.')
-            ->action('View Bank Details', url('/bank-details'));
+            ->view('emails.bank-detail-change-notice', [
+                'request' => $this->request,
+                'employeeName' => $name,
+                'notice' => $this->message,
+                'headline' => explode(' - ', $this->subject, 2)[0],
+                'recipientName' => $notifiable->name ?: 'there',
+                'url' => $url,
+            ]);
     }
 
     /** @return array<string, mixed> */

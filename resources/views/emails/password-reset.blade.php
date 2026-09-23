@@ -1,9 +1,9 @@
 @php
     $displayName = $employee->first_name ?: ($employee->fullName() ?: $employee->employee_id);
-    $logoPath = public_path('images/CreativeVision-LOGO-v2-01.png');
+    $logoPath = public_path('images/CreativeVision-email-logo.png');
     $logoSrc = isset($message) && file_exists($logoPath)
         ? $message->embed($logoPath)
-        : asset('images/CreativeVision-LOGO-v2-01.png');
+        : asset('images/CreativeVision-email-logo.png');
 @endphp
 
 <!DOCTYPE html>
