@@ -61,13 +61,21 @@ class LeaveService
 
         $manager = $employee->reportsTo;
 
-        $this->notifyHr($leaveRequest, "New leave request from " . $this->employeeName($employee) . " ({$daysRequested} day(s), {$leaveType->name}) submitted.");
+        /*
+         * Whoever has to act hears about it as a job to do; everybody else who
+         * watches leave gets the copy for information. One person is often
+         * both — the CEO approving their own staff's leave also has
+         * leave.view_all — and used to be told twice about one request.
+         */
+        $approver = $manager?->user ?? $this->firstCeoUser();
 
-        if ($manager?->user) {
-            $manager->user->notify(new LeaveRequestActionNeeded($leaveRequest));
-        } elseif ($ceo = $this->firstCeoUser()) {
-            $ceo->notify(new LeaveRequestActionNeeded($leaveRequest));
-        }
+        $approver?->notify(new LeaveRequestActionNeeded($leaveRequest));
+
+        $this->notifyHr(
+            $leaveRequest,
+            'New leave request from ' . $this->employeeName($employee) . " ({$daysRequested} day(s), {$leaveType->name}) submitted.",
+            [$approver?->id, $employee->user?->id],
+        );
 
         return $leaveRequest;
     }
@@ -90,18 +98,25 @@ class LeaveService
 
         $leaveRequest->refresh();
 
+        $manager = $leaveRequest->employee->reportsTo?->user;
+
         if (! $approved) {
-            $this->notifyFinalDecision($leaveRequest, 'declined by Manager', $note);
+            // The manager who declined it does not need telling.
+            $this->notifyFinalDecision($leaveRequest, 'declined by Manager', $note, [$manager?->id]);
 
             return;
         }
 
-        if ($ceo = $this->firstCeoUser()) {
-            $ceo->notify(new LeaveRequestActionNeeded($leaveRequest));
-        }
+        $ceo = $this->firstCeoUser();
+
+        $ceo?->notify(new LeaveRequestActionNeeded($leaveRequest));
 
         $this->notifyRequestor($leaveRequest, 'Your leave request was approved by your Manager and is now awaiting CEO/COO approval.');
-        $this->notifyHr($leaveRequest, $this->employeeName($leaveRequest->employee) . "'s leave request was approved by Manager, now pending CEO/COO.");
+        $this->notifyHr(
+            $leaveRequest,
+            $this->employeeName($leaveRequest->employee) . "'s leave request was approved by Manager, now pending CEO/COO.",
+            [$ceo?->id, $manager?->id, $leaveRequest->employee->user?->id],
+        );
     }
 
     public function ceoDecide(LeaveRequest $leaveRequest, Employee $ceoActor, bool $approved, ?string $note = null): void
@@ -137,15 +152,26 @@ class LeaveService
 
         $leaveRequest->refresh();
 
-        $this->notifyFinalDecision($leaveRequest, $approved ? 'approved by CEO/COO' : 'declined by CEO/COO', $note);
+        $this->notifyFinalDecision(
+            $leaveRequest,
+            $approved ? 'approved by CEO/COO' : 'declined by CEO/COO',
+            $note,
+            // Whoever just decided it watched themselves do it.
+            [$ceoActor->user?->id],
+        );
     }
 
-    protected function notifyFinalDecision(LeaveRequest $leaveRequest, string $outcome, ?string $note): void
+    /** @param list<int|null> $exceptUserIds people already told about this one */
+    protected function notifyFinalDecision(LeaveRequest $leaveRequest, string $outcome, ?string $note, array $exceptUserIds = []): void
     {
         $summary = "Your leave request was {$outcome}." . ($leaveRequest->is_lwop && str_contains($outcome, 'approved') ? ' This will be recorded as Leave Without Pay (LWOP).' : '') . ($note ? " Note: {$note}" : '');
 
         $this->notifyRequestor($leaveRequest, $summary);
-        $this->notifyHr($leaveRequest, $this->employeeName($leaveRequest->employee) . "'s leave request was {$outcome}.");
+        $this->notifyHr(
+            $leaveRequest,
+            $this->employeeName($leaveRequest->employee) . "'s leave request was {$outcome}.",
+            [...$exceptUserIds, $leaveRequest->employee->user?->id],
+        );
     }
 
     protected function notifyRequestor(LeaveRequest $leaveRequest, string $summary): void
@@ -155,11 +181,23 @@ class LeaveService
         }
     }
 
-    protected function notifyHr(LeaveRequest $leaveRequest, string $summary): void
+    /**
+     * The copy for everybody who watches leave company-wide.
+     *
+     * Anybody already told about this same event is left out, so holding both
+     * the approval and the oversight permission is one notification rather
+     * than two saying the same thing.
+     *
+     * @param  list<int|null>  $exceptUserIds
+     */
+    protected function notifyHr(LeaveRequest $leaveRequest, string $summary, array $exceptUserIds = []): void
     {
-        User::withPermission('leave.view_all')->get()->each(
-            fn (User $hrUser) => $hrUser->notify(new LeaveRequestStatusUpdated($leaveRequest, $summary))
-        );
+        $except = array_filter($exceptUserIds);
+
+        User::withPermission('leave.view_all')
+            ->get()
+            ->reject(fn (User $hrUser) => in_array($hrUser->id, $except, true))
+            ->each(fn (User $hrUser) => $hrUser->notify(new LeaveRequestStatusUpdated($leaveRequest, $summary)));
     }
 
     protected function firstCeoUser(): ?User

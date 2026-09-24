@@ -1,5 +1,10 @@
 @php
     $employeeName = $leaveRequest->employee->fullName() ?: $leaveRequest->employee->employee_id;
+    // Set once a manager has approved it, which is what makes this the CEO or
+    // COO's turn rather than the manager's.
+    $approvedBy = $leaveRequest->manager_decision === 'approved'
+        ? ($leaveRequest->manager?->fullName() ?: 'Their manager')
+        : null;
     $logoPath = public_path('images/CreativeVision-email-logo.png');
     $logoSrc = isset($message) && file_exists($logoPath)
         ? $message->embed($logoPath)
@@ -37,7 +42,11 @@
                         <td style="padding:38px;">
                             <h2 style="margin:0 0 14px; color:#0f172a; font-size:22px; line-height:1.35; font-weight:800;">Hello,</h2>
                             <p style="margin:0; color:#475569; font-size:16px; line-height:1.7;">
-                                <strong style="color:#0f172a;">{{ $employeeName }}</strong> requested {{ $leaveRequest->days_requested }} day(s) of {{ $leaveRequest->leaveType->name }} from {{ $leaveRequest->start_date->format('M d, Y') }} to {{ $leaveRequest->end_date->format('M d, Y') }}.
+                                @if ($approvedBy)
+                                    <strong style="color:#0f172a;">{{ $approvedBy }}</strong> approved <strong style="color:#0f172a;">{{ $employeeName }}</strong>'s request for {{ $leaveRequest->days_requested }} day(s) of {{ $leaveRequest->leaveType->name }} from {{ $leaveRequest->start_date->format('M d, Y') }} to {{ $leaveRequest->end_date->format('M d, Y') }}.
+                                @else
+                                    <strong style="color:#0f172a;">{{ $employeeName }}</strong> requested {{ $leaveRequest->days_requested }} day(s) of {{ $leaveRequest->leaveType->name }} from {{ $leaveRequest->start_date->format('M d, Y') }} to {{ $leaveRequest->end_date->format('M d, Y') }}.
+                                @endif
                             </p>
 
                             @if ($leaveRequest->is_lwop)
