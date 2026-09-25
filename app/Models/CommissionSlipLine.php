@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\MaskedName;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -35,6 +36,18 @@ class CommissionSlipLine extends Model
             'card_hold_amount' => 'decimal:2',
             'net_commission' => 'decimal:2',
         ];
+    }
+
+    /**
+     * The client's name as the slip shows it — first name, then stars.
+     *
+     * The whole name stays in the database, because this is the company's
+     * record of a sale. What is not needed is a readable list of clients on
+     * every slip and every PDF that leaves the building.
+     */
+    public function maskedClient(): ?string
+    {
+        return MaskedName::of($this->client);
     }
 
     public function commissionSlip(): BelongsTo

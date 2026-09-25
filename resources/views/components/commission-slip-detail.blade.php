@@ -217,7 +217,7 @@
                             <tr wire:key="line-{{ $row->id }}" class="transition hover:bg-ink-50 dark:hover:bg-white/5">
                                 <td class="whitespace-nowrap px-3 py-2.5 font-medium text-[#526783] dark:text-white">{{ $row->sold_date ?: '—' }}</td>
                                 <td class="whitespace-nowrap px-3 py-2.5 font-medium text-[#64748b] dark:text-ink-400">{{ $row->brand ?: '—' }}</td>
-                                <td class="px-3 py-2.5 font-medium text-[#64748b] dark:text-ink-400">{{ $row->client ?: '—' }}</td>
+                                <td class="px-3 py-2.5 font-medium text-[#64748b] dark:text-ink-400">{{ $row->maskedClient() ?: '—' }}</td>
                                 <td class="px-3 py-2.5 font-medium text-[#64748b] dark:text-ink-400">{{ $row->book_title ?: '—' }}</td>
                                 <td class="px-3 py-2.5 font-medium text-[#64748b] dark:text-ink-400">{{ $row->service ?: '—' }}</td>
                                 <td class="whitespace-nowrap px-3 py-2.5 font-medium text-[#64748b] dark:text-ink-400">

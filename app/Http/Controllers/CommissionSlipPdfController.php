@@ -168,7 +168,7 @@ class CommissionSlipPdfController
                 foreach ([
                     $this->clip($line->sold_date, 10),
                     $this->clip($line->brand, 11),
-                    $this->clip($line->client, 17),
+                    $this->clip($line->maskedClient(), 17),
                     $this->clip($line->book_title, 15),
                     $this->clip($line->service, 10),
                     $this->clip($line->payment_method, 9),

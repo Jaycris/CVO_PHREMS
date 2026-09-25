@@ -2,6 +2,8 @@
 
 namespace App\Services\Crm;
 
+use App\Support\MaskedName;
+
 /**
  * One line of an agent's commission statement, exactly as the CRM sent it.
  *
@@ -56,6 +58,12 @@ class CommissionTransaction
             cardHoldAmount: self::money($row, ['card_hold_amount', 'cardHoldAmount', 'card_payment_hold_amount']),
             netCommission: self::money($row, ['net_commission', 'netCommission']),
         );
+    }
+
+    /** Shown in place of the client's whole name — see MaskedName. */
+    public function maskedClient(): ?string
+    {
+        return MaskedName::of($this->client);
     }
 
     /** Card hold only ever applies to card payments, and the CRM decides that. */
