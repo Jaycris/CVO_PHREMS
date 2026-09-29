@@ -74,6 +74,12 @@ Omit `q` to list everyone (still capped by `limit`, default 15, max 50).
       "workplace_type":     "Onsite",      // Onsite | Hybrid | Remote | null
       "work_type":          "Onsite",      // same value, under the CRM's field name
       "position":           "Sales Agent", // Role *suggestion* only
+      "reports_to": {                      // null when nobody is set
+        "hris_employee_id": "EMP-1180",
+        "name":             "Maria Santos",
+        "email":            "maria.santos@creativision.net",
+        "position":         "Team Lead"
+      },
       "employment_status":  "Regular",     // Probationary | Regular | Contract | Training
       "employment_type":    "Full-time",   // Full-time | Part-time | null
       "is_active":          true
@@ -101,8 +107,35 @@ creating a *new* user.
 | Department | `department` | |
 | Work Type | `workplace_type` | `Onsite`, `Hybrid`, `Remote` or `null`. Also sent as `work_type` |
 | Role | `position` | **Suggestion only.** CRM owns its own access model |
+| Supervisor | `reports_to` | Object or `null` — see below |
 | Phone Number | — | **Stays manual.** This is the VOIP number, which only the CRM knows |
 | Brand / Account | — | **Stays manual.** Exists only in the CRM |
+
+### The Reports To rule
+
+HRIS owns the reporting line, the same way it owns identity. It is set on the
+employee's HRIS profile and drives leave, overtime and request approvals there.
+
+`reports_to` is sent so the CRM can route work of its own — an end-of-shift
+report, an escalation — to the right supervisor **without keeping a second org
+chart**. A copy in the CRM goes stale the day somebody changes team, and nobody
+notices until a report reaches the wrong person.
+
+```jsonc
+"reports_to": {
+  "hris_employee_id": "EMP-1180",   // match to a CRM user by this
+  "name":             "Maria Santos",
+  "email":            "maria.santos@creativision.net",
+  "position":         "Team Lead"
+}
+```
+
+`null` is ordinary and must be handled: a supervisor reports to nobody, and a
+new hire may not be assigned yet. Fall back to whoever the CRM treats as admin
+rather than dropping the report.
+
+Match the supervisor to a CRM user by `hris_employee_id`, not by name or email —
+names repeat and email addresses change.
 
 ### The Phone Name rule
 

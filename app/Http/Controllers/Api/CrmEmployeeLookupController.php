@@ -22,7 +22,7 @@ class CrmEmployeeLookupController
         $term = trim((string) $request->query('q', ''));
         $limit = min(max((int) $request->integer('limit', 15), 1), 50);
 
-        $employees = Employee::with(['department', 'position'])
+        $employees = Employee::with(['department', 'position', 'reportsTo.position'])
             ->when($term !== '', fn ($q) => $q->where(fn ($w) => $w
                 ->where('employee_id', 'like', "%{$term}%")
                 ->orWhere('phone_name', 'like', "%{$term}%")
@@ -52,7 +52,7 @@ class CrmEmployeeLookupController
      */
     public function show(string $employeeId): JsonResponse
     {
-        $employee = Employee::with(['department', 'position'])
+        $employee = Employee::with(['department', 'position', 'reportsTo.position'])
             ->where('employee_id', $employeeId)
             ->first();
 

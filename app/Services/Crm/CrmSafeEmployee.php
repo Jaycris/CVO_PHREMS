@@ -59,6 +59,25 @@ class CrmSafeEmployee
             // Offered as a Role suggestion only. The CRM decides its own access.
             'position' => $employee->position?->title,
 
+            /*
+             * Who this person's work is reported to.
+             *
+             * Sent so the CRM can route work of its own — an end-of-shift
+             * report, say — to the right supervisor without keeping a second
+             * org chart that drifts the day somebody changes team. HRIS owns
+             * the reporting line, as it owns identity.
+             *
+             * Null when nobody is set, which is ordinary: a supervisor reports
+             * to nobody, and a new hire may not be assigned yet. The CRM has to
+             * cope with that rather than assume a manager exists.
+             */
+            'reports_to' => $employee->reportsTo ? [
+                'hris_employee_id' => $employee->reportsTo->employee_id,
+                'name' => $employee->reportsTo->fullName() ?: $employee->reportsTo->employee_id,
+                'email' => $employee->reportsTo->company_email,
+                'position' => $employee->reportsTo->position?->title,
+            ] : null,
+
             'employment_status' => $employee->employment_status,
             'employment_type' => $employee->employment_type,
             // A separated employee stays searchable so an existing CRM user can

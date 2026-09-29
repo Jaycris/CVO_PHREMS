@@ -91,6 +91,45 @@ class CrmApiTest extends TestCase
     }
 
     #[Test]
+    public function the_supervisor_is_sent_so_the_crm_need_not_keep_an_org_chart(): void
+    {
+        $lead = Employee::factory()->create([
+            'employee_id' => 'EMP-1180',
+            'first_name' => 'Maria',
+            'last_name' => 'Santos',
+            'company_email' => 'maria.santos@creativision.net',
+        ]);
+
+        $agent = Employee::factory()->create([
+            'employee_id' => 'EMP-4242',
+            'reports_to_id' => $lead->id,
+        ]);
+
+        $this->getJson('/api/crm/employees/' . $agent->employee_id, $this->auth())
+            ->assertOk()
+            ->assertJsonPath('data.reports_to.hris_employee_id', 'EMP-1180')
+            ->assertJsonPath('data.reports_to.name', 'Maria Santos')
+            ->assertJsonPath('data.reports_to.email', 'maria.santos@creativision.net');
+
+        $this->getJson('/api/crm/employees?q=EMP-4242', $this->auth())
+            ->assertOk()
+            ->assertJsonPath('data.0.reports_to.hris_employee_id', 'EMP-1180');
+    }
+
+    #[Test]
+    public function somebody_with_no_supervisor_sends_null_rather_than_nothing(): void
+    {
+        // A supervisor reports to nobody, and a new hire may not be assigned
+        // yet. The key is always present so the CRM can tell "none" from
+        // "this HRIS is too old to send it".
+        Employee::factory()->create(['employee_id' => 'EMP-7000', 'reports_to_id' => null]);
+
+        $this->getJson('/api/crm/employees/EMP-7000', $this->auth())
+            ->assertOk()
+            ->assertJsonPath('data.reports_to', null);
+    }
+
+    #[Test]
     public function an_unknown_employee_id_is_a_clean_404(): void
     {
         $this->getJson('/api/crm/employees/EMP-DOESNOTEXIST', $this->auth())
