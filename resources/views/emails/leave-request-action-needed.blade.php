@@ -43,9 +43,9 @@
                             <h2 style="margin:0 0 14px; color:#0f172a; font-size:22px; line-height:1.35; font-weight:800;">Hello,</h2>
                             <p style="margin:0; color:#475569; font-size:16px; line-height:1.7;">
                                 @if ($approvedBy)
-                                    <strong style="color:#0f172a;">{{ $approvedBy }}</strong> approved <strong style="color:#0f172a;">{{ $employeeName }}</strong>'s request for {{ $leaveRequest->daysLabel() }} of {{ $leaveRequest->leaveType->name }} from {{ $leaveRequest->start_date->format('M d, Y') }} to {{ $leaveRequest->end_date->format('M d, Y') }}.
+                                    <strong style="color:#0f172a;">{{ $approvedBy }}</strong> approved <strong style="color:#0f172a;">{{ $employeeName }}</strong>'s request for {{ $leaveRequest->daysLabel() }} of {{ $leaveRequest->leaveType->name }} {{ $leaveRequest->datesLabel() }}.
                                 @else
-                                    <strong style="color:#0f172a;">{{ $employeeName }}</strong> requested {{ $leaveRequest->daysLabel() }} of {{ $leaveRequest->leaveType->name }} from {{ $leaveRequest->start_date->format('M d, Y') }} to {{ $leaveRequest->end_date->format('M d, Y') }}.
+                                    <strong style="color:#0f172a;">{{ $employeeName }}</strong> requested {{ $leaveRequest->daysLabel() }} of {{ $leaveRequest->leaveType->name }} {{ $leaveRequest->datesLabel() }}.
                                 @endif
                             </p>
 

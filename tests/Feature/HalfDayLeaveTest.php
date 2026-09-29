@@ -63,11 +63,11 @@ class HalfDayLeaveTest extends PayrollTestCase
     {
         $employee = $this->regularEmployee();
 
-        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::MORNING);
+        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::FIRST_HALF);
 
         $this->assertSame(0.5, (float) $request->days_requested);
         $this->assertTrue($request->isHalfDay());
-        $this->assertSame('Half day (Morning)', $request->daysLabel());
+        $this->assertSame('Half day Leave (9:00 AM - 1:30 PM)', $request->daysLabel());
         $this->assertFalse($request->is_lwop, 'ten credits covers half a day');
     }
 
@@ -78,7 +78,7 @@ class HalfDayLeaveTest extends PayrollTestCase
 
         $this->expectExceptionMessage('A half day covers one date');
 
-        $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-14', null, LeaveRequest::AFTERNOON);
+        $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-14', null, LeaveRequest::SECOND_HALF);
     }
 
     #[Test]
@@ -87,7 +87,7 @@ class HalfDayLeaveTest extends PayrollTestCase
         $employee = $this->regularEmployee();
         $ceo = $this->makeEmployee(60000);
 
-        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::MORNING);
+        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::FIRST_HALF);
         $this->leave->ceoDecide($request, $ceo, approved: true);
 
         $this->assertEqualsWithDelta(9.5, $employee->fresh()->leaveBalance($this->vacation), 0.001);
@@ -107,7 +107,7 @@ class HalfDayLeaveTest extends PayrollTestCase
         $employee = $this->regularEmployee();
         $this->fillAttendance($employee, $period);
 
-        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::MORNING);
+        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::FIRST_HALF);
         $request->update(['status' => 'approved']);
 
         $counters = $this->counters($employee, $period);
@@ -129,7 +129,7 @@ class HalfDayLeaveTest extends PayrollTestCase
         $day = AttendanceDay::where('employee_id', $employee->id)->whereDate('work_date', '2026-08-12')->sole();
         $day->update(['time_in' => Carbon::parse('2026-08-12 13:00:00')]);
 
-        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::MORNING);
+        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::FIRST_HALF);
         $request->update(['status' => 'approved']);
 
         $this->assertSame(0, $this->counters($employee, $period)['late_minutes']);
@@ -142,7 +142,7 @@ class HalfDayLeaveTest extends PayrollTestCase
         $employee = $this->regularEmployee();
         $this->fillAttendance($employee, $period);
 
-        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::AFTERNOON);
+        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::SECOND_HALF);
         $request->update(['status' => 'approved', 'is_lwop' => true]);
 
         $counters = $this->counters($employee, $period);
@@ -166,7 +166,7 @@ class HalfDayLeaveTest extends PayrollTestCase
         $this->fillAttendance($employee, $period, absentOn: ['2026-08-12']);
         $this->assertContains('2026-08-12', $days);
 
-        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::MORNING);
+        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::FIRST_HALF);
         $request->update(['status' => 'approved']);
 
         $counters = $this->counters($employee, $period);
@@ -182,13 +182,125 @@ class HalfDayLeaveTest extends PayrollTestCase
         $employee = $this->regularEmployee('graveyard');
         $this->fillAttendance($employee, $period);
 
-        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::MORNING);
+        $request = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::FIRST_HALF);
         $request->update(['status' => 'approved']);
 
         $counters = $this->counters($employee, $period);
 
         // Ten full nights of 480 minutes, and one worth half that.
         $this->assertSame((10 * 480) + 240, $counters['night_diff_minutes']);
+    }
+
+    #[Test]
+    public function the_approvers_email_says_half_day_and_one_date(): void
+    {
+        $employee = $this->regularEmployee();
+
+        $half = $this->leave->submit($employee, $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::FIRST_HALF);
+        $html = (new \App\Notifications\LeaveRequestActionNeeded($half))->toMail($employee->user)->render();
+
+        $this->assertStringContainsString('Half day Leave (9:00 AM - 1:30 PM) of Vacation Leave', $html);
+        $this->assertStringContainsString('on Aug 12, 2026', $html);
+        $this->assertStringNotContainsString('0.5 day', $html);
+
+        $range = $this->leave->submit($employee, $this->vacation, '2026-08-17', '2026-08-19', null);
+        $rangeHtml = (new \App\Notifications\LeaveRequestActionNeeded($range))->toMail($employee->user)->render();
+
+        $this->assertStringContainsString('3 day(s) of Vacation Leave', $rangeHtml);
+        $this->assertStringContainsString('from Aug 17, 2026 to Aug 19, 2026', $rangeHtml);
+    }
+
+    #[Test]
+    public function a_graveyard_shift_splits_at_2am_not_at_midday(): void
+    {
+        // The company's own shift. "Morning off" means nothing on it, which is
+        // why the halves are the shift's own hours.
+        $graveyard = \App\Models\WorkSchedule::factory()->create([
+            'start_time' => '22:00',
+            'end_time' => '06:00',
+        ]);
+
+        $this->assertSame(
+            ['first' => ['22:00', '02:00'], 'second' => ['02:00', '06:00']],
+            $graveyard->halfShiftWindows(),
+        );
+
+        $dayShift = \App\Models\WorkSchedule::factory()->create([
+            'start_time' => '09:00',
+            'end_time' => '18:00',
+        ]);
+
+        $this->assertSame(
+            ['first' => ['09:00', '13:30'], 'second' => ['13:30', '18:00']],
+            $dayShift->halfShiftWindows(),
+        );
+    }
+
+    #[Test]
+    public function the_hours_asked_for_are_kept_on_the_request(): void
+    {
+        $employee = $this->regularEmployee();
+        $employee->assignSchedule(
+            \App\Models\WorkSchedule::factory()->create(['start_time' => '22:00', 'end_time' => '06:00']),
+            '2026-08-01',
+        );
+
+        $request = $this->leave->submit($employee->fresh(), $this->vacation, '2026-08-12', '2026-08-12', null, LeaveRequest::SECOND_HALF);
+
+        $this->assertSame('02:00', substr((string) $request->half_day_start, 0, 5));
+        $this->assertSame('06:00', substr((string) $request->half_day_end, 0, 5));
+        $this->assertSame('Half day Leave (2:00 AM - 6:00 AM)', $request->daysLabel());
+    }
+
+    #[Test]
+    public function the_form_asks_how_long_first_and_the_hours_only_after(): void
+    {
+        $employee = $this->regularEmployee();
+        $employee->assignSchedule(
+            \App\Models\WorkSchedule::factory()->create(['start_time' => '22:00', 'end_time' => '06:00']),
+            '2026-08-01',
+        );
+
+        \Livewire\Livewire::actingAs($employee->user)
+            ->test('leave-requests.create')
+            // Whole day to begin with. The hours field is rendered but hidden
+            // in the browser, so switching to a half day is instant.
+            ->assertSet('duration', 'whole')
+            ->assertSee("duration === 'half'", escape: false)
+            ->set('startDate', '2026-08-12')
+            ->set('duration', 'half')
+            ->assertSet('halfDayPeriod', 'first')
+            ->assertSee('10:00 PM - 2:00 AM')
+            ->assertSee('2:00 AM - 6:00 AM')
+            ->set('halfDayPeriod', 'second')
+            ->set('leaveTypeId', $this->vacation->id)
+            ->call('submit')
+            ->assertHasNoErrors();
+
+        $request = LeaveRequest::where('employee_id', $employee->id)->sole();
+
+        $this->assertSame(0.5, (float) $request->days_requested);
+        $this->assertSame('Half day Leave (2:00 AM - 6:00 AM)', $request->daysLabel());
+        $this->assertTrue($request->start_date->isSameDay($request->end_date));
+    }
+
+    #[Test]
+    public function going_back_to_a_whole_day_forgets_the_hours(): void
+    {
+        $employee = $this->regularEmployee();
+
+        \Livewire\Livewire::actingAs($employee->user)
+            ->test('leave-requests.create')
+            ->set('duration', 'half')
+            ->set('duration', 'whole')
+            ->assertSet('halfDayPeriod', '')
+            ->set('leaveTypeId', $this->vacation->id)
+            ->set('startDate', '2026-08-12')
+            ->set('endDate', '2026-08-13')
+            ->call('submit')
+            ->assertHasNoErrors();
+
+        $this->assertSame(2.0, (float) LeaveRequest::where('employee_id', $employee->id)->sole()->days_requested);
     }
 
     #[Test]

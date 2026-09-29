@@ -37,11 +37,13 @@ class LeaveService
         $start = Carbon::parse($startDate);
         $end = Carbon::parse($endDate);
 
+        $halfDayWindow = null;
+
         if ($halfDayPeriod !== null) {
             abort_unless(
-                in_array($halfDayPeriod, [LeaveRequest::MORNING, LeaveRequest::AFTERNOON], true),
+                in_array($halfDayPeriod, [LeaveRequest::FIRST_HALF, LeaveRequest::SECOND_HALF], true),
                 422,
-                'A half day is either the morning or the afternoon.',
+                'A half day is either the first or the second half of the shift.',
             );
 
             // Half of which day, otherwise. A range cannot be half a day.
@@ -52,6 +54,14 @@ class LeaveService
             );
 
             $end = $start->copy();
+
+            /*
+             * The hours come from their own shift and are kept on the request.
+             * A schedule can be changed later, and the approval trail has to
+             * keep saying what was agreed at the time.
+             */
+            $schedule = $employee->scheduleAssignmentForDate($start)?->workSchedule;
+            $halfDayWindow = $schedule ? $schedule->halfShiftWindows()[$halfDayPeriod] : null;
         }
 
         $daysRequested = $halfDayPeriod !== null ? 0.5 : $start->diffInDays($end) + 1;
@@ -62,7 +72,7 @@ class LeaveService
             "This employee is not entitled to {$leaveType->name}."
         );
 
-        $leaveRequest = DB::transaction(function () use ($employee, $leaveType, $start, $end, $daysRequested, $reason, $halfDayPeriod) {
+        $leaveRequest = DB::transaction(function () use ($employee, $leaveType, $start, $end, $daysRequested, $reason, $halfDayPeriod, $halfDayWindow) {
             // Locking the employee serialises their own submissions, so two
             // requests filed at once cannot both read the same balance and
             // both come out as paid leave when only one is covered.
@@ -80,6 +90,8 @@ class LeaveService
                 'end_date' => $end,
                 'days_requested' => $daysRequested,
                 'half_day_period' => $halfDayPeriod,
+                'half_day_start' => $halfDayWindow[0] ?? null,
+                'half_day_end' => $halfDayWindow[1] ?? null,
                 'reason' => $reason,
                 'is_lwop' => $isLwop,
                 'status' => $manager ? 'pending_manager' : 'pending_ceo',

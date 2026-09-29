@@ -14,8 +14,53 @@ new #[Layout('layouts.app')] class extends Component
     public string $startDate = '';
     public string $endDate = '';
     public string $reason = '';
-    /** '', 'morning' or 'afternoon'. Half a day is always one date. */
+    /** 'whole' or 'half'. Asked before the hours, so the hours only appear when they apply. */
+    public string $duration = 'whole';
+
+    /** '', 'first' or 'second' half of their shift. Half a day is always one date. */
     public string $halfDayPeriod = '';
+
+    public function updatedDuration(): void
+    {
+        if ($this->duration === 'half') {
+            // One date, and the first half pre-chosen so the field is never
+            // left empty by somebody who thought they had finished.
+            $this->endDate = $this->startDate;
+            $this->halfDayPeriod = $this->halfDayPeriod ?: 'first';
+
+            return;
+        }
+
+        $this->halfDayPeriod = '';
+    }
+
+    /**
+     * The two halves of the shift they are rostered on for the date chosen,
+     * as the clock shows them — 10:00 PM - 2:00 AM rather than "morning",
+     * which means nothing on a graveyard shift.
+     *
+     * @return array<string, string>
+     */
+    public function halfDayOptions(): array
+    {
+        $generic = ['first' => 'First half of shift', 'second' => 'Second half of shift'];
+
+        if ($this->startDate === '') {
+            return $generic;
+        }
+
+        $schedule = $this->employee->scheduleAssignmentForDate($this->startDate)?->workSchedule;
+
+        if (! $schedule) {
+            return $generic;
+        }
+
+        $clock = fn (string $time) => \Illuminate\Support\Carbon::createFromFormat('H:i', $time)->format('g:i A');
+
+        return collect($schedule->halfShiftWindows())
+            ->map(fn (array $window) => $clock($window[0]) . ' - ' . $clock($window[1]))
+            ->all();
+    }
 
     public function mount(): void
     {
@@ -41,16 +86,21 @@ new #[Layout('layouts.app')] class extends Component
     {
         // Half a day covers one date, so the end date follows the start rather
         // than being another thing to get wrong.
-        if ($this->halfDayPeriod !== '') {
+        if ($this->duration === 'half') {
             $this->endDate = $this->startDate;
+        } else {
+            $this->halfDayPeriod = '';
         }
 
         $data = $this->validate([
             'leaveTypeId' => ['required', 'exists:leave_types,id'],
             'startDate' => ['required', 'date'],
             'endDate' => ['required', 'date', 'after_or_equal:startDate'],
-            'halfDayPeriod' => ['nullable', 'in:,morning,afternoon'],
+            'duration' => ['required', 'in:whole,half'],
+            'halfDayPeriod' => ['nullable', 'in:,first,second', 'required_if:duration,half'],
             'reason' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'halfDayPeriod.required_if' => 'Choose which half of your shift you are taking off.',
         ]);
 
         $leaveRequest = $leaveService->submit(
@@ -105,8 +155,36 @@ new #[Layout('layouts.app')] class extends Component
                     @error('leaveTypeId') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
 
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <div>
+                {{-- The hours field appears in the browser, not after a round
+                     trip: waiting half a second for a field to appear reads as
+                     the form being broken. The value still syncs to the server
+                     behind it, which is what the summary and the submit use. --}}
+                <div class="grid gap-5 sm:grid-cols-2" x-data="{ duration: $wire.entangle('duration').live }">
+                    <div :class="duration === 'half' ? '' : 'sm:col-span-2'">
+                        <x-label>Whole day or half day?</x-label>
+                        <x-select x-model="duration">
+                            <option value="whole">Whole day</option>
+                            <option value="half">Half day Leave</option>
+                        </x-select>
+                        @error('duration') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+
+                    <div x-cloak x-show="duration === 'half'">
+                        <x-label>Which hours are you taking off?</x-label>
+                        <x-select wire:model.live="halfDayPeriod">
+                            @foreach ($this->halfDayOptions() as $value => $hours)
+                                <option value="{{ $value }}">{{ $hours }}</option>
+                            @endforeach
+                        </x-select>
+                        <p class="mt-1.5 text-xs font-medium text-[#778599]">
+                            Taken from your own shift for that date. Half a day costs half a leave credit.
+                        </p>
+                        @error('halfDayPeriod') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2" x-data="{ duration: $wire.entangle('duration').live }">
+                    <div :class="duration === 'half' ? 'sm:col-span-2' : ''">
                         <x-label>Start Date</x-label>
                         <div class="relative" x-data="datePicker($wire.entangle('startDate').live)">
                             <button type="button" @click="open = ! open" class="flex h-11 w-full items-center justify-between rounded-lg border border-ink-200 bg-white px-3.5 text-left text-sm font-medium text-ink-700 shadow-sm transition hover:bg-ink-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-600/20 dark:border-white/10 dark:bg-ink-900 dark:text-white dark:hover:bg-white/5">
@@ -132,7 +210,8 @@ new #[Layout('layouts.app')] class extends Component
                         </div>
                         @error('startDate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                     </div>
-                    <div>
+                    {{-- A half day is one date, so there is nothing to end. --}}
+                    <div x-show="duration !== 'half'">
                         <x-label>End Date</x-label>
                         <div class="relative" x-data="datePicker($wire.entangle('endDate').live)">
                             <button type="button" @click="open = ! open" class="flex h-11 w-full items-center justify-between rounded-lg border border-ink-200 bg-white px-3.5 text-left text-sm font-medium text-ink-700 shadow-sm transition hover:bg-ink-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-600/20 dark:border-white/10 dark:bg-ink-900 dark:text-white dark:hover:bg-white/5">
@@ -161,19 +240,6 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
 
                 <div>
-                    <x-label>Half day?</x-label>
-                    <x-select wire:model.live="halfDayPeriod">
-                        <option value="">No — the whole day (or a range of days)</option>
-                        <option value="morning">Half day — morning off</option>
-                        <option value="afternoon">Half day — afternoon off</option>
-                    </x-select>
-                    <p class="mt-1.5 text-xs font-medium text-[#778599]">
-                        A half day covers one date and costs half a leave credit. The end date follows the start date.
-                    </p>
-                    @error('halfDayPeriod') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
                     <x-label>Reason (optional)</x-label>
                     <x-textarea wire:model="reason" rows="4" placeholder="Add notes that can help your manager review the request." />
                 </div>
@@ -194,7 +260,7 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="rounded-xl border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
                     <p class="text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-400">Days Requested</p>
                     <p class="mt-2 text-2xl font-bold text-ink-950 dark:text-white">
-                        @if ($halfDayPeriod)
+                        @if ($duration === 'half')
                             0.5
                         @elseif ($startDate && $endDate)
                             {{ \Carbon\Carbon::parse($startDate)->diffInDays(\Carbon\Carbon::parse($endDate)) + 1 }}
@@ -202,8 +268,10 @@ new #[Layout('layouts.app')] class extends Component
                             --
                         @endif
                     </p>
-                    @if ($halfDayPeriod)
-                        <p class="mt-1 text-xs font-medium text-[#778599]">{{ ucfirst($halfDayPeriod) }} off on {{ $startDate ? \Carbon\Carbon::parse($startDate)->format('M j, Y') : 'the date chosen' }}.</p>
+                    @if ($duration === 'half' && $halfDayPeriod)
+                        <p class="mt-1 text-xs font-medium text-[#778599]">
+                            {{ $this->halfDayOptions()[$halfDayPeriod] ?? '' }} off on {{ $startDate ? \Carbon\Carbon::parse($startDate)->format('M j, Y') : 'the date chosen' }}.
+                        </p>
                     @endif
                 </div>
                 <div class="rounded-xl border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">

@@ -112,6 +112,35 @@ class WorkSchedule extends Model
         return $this->night_differential_eligible ?? $this->overlapsNightWindow();
     }
 
+    /**
+     * The shift split down the middle, for half a day's leave.
+     *
+     * Worked out from the shift rather than named morning and afternoon,
+     * because "morning off" means nothing on a shift that runs 22:00 to 06:00.
+     * A graveyard gives 22:00-02:00 and 02:00-06:00; a 09:00-18:00 day gives
+     * 09:00-13:30 and 13:30-18:00.
+     *
+     * @return array{first: array{0: string, 1: string}, second: array{0: string, 1: string}}
+     */
+    public function halfShiftWindows(): array
+    {
+        $toMinutes = fn (string $time): int => (int) substr($time, 0, 2) * 60 + (int) substr($time, 3, 2);
+        $toClock = fn (int $minutes): string => sprintf('%02d:%02d', intdiv($minutes % 1440, 60), $minutes % 60);
+
+        $start = $toMinutes($this->start_time->format('H:i'));
+        $end = $toMinutes($this->end_time->format('H:i'));
+
+        // A graveyard ends on the next day, so its end is past midnight rather
+        // than before its own start.
+        $length = $this->crossesMidnight() ? ($end + 1440) - $start : $end - $start;
+        $middle = $start + intdiv($length, 2);
+
+        return [
+            'first' => [$toClock($start), $toClock($middle)],
+            'second' => [$toClock($middle), $toClock($start + $length)],
+        ];
+    }
+
     /** Scheduled workdays between two dates, inclusive of both endpoints. */
     public function expectedWorkdaysBetween(Carbon|string $from, Carbon|string $to): int
     {

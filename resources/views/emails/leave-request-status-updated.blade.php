@@ -37,7 +37,7 @@
                         <td style="padding:38px;">
                             <h2 style="margin:0 0 14px; color:#0f172a; font-size:22px; line-height:1.35; font-weight:800;">Hello,</h2>
                             <p style="margin:0; color:#475569; font-size:16px; line-height:1.7;">
-                                <strong style="color:#0f172a;">{{ $employeeName }}</strong>'s leave request for {{ $leaveRequest->daysLabel() }} of {{ $leaveRequest->leaveType->name }} from {{ $leaveRequest->start_date->format('M d, Y') }} to {{ $leaveRequest->end_date->format('M d, Y') }} has been updated.
+                                <strong style="color:#0f172a;">{{ $employeeName }}</strong>'s leave request for {{ $leaveRequest->daysLabel() }} of {{ $leaveRequest->leaveType->name }} {{ $leaveRequest->datesLabel() }} has been updated.
                             </p>
 
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0; border-radius:14px; background:#f8fafc; border:1px solid #e2e8f0;">
