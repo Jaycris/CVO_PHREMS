@@ -33,21 +33,24 @@ class CashAdvanceRequestStatusUpdated extends Notification implements ShouldQueu
     {
         $request = $this->advanceRequest;
 
-        $mail = (new MailMessage)
+        $approved = $request->status === 'approved';
+
+        return (new MailMessage)
             ->subject($this->subject)
-            ->line($this->message);
-
-        if ($request->status === 'approved') {
-            $mail->line('Amount: PHP ' . number_format($request->effectiveAmount(), 2))
-                ->line('Deduction: ' . $request->deductionPlanLabel()
-                    . ' (PHP ' . number_format($request->perCutoffAmount(), 2) . ' per cutoff)');
-        }
-
-        if ($request->decision_note) {
-            $mail->line('Note: ' . $request->decision_note);
-        }
-
-        return $mail->action('View Request', url('/cash-advance-requests'));
+            ->view('emails.notice', [
+                'heading' => 'Your cash advance was decided',
+                'lines' => [
+                    $this->message,
+                    $approved ? 'Amount: PHP ' . number_format($request->effectiveAmount(), 2) : null,
+                    $approved
+                        ? 'Deduction: ' . $request->deductionPlanLabel()
+                            . ' (PHP ' . number_format($request->perCutoffAmount(), 2) . ' per cutoff)'
+                        : null,
+                ],
+                'note' => $request->decision_note ? 'Note: ' . $request->decision_note : null,
+                'actionLabel' => 'View Request',
+                'url' => url('/cash-advance-requests'),
+            ]);
     }
 
     /** @return array<string, mixed> */

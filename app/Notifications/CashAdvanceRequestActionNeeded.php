@@ -30,10 +30,17 @@ class CashAdvanceRequestActionNeeded extends Notification implements ShouldQueue
 
         return (new MailMessage)
             ->subject("Cash advance awaiting your approval - {$name}")
-            ->line("{$name} requested a cash advance of PHP {$amount}.")
-            ->line('Deduction: ' . $request->deductionPlanLabel())
-            ->line('Reason: ' . $request->reason)
-            ->action('Review Request', url('/cash-advance-requests'));
+            ->view('emails.notice', [
+                'heading' => 'Cash advance needs approval',
+                'heroLine' => 'A team member is waiting for your review.',
+                'lines' => [
+                    "{$name} requested a cash advance of PHP {$amount}.",
+                    'Deduction: ' . $request->deductionPlanLabel(),
+                    'Reason: ' . $request->reason,
+                ],
+                'actionLabel' => 'Review Request',
+                'url' => url('/cash-advance-requests'),
+            ]);
     }
 
     /** @return array<string, mixed> */

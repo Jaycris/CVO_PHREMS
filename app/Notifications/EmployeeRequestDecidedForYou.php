@@ -31,15 +31,16 @@ class EmployeeRequestDecidedForYou extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        $mail = (new MailMessage)
+        return (new MailMessage)
             ->subject('A request waiting on you was decided')
-            ->line($this->message);
-
-        if ($this->request->decision_note) {
-            $mail->line('Note: ' . $this->request->decision_note);
-        }
-
-        return $mail->action('View Requests', url('/requests'));
+            ->view('emails.notice', [
+                'heading' => 'A request waiting on you was decided',
+                'heroLine' => 'It has left your queue, so here is what happened to it.',
+                'lines' => [$this->message],
+                'note' => $this->request->decision_note ? 'Note: ' . $this->request->decision_note : null,
+                'actionLabel' => 'View Requests',
+                'url' => url('/requests'),
+            ]);
     }
 
     /** @return array<string, mixed> */

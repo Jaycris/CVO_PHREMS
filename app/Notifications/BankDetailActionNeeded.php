@@ -35,12 +35,21 @@ class BankDetailActionNeeded extends Notification implements ShouldQueue
 
         return (new MailMessage)
             ->subject("Bank detail change to review - {$name}")
-            ->line("{$name} wants their salary paid to a different account.")
-            ->line('From: ' . ($this->request->previous_bank_name ?: '—') . ' ' . $this->request->maskedPreviousAccount())
-            ->line('To: ' . $this->request->bank_name . ' ' . $this->request->maskedAccount())
-            ->line($this->request->reason ? 'Reason: ' . $this->request->reason : 'No reason given.')
-            ->line('Check this against the employee before approving. This is where their salary lands.')
-            ->action('Review Change', url('/bank-details'));
+            ->view('emails.notice', [
+                'heading' => 'Payout account change to review',
+                'heroLine' => 'Somebody wants their salary paid somewhere else.',
+                'lines' => [
+                    "{$name} wants their salary paid to a different account.",
+                    'From: ' . ($this->request->previous_bank_name ?: '—') . ' ' . $this->request->maskedPreviousAccount(),
+                    'To: ' . $this->request->bank_name . ' ' . $this->request->maskedAccount(),
+                    $this->request->reason ? 'Reason: ' . $this->request->reason : 'No reason given.',
+                ],
+                // The one thing not to skim past: this is the classic payroll
+                // fraud, and an email is exactly how it arrives.
+                'note' => 'Check this against the employee in person before approving. This is where their salary lands.',
+                'actionLabel' => 'Review Change',
+                'url' => url('/bank-details'),
+            ]);
     }
 
     /** @return array<string, mixed> */

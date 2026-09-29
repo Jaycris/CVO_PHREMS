@@ -28,18 +28,21 @@ class EmployeeRequestActionNeeded extends Notification implements ShouldQueue
         $name = $this->employeeName();
         $type = $this->request->typeName();
 
-        $mail = (new MailMessage)
+        return (new MailMessage)
             ->subject("{$type} request - {$name}")
-            ->line("{$name} has filed a {$type} request.");
-
-        if ($this->request->days->isNotEmpty()) {
-            $mail->line('Days: ' . $this->request->dateLabel()
-                . ' (' . $this->request->dayCount() . ' day(s))');
-        }
-
-        return $mail
-            ->line('Details: ' . $this->request->details)
-            ->action('Review Request', url('/requests'));
+            ->view('emails.notice', [
+                'heading' => $type . ' request needs approval',
+                'heroLine' => 'A team member is waiting for your review.',
+                'lines' => [
+                    "{$name} has filed a {$type} request.",
+                    $this->request->days->isNotEmpty()
+                        ? 'Days: ' . $this->request->dateLabel() . ' (' . $this->request->dayCount() . ' day(s))'
+                        : null,
+                    'Details: ' . $this->request->details,
+                ],
+                'actionLabel' => 'Review Request',
+                'url' => url('/requests'),
+            ]);
     }
 
     /** @return array<string, mixed> */

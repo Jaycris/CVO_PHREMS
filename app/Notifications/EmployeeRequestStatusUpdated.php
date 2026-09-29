@@ -30,15 +30,15 @@ class EmployeeRequestStatusUpdated extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        $mail = (new MailMessage)
+        return (new MailMessage)
             ->subject($this->subject)
-            ->line($this->message);
-
-        if ($this->request->decision_note) {
-            $mail->line('Note: ' . $this->request->decision_note);
-        }
-
-        return $mail->action('View Request', url('/requests'));
+            ->view('emails.notice', [
+                'heading' => 'Your request was decided',
+                'lines' => [$this->message],
+                'note' => $this->request->decision_note ? 'Note: ' . $this->request->decision_note : null,
+                'actionLabel' => 'View Request',
+                'url' => url('/requests'),
+            ]);
     }
 
     /** @return array<string, mixed> */

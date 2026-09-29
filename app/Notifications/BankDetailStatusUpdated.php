@@ -34,17 +34,18 @@ class BankDetailStatusUpdated extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        $mail = (new MailMessage)
+        return (new MailMessage)
             ->subject($this->subject)
-            ->line($this->message);
-
-        if ($this->request->decision_note) {
-            $mail->line('Note from the approver: ' . $this->request->decision_note);
-        }
-
-        return $mail
-            ->line('If this was not you, tell HR straight away.')
-            ->action('View My Profile', url('/my-profile'));
+            ->view('emails.notice', [
+                'heading' => 'Your payout account',
+                'lines' => [
+                    $this->message,
+                    $this->request->decision_note ? 'Note from the approver: ' . $this->request->decision_note : null,
+                ],
+                'note' => 'If this was not you, tell HR straight away.',
+                'actionLabel' => 'View My Profile',
+                'url' => url('/my-profile'),
+            ]);
     }
 
     /** @return array<string, mixed> */

@@ -31,20 +31,21 @@ class ReimbursementStatusUpdated extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        $mail = (new MailMessage)
+        $reduced = $this->claim->wasReduced();
+
+        return (new MailMessage)
             ->subject($this->subject)
-            ->line($this->message);
-
-        if ($this->claim->wasReduced()) {
-            $mail->line('Claimed: PHP ' . number_format((float) $this->claim->amount_requested, 2))
-                ->line('Approved: PHP ' . number_format($this->claim->effectiveAmount(), 2));
-        }
-
-        if ($this->claim->decision_note) {
-            $mail->line('Note: ' . $this->claim->decision_note);
-        }
-
-        return $mail->action('View Claim', url('/my-reimbursements'));
+            ->view('emails.notice', [
+                'heading' => 'Your expense claim was decided',
+                'lines' => [
+                    $this->message,
+                    $reduced ? 'Claimed: PHP ' . number_format((float) $this->claim->amount_requested, 2) : null,
+                    $reduced ? 'Approved: PHP ' . number_format($this->claim->effectiveAmount(), 2) : null,
+                ],
+                'note' => $this->claim->decision_note ? 'Note: ' . $this->claim->decision_note : null,
+                'actionLabel' => 'View Claim',
+                'url' => url('/my-reimbursements'),
+            ]);
     }
 
     /** @return array<string, mixed> */
