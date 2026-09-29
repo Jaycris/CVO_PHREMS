@@ -73,7 +73,7 @@ class AttendanceAggregator
      * @param  list<string>  $dates
      * @param  array<string, AttendanceDay>  $attendance
      * @param  Collection<int, EmployeeScheduleAssignment>  $assignments
-     * @param  array<string, string>  $leave  date => paid|lwop
+     * @param  array<string, array{kind: string, half: bool}>  $leave  date => paid|lwop, and whether it is half a day
      * @param  array<string, string>  $offsite  date => reason
      * @param  array<string, Holiday>  $holidays  date => holiday
      * @return array<string, mixed>
@@ -233,16 +233,33 @@ class AttendanceAggregator
                 continue;
             }
 
-            if ($leaveKind === 'lwop') {
-                $counters['days_lwop']++;
+            /*
+             * A whole day of leave is settled here and the day is over. Half a
+             * day is not: they are expected for the other half, so the day
+             * carries on being measured like any other — with the half they
+             * were excused for costing them neither an absence nor lateness.
+             */
+            $excusedHalf = false;
 
-                continue;
-            }
+            if ($leaveKind !== null) {
+                $counter = $leaveKind['kind'] === 'lwop' ? 'days_lwop' : 'days_on_paid_leave';
 
-            if ($leaveKind === 'paid') {
-                $counters['days_on_paid_leave']++;
+                if (! $leaveKind['half']) {
+                    $counters[$counter]++;
 
-                continue;
+                    continue;
+                }
+
+                $counters[$counter] += 0.5;
+                $excusedHalf = true;
+
+                if (! $row) {
+                    // Excused for half the day and missing for the rest, which
+                    // is half an absence rather than none.
+                    $counters['days_absent'] += 0.5;
+
+                    continue;
+                }
             }
 
             // Leave is settled before this on purpose. A regular holiday and a
@@ -296,9 +313,11 @@ class AttendanceAggregator
                 $counters['unclosed_days'][] = $date;
             }
 
-            $lateMinutes = (int) ($row->lateMinutes($assignment) ?? 0);
-            $undertimeMinutes = (int) ($row->undertimeMinutes($assignment) ?? 0);
-            $overBreakMinutes = $row->overBreakMinutes($assignment);
+            // Somebody on half a day's leave arrives late or leaves early by
+            // arrangement. Charging them for it would take the time twice.
+            $lateMinutes = $excusedHalf ? 0 : (int) ($row->lateMinutes($assignment) ?? 0);
+            $undertimeMinutes = $excusedHalf ? 0 : (int) ($row->undertimeMinutes($assignment) ?? 0);
+            $overBreakMinutes = $excusedHalf ? 0 : $row->overBreakMinutes($assignment);
 
             $counters['late_minutes'] += $lateMinutes;
             $counters['undertime_minutes'] += $undertimeMinutes;
@@ -308,7 +327,14 @@ class AttendanceAggregator
             // shift earns nothing and someone moved onto graveyard mid-cutoff
             // earns it only for the days after the move.
             if ($schedule->qualifiesForNightDifferential()) {
-                $nights[] = $this->nightMinutes($schedule, $lateMinutes, $undertimeMinutes, $overBreakMinutes);
+                $minutes = $this->nightMinutes($schedule, $lateMinutes, $undertimeMinutes, $overBreakMinutes);
+
+                // Half a night worked earns half a night's premium.
+                if ($excusedHalf) {
+                    $minutes = (int) round($minutes / 2);
+                }
+
+                $nights[] = $minutes;
             }
         }
 
@@ -459,7 +485,7 @@ class AttendanceAggregator
             ->where('status', 'approved')
             ->whereDate('start_date', '<=', $end->toDateString())
             ->whereDate('end_date', '>=', $start->toDateString())
-            ->get(['employee_id', 'start_date', 'end_date', 'is_lwop']);
+            ->get(['employee_id', 'start_date', 'end_date', 'is_lwop', 'half_day_period']);
 
         $map = [];
 
@@ -469,7 +495,10 @@ class AttendanceAggregator
 
             while ($cursor->lte($last)) {
                 if ($cursor->betweenIncluded($start->copy()->startOfDay(), $end->copy()->startOfDay())) {
-                    $map[$request->employee_id][$cursor->toDateString()] = $request->is_lwop ? 'lwop' : 'paid';
+                    $map[$request->employee_id][$cursor->toDateString()] = [
+                        'kind' => $request->is_lwop ? 'lwop' : 'paid',
+                        'half' => $request->isHalfDay(),
+                    ];
                 }
 
                 $cursor->addDay();

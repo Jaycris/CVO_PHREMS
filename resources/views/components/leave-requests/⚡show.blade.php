@@ -100,7 +100,7 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
                 <div class="rounded-xl border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
                     <p class="text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-400">Days Requested</p>
-                    <p class="mt-2 text-sm font-bold text-ink-950 dark:text-white">{{ $leaveRequest->days_requested }} day(s)</p>
+                    <p class="mt-2 text-sm font-bold text-ink-950 dark:text-white">{{ $leaveRequest->daysLabel() }}</p>
                 </div>
                 <div class="rounded-xl border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
                     <p class="text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-400">Start Date</p>

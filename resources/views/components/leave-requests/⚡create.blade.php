@@ -14,6 +14,8 @@ new #[Layout('layouts.app')] class extends Component
     public string $startDate = '';
     public string $endDate = '';
     public string $reason = '';
+    /** '', 'morning' or 'afternoon'. Half a day is always one date. */
+    public string $halfDayPeriod = '';
 
     public function mount(): void
     {
@@ -37,10 +39,17 @@ new #[Layout('layouts.app')] class extends Component
 
     public function submit(LeaveService $leaveService): void
     {
+        // Half a day covers one date, so the end date follows the start rather
+        // than being another thing to get wrong.
+        if ($this->halfDayPeriod !== '') {
+            $this->endDate = $this->startDate;
+        }
+
         $data = $this->validate([
             'leaveTypeId' => ['required', 'exists:leave_types,id'],
             'startDate' => ['required', 'date'],
             'endDate' => ['required', 'date', 'after_or_equal:startDate'],
+            'halfDayPeriod' => ['nullable', 'in:,morning,afternoon'],
             'reason' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -50,6 +59,7 @@ new #[Layout('layouts.app')] class extends Component
             $data['startDate'],
             $data['endDate'],
             $data['reason'] ?: null,
+            $data['halfDayPeriod'] ?: null,
         );
 
         $this->redirect(route('leave-requests.show', $leaveRequest), navigate: true);
@@ -151,6 +161,19 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
 
                 <div>
+                    <x-label>Half day?</x-label>
+                    <x-select wire:model.live="halfDayPeriod">
+                        <option value="">No — the whole day (or a range of days)</option>
+                        <option value="morning">Half day — morning off</option>
+                        <option value="afternoon">Half day — afternoon off</option>
+                    </x-select>
+                    <p class="mt-1.5 text-xs font-medium text-[#778599]">
+                        A half day covers one date and costs half a leave credit. The end date follows the start date.
+                    </p>
+                    @error('halfDayPeriod') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+
+                <div>
                     <x-label>Reason (optional)</x-label>
                     <x-textarea wire:model="reason" rows="4" placeholder="Add notes that can help your manager review the request." />
                 </div>
@@ -171,12 +194,17 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="rounded-xl border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
                     <p class="text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-400">Days Requested</p>
                     <p class="mt-2 text-2xl font-bold text-ink-950 dark:text-white">
-                        @if ($startDate && $endDate)
+                        @if ($halfDayPeriod)
+                            0.5
+                        @elseif ($startDate && $endDate)
                             {{ \Carbon\Carbon::parse($startDate)->diffInDays(\Carbon\Carbon::parse($endDate)) + 1 }}
                         @else
                             --
                         @endif
                     </p>
+                    @if ($halfDayPeriod)
+                        <p class="mt-1 text-xs font-medium text-[#778599]">{{ ucfirst($halfDayPeriod) }} off on {{ $startDate ? \Carbon\Carbon::parse($startDate)->format('M j, Y') : 'the date chosen' }}.</p>
+                    @endif
                 </div>
                 <div class="rounded-xl border border-ink-200 bg-ink-50 p-4 dark:border-white/10 dark:bg-white/5">
                     <p class="text-xs font-bold uppercase tracking-wide text-[#526783] dark:text-ink-400">Available Balance</p>

@@ -121,7 +121,7 @@ new #[Layout('layouts.app')] class extends Component
                             <tr wire:key="approve-{{ $request->id }}" class="transition hover:bg-ink-50 dark:hover:bg-white/5">
                                 <td class="whitespace-nowrap px-5 py-4 font-medium text-[#526783] dark:text-white">{{ $request->employee->fullName() ?: $request->employee->employee_id }}</td>
                                 <td class="whitespace-nowrap px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $request->leaveType->code }}</td>
-                                <td class="whitespace-nowrap px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }} ({{ $request->days_requested }}d)</td>
+                                <td class="whitespace-nowrap px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }} ({{ $request->isHalfDay() ? 'half day' : $request->days_requested . 'd' }})</td>
                                 <td class="whitespace-nowrap px-5 py-4"><x-badge :color="$request->statusColor()">{{ $request->statusLabel() }}</x-badge></td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right"><a href="{{ route('leave-requests.show', $request) }}" wire:navigate class="text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">Review</a></td>
                             </tr>
@@ -158,7 +158,7 @@ new #[Layout('layouts.app')] class extends Component
                         @forelse ($myRequests as $request)
                             <tr wire:key="mine-{{ $request->id }}" class="transition hover:bg-ink-50 dark:hover:bg-white/5">
                                 <td class="whitespace-nowrap px-5 py-4 font-medium text-[#526783] dark:text-white">{{ $request->leaveType->code }}</td>
-                                <td class="whitespace-nowrap px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }} ({{ $request->days_requested }}d)</td>
+                                <td class="whitespace-nowrap px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }} ({{ $request->isHalfDay() ? 'half day' : $request->days_requested . 'd' }})</td>
                                 <td class="whitespace-nowrap px-5 py-4"><x-badge :color="$request->statusColor()">{{ $request->statusLabel() }}</x-badge></td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right"><a href="{{ route('leave-requests.show', $request) }}" wire:navigate class="text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">View</a></td>
                             </tr>
@@ -199,7 +199,7 @@ new #[Layout('layouts.app')] class extends Component
                             <tr wire:key="all-{{ $request->id }}" class="transition hover:bg-ink-50 dark:hover:bg-white/5">
                                 <td class="whitespace-nowrap px-5 py-4 font-medium text-[#526783] dark:text-white">{{ $request->employee->fullName() ?: $request->employee->employee_id }}</td>
                                 <td class="whitespace-nowrap px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $request->leaveType->code }}</td>
-                                <td class="whitespace-nowrap px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }} ({{ $request->days_requested }}d)</td>
+                                <td class="whitespace-nowrap px-5 py-4 font-medium text-[#64748b] dark:text-ink-400">{{ $request->start_date->format('M d') }} - {{ $request->end_date->format('M d, Y') }} ({{ $request->isHalfDay() ? 'half day' : $request->days_requested . 'd' }})</td>
                                 <td class="whitespace-nowrap px-5 py-4"><x-badge :color="$request->statusColor()">{{ $request->statusLabel() }}</x-badge></td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right"><a href="{{ route('leave-requests.show', $request) }}" wire:navigate class="text-sm font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">View</a></td>
                             </tr>

@@ -23,11 +23,38 @@ use Illuminate\Support\Facades\DB;
  */
 class LeaveService
 {
-    public function submit(Employee $employee, LeaveType $leaveType, string $startDate, string $endDate, ?string $reason): LeaveRequest
-    {
+    /**
+     * @param  ?string  $halfDayPeriod  'morning' or 'afternoon' for half a day off, null for whole days
+     */
+    public function submit(
+        Employee $employee,
+        LeaveType $leaveType,
+        string $startDate,
+        string $endDate,
+        ?string $reason,
+        ?string $halfDayPeriod = null,
+    ): LeaveRequest {
         $start = Carbon::parse($startDate);
         $end = Carbon::parse($endDate);
-        $daysRequested = $start->diffInDays($end) + 1;
+
+        if ($halfDayPeriod !== null) {
+            abort_unless(
+                in_array($halfDayPeriod, [LeaveRequest::MORNING, LeaveRequest::AFTERNOON], true),
+                422,
+                'A half day is either the morning or the afternoon.',
+            );
+
+            // Half of which day, otherwise. A range cannot be half a day.
+            abort_unless(
+                $start->isSameDay($end),
+                422,
+                'A half day covers one date. Use whole days for a range.',
+            );
+
+            $end = $start->copy();
+        }
+
+        $daysRequested = $halfDayPeriod !== null ? 0.5 : $start->diffInDays($end) + 1;
 
         abort_unless(
             $employee->isEligibleFor($leaveType),
@@ -35,7 +62,7 @@ class LeaveService
             "This employee is not entitled to {$leaveType->name}."
         );
 
-        $leaveRequest = DB::transaction(function () use ($employee, $leaveType, $start, $end, $daysRequested, $reason) {
+        $leaveRequest = DB::transaction(function () use ($employee, $leaveType, $start, $end, $daysRequested, $reason, $halfDayPeriod) {
             // Locking the employee serialises their own submissions, so two
             // requests filed at once cannot both read the same balance and
             // both come out as paid leave when only one is covered.
@@ -52,6 +79,7 @@ class LeaveService
                 'start_date' => $start,
                 'end_date' => $end,
                 'days_requested' => $daysRequested,
+                'half_day_period' => $halfDayPeriod,
                 'reason' => $reason,
                 'is_lwop' => $isLwop,
                 'status' => $manager ? 'pending_manager' : 'pending_ceo',
@@ -73,7 +101,8 @@ class LeaveService
 
         $this->notifyHr(
             $leaveRequest,
-            'New leave request from ' . $this->employeeName($employee) . " ({$daysRequested} day(s), {$leaveType->name}) submitted.",
+            'New leave request from ' . $this->employeeName($employee)
+                . ' (' . $leaveRequest->daysLabel() . ', ' . $leaveType->name . ') submitted.',
             [$approver?->id, $employee->user?->id],
         );
 

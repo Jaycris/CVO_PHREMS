@@ -61,7 +61,7 @@ class LeaveRequestActionNeeded extends Notification implements ShouldQueue
         $leaveRequest = $this->leaveRequest;
         $employeeName = $leaveRequest->employee->fullName() ?: $leaveRequest->employee->employee_id;
 
-        $days = "{$leaveRequest->days_requested} day(s) of {$leaveRequest->leaveType->name}";
+        $days = $leaveRequest->daysLabel() . ' of ' . $leaveRequest->leaveType->name;
         $manager = $this->approvedByManager();
 
         return [

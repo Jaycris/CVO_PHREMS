@@ -13,6 +13,7 @@ class LeaveRequest extends Model
         'start_date',
         'end_date',
         'days_requested',
+        'half_day_period',
         'reason',
         'is_lwop',
         'status',
@@ -29,10 +30,43 @@ class LeaveRequest extends Model
         return [
             'start_date' => 'date',
             'end_date' => 'date',
+            'days_requested' => 'float',
             'is_lwop' => 'boolean',
             'manager_decided_at' => 'datetime',
             'ceo_decided_at' => 'datetime',
         ];
+    }
+
+    public const MORNING = 'morning';
+
+    public const AFTERNOON = 'afternoon';
+
+    public function isHalfDay(): bool
+    {
+        return $this->half_day_period !== null;
+    }
+
+    /** "Morning" or "Afternoon", for the approver and the DTR. */
+    public function halfDayLabel(): ?string
+    {
+        return $this->isHalfDay() ? ucfirst($this->half_day_period) : null;
+    }
+
+    /**
+     * How much time off this is, in words.
+     *
+     * "0.5 day(s)" reads like a rounding error on an approval screen, so a half
+     * day says which half instead.
+     */
+    public function daysLabel(): string
+    {
+        if ($this->isHalfDay()) {
+            return 'Half day (' . $this->halfDayLabel() . ')';
+        }
+
+        $days = (float) $this->days_requested;
+
+        return rtrim(rtrim(number_format($days, 2), '0'), '.') . ' day(s)';
     }
 
     public function employee(): BelongsTo
