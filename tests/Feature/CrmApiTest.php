@@ -97,6 +97,8 @@ class CrmApiTest extends TestCase
             'employee_id' => 'EMP-1180',
             'first_name' => 'Maria',
             'last_name' => 'Santos',
+            // What she goes by on the phones, which is what the CRM shows.
+            'phone_name' => 'Maria Bell',
             'company_email' => 'maria.santos@creativision.net',
         ]);
 
@@ -108,12 +110,33 @@ class CrmApiTest extends TestCase
         $this->getJson('/api/crm/employees/' . $agent->employee_id, $this->auth())
             ->assertOk()
             ->assertJsonPath('data.reports_to.hris_employee_id', 'EMP-1180')
-            ->assertJsonPath('data.reports_to.name', 'Maria Santos')
+            ->assertJsonPath('data.reports_to.name', 'Maria Bell')
+            ->assertJsonPath('data.reports_to.phone_name', 'Maria Bell')
             ->assertJsonPath('data.reports_to.email', 'maria.santos@creativision.net');
 
         $this->getJson('/api/crm/employees?q=EMP-4242', $this->auth())
             ->assertOk()
             ->assertJsonPath('data.0.reports_to.hris_employee_id', 'EMP-1180');
+    }
+
+    #[Test]
+    public function a_supervisor_with_no_phone_name_falls_back_to_their_real_name(): void
+    {
+        // Better the name on the 201 file than a blank where a supervisor
+        // should be.
+        $lead = Employee::factory()->create([
+            'employee_id' => 'EMP-1181',
+            'first_name' => 'Ana',
+            'last_name' => 'Reyes',
+            'phone_name' => null,
+        ]);
+
+        Employee::factory()->create(['employee_id' => 'EMP-4243', 'reports_to_id' => $lead->id]);
+
+        $this->getJson('/api/crm/employees/EMP-4243', $this->auth())
+            ->assertOk()
+            ->assertJsonPath('data.reports_to.name', 'Ana Reyes')
+            ->assertJsonPath('data.reports_to.phone_name', null);
     }
 
     #[Test]

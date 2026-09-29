@@ -73,7 +73,20 @@ class CrmSafeEmployee
              */
             'reports_to' => $employee->reportsTo ? [
                 'hris_employee_id' => $employee->reportsTo->employee_id,
-                'name' => $employee->reportsTo->fullName() ?: $employee->reportsTo->employee_id,
+
+                /*
+                 * The phone name, like everywhere else the CRM shows a person.
+                 * It falls back to the legal name only when nobody has set one,
+                 * because a supervisor with no name at all is worse than a
+                 * supervisor under the name on their 201 file.
+                 */
+                'name' => $employee->reportsTo->phone_name
+                    ?: ($employee->reportsTo->fullName() ?: $employee->reportsTo->employee_id),
+
+                // Sent apart as well, so the CRM can tell a real phone name
+                // from the fallback rather than guessing.
+                'phone_name' => $employee->reportsTo->phone_name,
+
                 'email' => $employee->reportsTo->company_email,
                 'position' => $employee->reportsTo->position?->title,
             ] : null,

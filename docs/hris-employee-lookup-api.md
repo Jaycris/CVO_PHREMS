@@ -76,7 +76,8 @@ Omit `q` to list everyone (still capped by `limit`, default 15, max 50).
       "position":           "Sales Agent", // Role *suggestion* only
       "reports_to": {                      // null when nobody is set
         "hris_employee_id": "EMP-1180",
-        "name":             "Maria Santos",
+        "name":             "Maria Bell",  // phone name, falling back to the legal name
+        "phone_name":       "Maria Bell",  // null when they have none set
         "email":            "maria.santos@creativision.net",
         "position":         "Team Lead"
       },
@@ -124,11 +125,19 @@ notices until a report reaches the wrong person.
 ```jsonc
 "reports_to": {
   "hris_employee_id": "EMP-1180",   // match to a CRM user by this
-  "name":             "Maria Santos",
+  "name":             "Maria Bell", // phone name — what the CRM shows
+  "phone_name":       "Maria Bell", // null when they have none set
   "email":            "maria.santos@creativision.net",
   "position":         "Team Lead"
 }
 ```
+
+`name` follows the same rule as the rest of this endpoint: it is the
+**phone name**, the name the person uses for CRM work. It falls back to the
+legal name only when nobody has set a phone name, because a supervisor with no
+name at all is worse than one under the name on their 201 file. `phone_name`
+comes through separately so the CRM can tell a real phone name from that
+fallback.
 
 `null` is ordinary and must be handled: a supervisor reports to nobody, and a
 new hire may not be assigned yet. Fall back to whoever the CRM treats as admin
