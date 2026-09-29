@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\CareersController;
 use App\Http\Controllers\Api\CrmEmployeeLookupController;
 use App\Http\Middleware\AuthenticateCrmRequest;
 use Illuminate\Support\Facades\Route;
@@ -19,6 +20,28 @@ use Illuminate\Support\Facades\Route;
 | rather than a bulk export of the staff directory.
 |
 */
+
+/*
+|--------------------------------------------------------------------------
+| Careers
+|--------------------------------------------------------------------------
+|
+| The company website's Join Our Team page reads these. No token: the content
+| is an advert meant for the public, and a secret in a website's JavaScript is
+| not a secret. Only published roles are returned, and only the fields in
+| JobPosting::forWebsite().
+|
+| The website is a separate origin, so these answer cross-origin requests —
+| see config/cors.php.
+|
+*/
+
+Route::middleware('throttle:120,1')
+    ->prefix('api/careers')
+    ->group(function () {
+        Route::get('/openings', [CareersController::class, 'index'])->name('api.careers.index');
+        Route::get('/openings/{slug}', [CareersController::class, 'show'])->name('api.careers.show');
+    });
 
 Route::middleware([AuthenticateCrmRequest::class, 'throttle:60,1'])
     ->prefix('api/crm')
