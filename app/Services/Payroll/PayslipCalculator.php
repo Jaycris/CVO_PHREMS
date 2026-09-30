@@ -34,17 +34,26 @@ class PayslipCalculator
      */
     public function calculate(Employee $employee, array $counters, string $cutoff): array
     {
-        // The days this employee was actually scheduled for this cutoff. Feeds
-        // the rates so a short month and a long month both settle exactly.
-        $workingDays = (int) ($counters['days_expected'] ?? 0);
+        /*
+         * A day is priced over the whole cutoff, not over the part of it this
+         * person was employed for.
+         *
+         * They are the same number for everybody who worked the full cutoff.
+         * For somebody who joined on the 21st they are not: pricing their day
+         * over their own five days would make each day worth a fifth of a
+         * half-month, and five of them the whole thing — which is how a new
+         * hire came to be paid eleven days for five days of work.
+         */
+        $cutoffDays = (int) ($counters['days_in_cutoff'] ?? 0) ?: (int) ($counters['days_expected'] ?? 0);
+        $employedDays = (int) ($counters['days_expected'] ?? 0);
 
-        $dailyRate = $employee->dailyRate($workingDays);
-        $hourlyRate = $employee->hourlyRate($workingDays);
-        $minuteRate = $employee->minuteRate($workingDays);
+        $dailyRate = $employee->dailyRate($cutoffDays);
+        $hourlyRate = $employee->hourlyRate($cutoffDays);
+        $minuteRate = $employee->minuteRate($cutoffDays);
 
         // --- earnings -------------------------------------------------------
 
-        $basicEarnings = $this->basicEarnings($employee);
+        $basicEarnings = $this->basicEarnings($employee, $dailyRate, $cutoffDays, $employedDays);
         $absenceDeduction = $this->absenceDeduction($dailyRate, $counters);
         $lateDeduction = $this->lateDeduction($minuteRate, $counters);
         $undertimeDeduction = $this->undertimeDeduction($minuteRate, $counters);
@@ -125,9 +134,18 @@ class PayslipCalculator
      * Basic pay is a fixed half of the monthly salary, identical on both
      * cutoffs regardless of whether the period spans 13, 15 or 16 days. Twelve
      * months of payslips therefore add up to exactly the annual salary.
+     *
+     * Unless the person was not there for the whole cutoff. Somebody hired on
+     * the 21st is owed the days they worked, not a half-month — and because
+     * days before their hire date are deliberately not absences, nothing
+     * downstream would ever take the difference off.
      */
-    protected function basicEarnings(Employee $employee): float
+    protected function basicEarnings(Employee $employee, float $dailyRate, int $cutoffDays, int $employedDays): float
     {
+        if ($cutoffDays > 0 && $employedDays > 0 && $employedDays < $cutoffDays) {
+            return round($dailyRate * $employedDays, 2);
+        }
+
         return round((float) $employee->basic_salary / 2, 2);
     }
 

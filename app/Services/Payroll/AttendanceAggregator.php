@@ -108,6 +108,11 @@ class AttendanceAggregator
             // own setting. 0.3 for a special non-working day, 1.0 for a double.
             'holiday_premium_units' => 0.0,
             'days_expected' => 0,
+            // The whole cutoff's length, whether or not this person was
+            // employed for all of it. days_expected is their share of it, and
+            // the two differ only for somebody who joined or left mid-cutoff —
+            // which is exactly when basic pay has to be pro-rated.
+            'days_in_cutoff' => 0,
             'late_minutes' => 0,
             'undertime_minutes' => 0,
             'over_break_minutes' => 0,
@@ -356,6 +361,14 @@ class AttendanceAggregator
         $days = (int) PayrollSetting::number('payroll_max_days_per_cutoff', 11);
         $wholeCutoff = $from === $start->timestamp && $to === $end->timestamp;
         $extra = 0;
+
+        /*
+         * What a full cutoff is for this person: the company's fixed number
+         * when there is one, and otherwise however many days they were
+         * scheduled for. Basic pay is a half-month priced over this, so a new
+         * hire's five days are five elevenths of it rather than all of it.
+         */
+        $counters['days_in_cutoff'] = $days > 0 ? $days : $counters['days_expected'];
 
         if ($days > 0 && $counters['days_expected'] > $days) {
             $extra = $counters['days_expected'] - $days;
