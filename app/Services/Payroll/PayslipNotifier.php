@@ -69,6 +69,55 @@ class PayslipNotifier
         return $result;
     }
 
+    /**
+     * Sends one payslip, whether or not it has already gone out.
+     *
+     * The bulk send deliberately skips anybody already told, so a second click
+     * cannot spam a hundred people. This is the other half of that: a figure
+     * corrected after the run went out has to reach the one person it belongs
+     * to, without emailing everybody else a second copy.
+     *
+     * @return array{sent: bool, message: string}
+     */
+    public function sendOne(Payslip $payslip): array
+    {
+        $run = $payslip->payrollRun;
+
+        abort_unless(
+            in_array($run->status, ['finalized', 'paid'], true),
+            422,
+            'Payslips can only be sent once the payroll is finalized.',
+        );
+
+        $payslip->loadMissing('employee.user');
+        $user = $payslip->employee?->user;
+        $name = $payslip->employeeName();
+
+        if (! $user) {
+            return ['sent' => false, 'message' => $name . ' has no PHREMS login yet, so nothing was sent.'];
+        }
+
+        $again = $payslip->notified_at !== null;
+
+        try {
+            $user->notify(new PayslipReady($payslip));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return ['sent' => false, 'message' => 'That payslip could not be delivered to ' . $name . '.'];
+        }
+
+        // The observer allows this one field through on a locked run.
+        $payslip->forceFill(['notified_at' => now()])->save();
+
+        $run->log('payslips_sent', 'Payslip ' . ($again ? 're-sent' : 'sent') . ' to ' . $name);
+
+        return [
+            'sent' => true,
+            'message' => $again ? 'Payslip sent again to ' . $name . '.' : 'Payslip sent to ' . $name . '.',
+        ];
+    }
+
     /** How many are still waiting to go out. */
     public function pendingCount(PayrollRun $run): int
     {

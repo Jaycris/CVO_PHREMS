@@ -104,6 +104,25 @@ new #[Layout('layouts.app')] class extends Component
         });
     }
 
+    /**
+     * One payslip to one person, for the figure that was corrected after the
+     * run went out. Everybody else is left alone.
+     */
+    public function sendOnePayslip(int $payslipId, \App\Services\Payroll\PayslipNotifier $notifier): void
+    {
+        $this->attempt(function () use ($payslipId, $notifier) {
+            abort_unless(
+                Auth::user()->canAny(['payroll.payslips.send', 'payroll.runs.manage']),
+                403,
+                'You cannot send payslips to employees.',
+            );
+
+            $payslip = \App\Models\Payslip::where('payroll_run_id', $this->runId)->findOrFail($payslipId);
+
+            $this->statusMessage = $notifier->sendOne($payslip)['message'];
+        });
+    }
+
     public function unlock(PayrollService $service): void
     {
         $this->attempt(function () use ($service) {
@@ -288,7 +307,7 @@ new #[Layout('layouts.app')] class extends Component
 
         @if (in_array($run->status, ['finalized', 'paid'], true) && $unsentPayslips === 0 && $payslips->isNotEmpty())
             <p class="mt-3 text-xs font-medium text-[#778599]">
-                All payslips have been sent. Sending again is not possible — each one goes out once.
+                All payslips have been sent. To send one again after a correction, use Send again on that employee's row — nobody else is emailed.
             </p>
         @endif
 
@@ -339,7 +358,25 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="px-4 py-3 text-right font-medium text-[#778599] tabular-nums">₱{{ number_format((float) $payslip->total_deductions, 2) }}</td>
                             <td class="px-4 py-3 text-right font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $payslip->net_pay, 2) }}</td>
                             <td class="px-4 py-3 text-right">
-                                <a href="{{ route('payroll.payslip', $payslip) }}" wire:navigate class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View</a>
+                                <div class="flex flex-wrap items-center justify-end gap-3">
+                                    @if (in_array($run->status, ['finalized', 'paid'], true) && $canSendPayslips)
+                                        <span class="text-xs font-medium text-[#778599]">
+                                            {{ $payslip->notified_at ? 'Sent ' . $payslip->notified_at->format('M j') : 'Not sent' }}
+                                        </span>
+
+                                        {{-- One person at a time, for the figure that changed
+                                             after the run went out. --}}
+                                        <button wire:click="sendOnePayslip({{ $payslip->id }})"
+                                                wire:confirm="{{ $payslip->notified_at
+                                                    ? 'Send this payslip again to ' . $payslip->employeeName() . '? They will get a second email.'
+                                                    : 'Send this payslip to ' . $payslip->employeeName() . '?' }}"
+                                                class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">
+                                            {{ $payslip->notified_at ? 'Send again' : 'Send' }}
+                                        </button>
+                                    @endif
+
+                                    <a href="{{ route('payroll.payslip', $payslip) }}" wire:navigate class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View</a>
+                                </div>
                             </td>
                         </tr>
                     @empty

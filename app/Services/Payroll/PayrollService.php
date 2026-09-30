@@ -174,6 +174,10 @@ class PayrollService
             $employees = $this->eligibleEmployees($run);
             $counters = $this->aggregator->aggregate($employees, $run->period_start, $run->period_end);
 
+            // What everyone was told last time, to compare against afterwards.
+            // Only the people whose figures actually move need telling again.
+            $before = $this->figureSnapshot($run);
+
             $statutory = (new StatutoryDeductionCalculator)->preload($run->pay_date);
             $calculator = new PayslipCalculator($statutory);
 
@@ -204,6 +208,8 @@ class PayrollService
                 $totals['deductions'] += (float) $payslip->total_deductions;
                 $totals['net'] += (float) $payslip->net_pay;
             }
+
+            $this->withdrawChangedPayslips($run, $before);
 
             // Overtime is stamped as consumed so it cannot be paid again on a
             // later run, and the stamp is what rollbackSideEffects clears.
@@ -296,17 +302,14 @@ class PayrollService
         abort_if(trim($reason) === '', 422, 'A reason is required to reopen a finalized run.');
 
         return DB::transaction(function () use ($run, $reason) {
-            // Withdraw whatever was already released. Without this an employee
-            // keeps seeing a payslip that is now being changed, and re-sending
-            // after the correction would skip them as already notified — so
-            // they would never see the corrected figure at all.
-            $withdrawn = $run->payslips()->whereNotNull('notified_at')->count();
-
-            if ($withdrawn > 0) {
-                $run->payslips()->newQuery()
-                    ->where('payroll_run_id', $run->id)
-                    ->update(['notified_at' => null]);
-            }
+            /*
+             * Released payslips keep their mark. Reopening used to withdraw
+             * every one of them, so sending again after correcting one person
+             * emailed the whole company a second copy of a figure that had not
+             * changed. The recompute withdraws the ones whose figures actually
+             * move, and only those people are sent to again.
+             */
+            $released = $run->payslips()->whereNotNull('notified_at')->count();
 
             $run->update([
                 'status' => 'computed',
@@ -314,8 +317,8 @@ class PayrollService
                 'finalized_by_user_id' => null,
             ]);
 
-            $run->log('unfinalized', $reason . ($withdrawn > 0
-                ? ' — ' . $withdrawn . ' released payslip(s) withdrawn from employees'
+            $run->log('unfinalized', $reason . ($released > 0
+                ? ' — ' . $released . ' payslip(s) already with employees; recomputing withdraws only those that change'
                 : ''));
 
             return $run->fresh();
@@ -390,6 +393,74 @@ class PayrollService
     }
 
     /** @return array<string, mixed> */
+    /**
+     * The figures an employee would notice, per payslip, before a recompute.
+     *
+     * @return array<int, string> payslip id => a fingerprint of its figures
+     */
+    protected function figureSnapshot(PayrollRun $run): array
+    {
+        return $run->payslips()
+            ->whereNotNull('notified_at')
+            ->get(array_merge(self::COMPARED_FIGURES, ['id']))
+            ->mapWithKeys(fn (Payslip $payslip) => [
+                $payslip->id => $this->fingerprint($payslip),
+            ])
+            ->all();
+    }
+
+    /** The columns worth re-sending a payslip over. */
+    protected const COMPARED_FIGURES = [
+        'days_expected', 'days_present', 'days_absent', 'days_paid_leave', 'days_lwop',
+        'days_holiday_worked', 'night_diff_days', 'night_diff_hours', 'overtime_hours',
+        'late_minutes', 'undertime_minutes', 'over_break_minutes',
+        'basic_pay', 'absence_deduction', 'basic_earned', 'overtime_pay',
+        'night_differential_pay', 'holiday_premium_pay', 'allowance',
+        'reimbursement_pay', 'leave_conversion_pay', 'thirteenth_month_pay', 'gross_pay',
+        'late_deduction', 'undertime_deduction', 'over_break_deduction',
+        'total_contributions', 'withholding_tax', 'cash_advance_deduction',
+        'total_deductions', 'net_pay',
+    ];
+
+    protected function fingerprint(Payslip $payslip): string
+    {
+        return collect(self::COMPARED_FIGURES)
+            ->map(fn (string $column) => (string) round((float) $payslip->getAttribute($column), 2))
+            ->implode('|');
+    }
+
+    /**
+     * Takes back only the payslips whose figures moved.
+     *
+     * A recompute after a correction used to withdraw every released payslip,
+     * so sending again emailed the whole company a second copy of a figure
+     * that had not changed. Whoever was already told and is still owed exactly
+     * the same is left alone.
+     *
+     * @param  array<int, string>  $before
+     */
+    protected function withdrawChangedPayslips(PayrollRun $run, array $before): void
+    {
+        if ($before === []) {
+            return;
+        }
+
+        $changed = $run->payslips()
+            ->whereKey(array_keys($before))
+            ->get(array_merge(self::COMPARED_FIGURES, ['id', 'employee_id']))
+            ->filter(fn (Payslip $payslip) => $this->fingerprint($payslip) !== $before[$payslip->id])
+            ->pluck('id');
+
+        if ($changed->isEmpty()) {
+            return;
+        }
+
+        Payslip::whereIn('id', $changed)->update(['notified_at' => null]);
+
+        $run->log('payslips_withdrawn', $changed->count()
+            . ' payslip(s) changed and were withdrawn — sending again reaches only those employees');
+    }
+
     protected function payslipAttributes(Employee $employee, array $counters, array $figures): array
     {
         return [
@@ -399,6 +470,7 @@ class PayrollService
             'minute_rate' => $figures['minute_rate'],
 
             'days_expected' => $counters['days_expected'] ?? 0,
+            'days_in_cutoff' => $counters['days_in_cutoff'] ?? 0,
             'days_present' => $counters['days_present'] ?? 0,
             'days_absent' => $counters['days_absent'] ?? 0,
             'days_paid_leave' => $counters['days_on_paid_leave'] ?? 0,
@@ -716,7 +788,14 @@ class PayrollService
      */
     protected function basicPayNote(Payslip $payslip): string
     {
-        $note = 'Half of monthly salary';
+        $expected = (int) $payslip->days_expected;
+        $cutoff = (int) $payslip->days_in_cutoff;
+
+        // Somebody who joined or left mid-cutoff is paid for their days, not a
+        // half-month, and the payslip has to say so before anybody asks.
+        $note = $cutoff > 0 && $expected > 0 && $expected < $cutoff
+            ? $expected . ' of ' . $cutoff . ' days — part of this cutoff only'
+            : 'Half of monthly salary';
 
         $worked = (int) $payslip->days_offsite - (int) $payslip->days_offsite_day_off;
         $daysOff = (int) $payslip->days_offsite_day_off;
