@@ -61,6 +61,12 @@ new #[Layout('layouts.app')] class extends Component
         abort_unless(auth()->user()->can('commissions.runs.manage'), 403);
     }
 
+    /** Opens one run. Reachable by whoever may see commissions at all. */
+    public function open(int $id): void
+    {
+        $this->redirectRoute('commissions.run-show', CommissionRun::findOrFail($id), navigate: true);
+    }
+
     public function openForm(): void
     {
         $this->guardManage();
@@ -290,11 +296,14 @@ new #[Layout('layouts.app')] class extends Component
                 </thead>
                 <tbody class="directory-table-body">
                     @forelse ($runs as $run)
+                        {{-- Opened through Livewire rather than Alpine: the row
+                             has to work even when Alpine has not taken over the
+                             table, and this is the only way into the run. --}}
                         <tr wire:key="run-{{ $run->id }}"
-                            @click="Livewire.navigate(runUrls['{{ $run->id }}'])"
+                            wire:click="open({{ $run->id }})"
                             class="directory-row cursor-pointer"
                             x-bind:class="selected.includes('{{ $run->id }}') ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''">
-                            <td class="px-6 py-4" @click.stop>
+                            <td class="px-6 py-4" @click.stop onclick="event.stopPropagation()">
                                 <input type="checkbox" value="{{ $run->id }}" x-model="selected" class="directory-checkbox">
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 font-bold text-ink-800 dark:text-white">
