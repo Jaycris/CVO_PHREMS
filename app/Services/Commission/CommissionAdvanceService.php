@@ -80,13 +80,17 @@ class CommissionAdvanceService
     }
 
     /**
-     * Everything to collect from a run ending on this date.
+     * Everything a run computed on this date should collect.
+     *
+     * Today, not the month the run covers: an advance handed over after the
+     * period ended is still repaid out of that period's commission, because
+     * that is the money it was advanced against.
      *
      * @return Collection<int, CommissionAdvance>
      */
-    public function collectableFor(Carbon|string $periodEnd): Collection
+    public function collectableFor(Carbon|string $asOf): Collection
     {
-        return CommissionAdvance::collectableOn($periodEnd)
+        return CommissionAdvance::collectableOn($asOf)
             ->with(['employee', 'payments'])
             ->get()
             ->reject(fn (CommissionAdvance $advance) => $advance->isSettled())

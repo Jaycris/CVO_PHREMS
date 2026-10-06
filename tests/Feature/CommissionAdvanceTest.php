@@ -164,6 +164,29 @@ class CommissionAdvanceTest extends TestCase
     }
 
     #[Test]
+    public function an_advance_given_after_the_month_ended_still_comes_off_that_month(): void
+    {
+        // The usual case: the money is handed over in October against the
+        // September commission that has not been released yet. Measuring
+        // against the period end skipped it and paid the agent twice.
+        $october = $this->advances->open($this->agent, 70000, null, '2026-10-02');
+
+        $collectable = $this->advances->collectableFor('2026-10-06');
+
+        $this->assertTrue($collectable->contains(fn ($advance) => $advance->is($october)));
+    }
+
+    #[Test]
+    public function money_not_yet_handed_over_is_left_alone(): void
+    {
+        $future = $this->advances->open($this->agent, 5000, null, '2026-12-01');
+
+        $collectable = $this->advances->collectableFor('2026-10-06');
+
+        $this->assertFalse($collectable->contains(fn ($advance) => $advance->is($future)));
+    }
+
+    #[Test]
     public function cancelling_the_advance_keeps_what_was_already_repaid(): void
     {
         $advance = $this->advance();

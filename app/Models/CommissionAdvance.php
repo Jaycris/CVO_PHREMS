@@ -104,11 +104,22 @@ class CommissionAdvance extends Model
         return round(min($wanted, $netCeiling), 2);
     }
 
-    /** Advances that should be collected from a run ending on this date. */
-    public function scopeCollectableOn(Builder $query, Carbon|string $periodEnd): Builder
+    /**
+     * Advances the next run should collect.
+     *
+     * Measured against the day the run is computed, not the month it covers.
+     * An advance handed over on 2 October is repaid out of the September
+     * commission still waiting to be released — that is the money it was
+     * advanced against. Tying it to the period end skipped it entirely and
+     * left the agent paid twice.
+     *
+     * A future-dated advance is still left alone: money not yet handed over
+     * cannot be collected back.
+     */
+    public function scopeCollectableOn(Builder $query, Carbon|string $asOf): Builder
     {
         return $query->where('status', self::ACTIVE)
-            ->whereDate('released_on', '<=', Carbon::parse($periodEnd)->toDateString());
+            ->whereDate('released_on', '<=', Carbon::parse($asOf)->toDateString());
     }
 
     public function statusLabel(): string

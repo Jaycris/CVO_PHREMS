@@ -212,7 +212,10 @@ new #[Layout('layouts.app')] class extends Component
                 <div>
                     <x-label>Taken each run <span class="font-medium text-[#778599]">(optional)</span></x-label>
                     <x-input wire:model="amount_per_run" type="number" step="0.01" placeholder="Leave blank to take it all at once" />
-                    <p class="mt-1 text-xs font-medium text-[#778599]">A thin month takes less and leaves the rest owing. Nothing is taken from a month with no commission.</p>
+                    <p class="mt-1 text-xs font-medium text-[#778599]">
+                        Collected by the next run computed after the money was handed over, whichever month that run covers.
+                        A thin month takes less and leaves the rest owing; a month with no commission takes nothing.
+                    </p>
                     @error('amount_per_run') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                 </div>
 

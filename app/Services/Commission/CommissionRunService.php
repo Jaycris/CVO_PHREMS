@@ -240,9 +240,15 @@ class CommissionRunService
         $totals = ['usd' => 0.0, 'php' => 0.0, 'hold' => 0.0, 'net' => 0.0];
         $failed = 0;
 
-        // Keyed by employee so each agent's advance is found without a query
-        // inside the loop.
-        $collectable = $this->advances->collectableFor($end)->groupBy('employee_id');
+        /*
+         * Measured against today rather than the period end. An advance handed
+         * over on 2 October is repaid out of the September commission that has
+         * not been released yet — that is the money it was advanced against.
+         *
+         * Keyed by employee so each agent's advances are found without a query
+         * inside the loop.
+         */
+        $collectable = $this->advances->collectableFor(now())->groupBy('employee_id');
 
         foreach ($employees as $employee) {
             // Outside the transaction on purpose — an HTTP call held inside one
