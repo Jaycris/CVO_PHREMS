@@ -45,6 +45,9 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->month = now('Asia/Manila')->format('Y-m');
         $this->applyPreset();
+
+        // Set by the run page when a run is cancelled from there.
+        $this->statusMessage = session('commission.status');
     }
 
     /**
