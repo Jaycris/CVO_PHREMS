@@ -140,6 +140,10 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::middleware('can:commissions.open')->group(function () {
         Route::livewire('/commissions', 'commissions.runs')->name('commissions.runs');
         Route::livewire('/commissions/runs/{run}', 'commissions.run-show')->name('commissions.run-show');
+
+        Route::middleware('can:commissions.runs.manage')->group(function () {
+            Route::livewire('/commissions/advances', 'commissions.advances')->name('commissions.advances');
+        });
     });
 
     Route::middleware('can:bank_details.approve')->group(function () {

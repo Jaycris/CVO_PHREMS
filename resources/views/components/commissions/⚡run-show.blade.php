@@ -170,6 +170,25 @@ new #[Layout('layouts.app')] class extends Component
             . ($result['failed'] ? ' ' . $result['failed'] . ' failed to send.' : '');
     }
 
+    /**
+     * Throws the run away so the month can be opened again from nothing.
+     *
+     * Only before it is finalized: once slips are locked — let alone sent —
+     * the way back is Reopen, which asks for a reason and leaves a trail.
+     */
+    public function cancelRun(CommissionRunService $service): void
+    {
+        abort_unless(Auth::user()->can('commissions.runs.manage'), 403, 'You cannot cancel a commission run.');
+
+        $run = $this->run();
+        $label = $run->label;
+
+        $service->cancel($run);
+
+        session()->flash('commission.status', 'Commission run for ' . $label . ' cancelled.');
+        $this->redirectRoute('commissions.runs', navigate: true);
+    }
+
     public function unlock(CommissionRunService $service): void
     {
         abort_unless(Auth::user()->can('commissions.runs.finalize'), 403);
@@ -190,6 +209,67 @@ new #[Layout('layouts.app')] class extends Component
     public function viewSlip(int $id): void
     {
         $this->viewingSlipId = $id;
+    }
+
+    /*
+     * Amounts a person adds to a slip: a bonus agreed verbally, a correction,
+     * something the CRM has no idea about. They survive a recompute, which is
+     * the whole point of keeping them apart from the CRM's own figures.
+     */
+
+    public string $adjustmentType = 'earning';
+    public string $adjustmentLabel = '';
+    public string $adjustmentAmount = '';
+    public string $adjustmentNote = '';
+
+    public function addAdjustment(CommissionRunService $service): void
+    {
+        abort_unless(Auth::user()->can('commissions.runs.manage'), 403, 'You cannot change a commission slip.');
+
+        $slip = CommissionSlip::where('commission_run_id', $this->runId)->findOrFail($this->viewingSlipId);
+
+        // Finalized means the figures are agreed; sent means the agent has
+        // them. Either way the way back is Reopen, not a quiet edit.
+        abort_unless($slip->commissionRun->isMutable(), 422, 'This run is locked. Reopen it to change a slip.');
+
+        $data = $this->validate([
+            'adjustmentType' => ['required', 'in:earning,deduction'],
+            'adjustmentLabel' => ['required', 'string', 'max:120'],
+            'adjustmentAmount' => ['required', 'numeric', 'min:0.01'],
+            'adjustmentNote' => ['nullable', 'string', 'max:200'],
+        ], [], [
+            'adjustmentLabel' => 'description',
+            'adjustmentAmount' => 'amount',
+        ]);
+
+        $slip->adjustments()->create([
+            'type' => $data['adjustmentType'],
+            'label' => $data['adjustmentLabel'],
+            'amount' => round((float) $data['adjustmentAmount'], 2),
+            'note' => $data['adjustmentNote'] ?: null,
+            'created_by_user_id' => Auth::id(),
+            'created_by_name' => Auth::user()->name,
+        ]);
+
+        $service->refreshSlip($slip->fresh());
+
+        $this->reset(['adjustmentLabel', 'adjustmentAmount', 'adjustmentNote']);
+        $this->statusMessage = 'Added. It stays on this slip through a recompute.';
+    }
+
+    public function removeAdjustment(int $id, CommissionRunService $service): void
+    {
+        abort_unless(Auth::user()->can('commissions.runs.manage'), 403, 'You cannot change a commission slip.');
+
+        $slip = CommissionSlip::where('commission_run_id', $this->runId)->findOrFail($this->viewingSlipId);
+
+        abort_unless($slip->commissionRun->isMutable(), 422, 'This run is locked. Reopen it to change a slip.');
+
+        $slip->adjustments()->whereKey($id)->delete();
+
+        $service->refreshSlip($slip->fresh());
+
+        $this->statusMessage = 'Removed.';
     }
 
     public function closeSlip(): void
@@ -223,7 +303,7 @@ new #[Layout('layouts.app')] class extends Component
             'canManageRuns' => Auth::user()->can('commissions.runs.manage'),
             'canSendSlips' => Auth::user()->canAny(['commissions.slips.send', 'commissions.runs.finalize']),
             'viewingSlip' => $this->viewingSlipId
-                ? CommissionSlip::with(['lines', 'employee', 'commissionRun'])->find($this->viewingSlipId)
+                ? CommissionSlip::with(['lines', 'employee', 'commissionRun', 'adjustments'])->find($this->viewingSlipId)
                 : null,
         ];
     }
@@ -300,6 +380,18 @@ new #[Layout('layouts.app')] class extends Component
             @if ($run->isFinalized() && $canFinalize)
                 <x-button wire:click="$set('showUnlock', true)" @click="$wire.showUnlock = true" variant="secondary" class="ml-auto">
                     Reopen
+                </x-button>
+            @endif
+
+            {{-- Finalized runs are left out on purpose: reopen first. --}}
+            @if ($run->isMutable() && $canManageRuns)
+                <x-button type="button" variant="danger" wire:click="cancelRun"
+                          wire:confirm="{{ $run->status === 'draft'
+                              ? 'Cancel this commission run? Nothing has been computed yet.'
+                              : 'Cancel this commission run? Every slip in it is deleted and the month is free to run again.' }}"
+                          class="ml-auto">
+                    <span wire:loading.remove wire:target="cancelRun">Cancel Run</span>
+                    <span wire:loading wire:target="cancelRun">Cancelling…</span>
                 </x-button>
             @endif
         </div>
@@ -550,6 +642,79 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             <x-commission-slip-detail :slip="$viewingSlip" />
+
+            {{-- Everything above comes from the CRM. This is the part a person
+                 decides, and the only part a recompute leaves alone. --}}
+            <div class="mt-5 rounded-xl border border-ink-200 dark:border-white/10">
+                <div class="border-b border-ink-200 px-5 py-4 dark:border-white/10">
+                    <h3 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Added by hand</h3>
+                    <p class="mt-1 text-xs font-medium text-[#778599]">
+                        Bonuses, corrections, deductions the CRM knows nothing about. These survive a recompute — everything else is read fresh from the CRM.
+                    </p>
+                </div>
+
+                <div class="divide-y divide-ink-100 dark:divide-white/10">
+                    @forelse ($viewingSlip->adjustments as $adjustment)
+                        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3" wire:key="cadj-{{ $adjustment->id }}">
+                            <div class="min-w-0">
+                                <p class="flex flex-wrap items-center gap-2 text-sm font-bold text-[#0f172a] dark:text-white">
+                                    {{ $adjustment->label }}
+                                    <x-badge :color="$adjustment->isEarning() ? 'green' : 'amber'">
+                                        {{ $adjustment->isEarning() ? 'Added to commission' : 'Taken from commission' }}
+                                    </x-badge>
+                                </p>
+                                <p class="mt-0.5 text-xs font-medium text-[#778599]">
+                                    {{ $adjustment->note ? $adjustment->note . ' · ' : '' }}{{ $adjustment->created_by_name }} · {{ $adjustment->created_at->format('M j, g:i A') }}
+                                </p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <p class="text-sm font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $adjustment->amount, 2) }}</p>
+                                @if ($viewingSlip->commissionRun->isMutable() && $canManageRuns)
+                                    <button wire:click="removeAdjustment({{ $adjustment->id }})" wire:confirm="Remove this?"
+                                            class="text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400">Remove</button>
+                                @endif
+                            </div>
+                        </div>
+                    @empty
+                        <p class="px-5 py-4 text-sm font-medium text-[#778599]">Nothing added by hand.</p>
+                    @endforelse
+                </div>
+
+                @if ($viewingSlip->commissionRun->isMutable() && $canManageRuns)
+                    <div class="border-t border-ink-200 px-5 py-4 dark:border-white/10">
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                            <div>
+                                <x-label>Add or take off</x-label>
+                                <x-select wire:model="adjustmentType">
+                                    <option value="earning">Add to commission</option>
+                                    <option value="deduction">Take from commission</option>
+                                </x-select>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <x-label>What is it for?</x-label>
+                                <x-input wire:model="adjustmentLabel" type="text" maxlength="120" placeholder="e.g. Top seller bonus" />
+                                @error('adjustmentLabel') <p class="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <x-label>Amount</x-label>
+                                <x-input wire:model="adjustmentAmount" type="number" step="0.01" />
+                                @error('adjustmentAmount') <p class="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                            </div>
+                            <div class="sm:col-span-3">
+                                <x-label>Note <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                                <x-input wire:model="adjustmentNote" type="text" maxlength="200" placeholder="Who agreed it, and why." />
+                            </div>
+                            <div class="flex items-end">
+                                <x-button wire:click="addAdjustment" class="w-full">Add</x-button>
+                            </div>
+                        </div>
+                    </div>
+                @else
+                    <p class="border-t border-ink-200 px-5 py-3 text-xs font-medium text-[#778599] dark:border-white/10">
+                        This run is locked, so the slip cannot be changed. Reopen it first, or put the correction on the next run.
+                    </p>
+                @endif
+            </div>
         @endif
     </x-modal>
 

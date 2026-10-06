@@ -43,6 +43,20 @@
         ['Card payment hold amount', $money($slip->card_hold_amount, '₱')],
     ];
 
+    // Shown only when something was collected, so a slip with no advance does
+    // not carry a row of zeroes inviting the question.
+    if ((float) $slip->advance_deduction > 0) {
+        $held[] = ['Less: commission advance repaid', $money($slip->advance_deduction, '₱')];
+    }
+
+    if ((float) $slip->adjustments_earning > 0) {
+        $held[] = ['Added by hand', $money($slip->adjustments_earning, '₱')];
+    }
+
+    if ((float) $slip->adjustments_deduction > 0) {
+        $held[] = ['Taken off by hand', $money($slip->adjustments_deduction, '₱')];
+    }
+
     // The threshold is the slice of a qualifying sale that earns nothing before
     // the rate is applied. The CRM applies it and sends the commission already
     // reduced, so this is shown to explain a figure rather than to produce one.

@@ -29,6 +29,7 @@ class CommissionRunService
 {
     public function __construct(
         protected CommissionSlipService $crm,
+        protected CommissionAdvanceService $advances = new CommissionAdvanceService,
     ) {}
 
     /**
@@ -227,10 +228,21 @@ class CommissionRunService
             $run->log('slips_withdrawn', $withdrawn . ' sent slip(s) withdrawn for recomputing');
         }
 
+        /*
+         * Repayments this run already took are released before anything is
+         * recomputed, so a second compute collects one instalment rather than
+         * two. The same reasoning as payroll's rollback of cash advances.
+         */
+        $this->advances->reverseForRun($run->id);
+
         $start = $run->period_start;
         $end = $run->period_end;
         $totals = ['usd' => 0.0, 'php' => 0.0, 'hold' => 0.0, 'net' => 0.0];
         $failed = 0;
+
+        // Keyed by employee so each agent's advance is found without a query
+        // inside the loop.
+        $collectable = $this->advances->collectableFor($end)->groupBy('employee_id');
 
         foreach ($employees as $employee) {
             // Outside the transaction on purpose — an HTTP call held inside one
@@ -254,7 +266,7 @@ class CommissionRunService
                 app(CommissionProfileMirror::class)->apply($employee, $slip);
             }
 
-            DB::transaction(function () use ($run, $employee, $slip, $error, &$totals) {
+            DB::transaction(function () use ($run, $employee, $slip, $error, &$totals, $collectable) {
                 $record = CommissionSlip::updateOrCreate(
                     ['commission_run_id' => $run->id, 'employee_id' => $employee->id],
                     $this->slipAttributes($employee, $slip, $error),
@@ -290,8 +302,13 @@ class CommissionRunService
                     $totals['usd'] += (float) ($slip->usdTotal ?? 0);
                     $totals['php'] += (float) ($slip->phpTotal ?? 0);
                     $totals['hold'] += (float) ($slip->cardHoldAmount ?? 0);
-                    $totals['net'] += (float) ($slip->netCommission ?? 0);
                 }
+
+                $this->collectAdvances($record, $collectable->get($employee->id));
+
+                // Last, so what a person typed is applied to the figure the
+                // CRM and the advance between them arrived at.
+                $totals['net'] += $this->applyAdjustments($record->fresh());
             });
         }
 
@@ -315,6 +332,99 @@ class CommissionRunService
             . ($failed ? ', ' . $failed . ' could not be read' : ''));
 
         return $run->refresh();
+    }
+
+    /**
+     * Takes whatever the agent's advances are owed out of this slip, and
+     * returns the net they are actually paid.
+     *
+     * Each advance shrinks to what the slip can bear, so a thin month costs
+     * them nothing and leaves the rest on the balance for the next run. Net
+     * never goes below zero: an agent cannot be made to owe commission.
+     *
+     * @param  Collection<int, \App\Models\CommissionAdvance>|null  $advances
+     */
+    protected function collectAdvances(CommissionSlip $slip, ?Collection $advances): float
+    {
+        $net = round((float) $slip->net_commission, 2);
+
+        if ($advances === null || $advances->isEmpty()) {
+            if ((float) $slip->advance_deduction !== 0.0) {
+                $slip->update(['advance_deduction' => 0]);
+            }
+
+            return $net;
+        }
+
+        $taken = 0.0;
+
+        foreach ($advances as $advance) {
+            $payment = $this->advances->applyToSlip($advance, $slip, $slip->commissionRun->period_end, $net - $taken);
+
+            $taken += (float) ($payment?->amount ?? 0);
+        }
+
+        $taken = round($taken, 2);
+
+        $slip->update([
+            'advance_deduction' => $taken,
+            'net_commission' => round($net - $taken, 2),
+        ]);
+
+        return round($net - $taken, 2);
+    }
+
+    /**
+     * Re-totals one slip after an adjustment was added or removed, without
+     * going back to the CRM.
+     *
+     * The CRM figures and the advance are already written down; only the
+     * hand-typed part has moved, so asking the CRM again would be a network
+     * call to arrive at the same answer.
+     */
+    public function refreshSlip(CommissionSlip $slip): CommissionSlip
+    {
+        $base = round(
+            (float) $slip->php_total
+            - (float) $slip->card_hold_amount
+            - (float) $slip->advance_deduction,
+            2,
+        );
+
+        $slip->update(['net_commission' => $base]);
+
+        $this->applyAdjustments($slip->fresh());
+
+        return $slip->fresh();
+    }
+
+    /**
+     * Applies what a person added to the slip by hand, and returns the net.
+     *
+     * These survive a recompute — everything else on a slip is worked out
+     * fresh from the CRM, and a bonus somebody agreed verbally would be lost
+     * every time the run was computed again.
+     *
+     * Net is floored at zero: an agent cannot be made to owe commission. A
+     * deduction bigger than the month's commission is the case for a
+     * commission advance, which carries properly across runs.
+     */
+    protected function applyAdjustments(CommissionSlip $slip): float
+    {
+        $adjustments = $slip->adjustments()->get();
+
+        $earnings = round((float) $adjustments->where('type', 'earning')->sum('amount'), 2);
+        $deductions = round((float) $adjustments->where('type', 'deduction')->sum('amount'), 2);
+
+        $net = max(0, round((float) $slip->net_commission + $earnings - $deductions, 2));
+
+        $slip->update([
+            'adjustments_earning' => $earnings,
+            'adjustments_deduction' => $deductions,
+            'net_commission' => $net,
+        ]);
+
+        return $net;
     }
 
     /**
@@ -404,6 +514,10 @@ class CommissionRunService
     public function cancel(CommissionRun $run): void
     {
         abort_unless($run->isMutable(), 403, 'A locked run cannot be cancelled.');
+
+        // Give back whatever this run collected, or the agent would still owe
+        // it and have no slip showing they had paid.
+        $this->advances->reverseForRun($run->id);
 
         // Hard-deleted so the month is free for a corrected run — the unique
         // key on the run type and period would otherwise block it forever.

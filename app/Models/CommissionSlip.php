@@ -22,7 +22,8 @@ class CommissionSlip extends Model
         'commission_scheme', 'scheme_rules',
         'mtd', 'target', 'mtd_percent',
         'service_commission', 'markup_commission', 'usd_total', 'exchange_rate', 'php_total',
-        'card_hold_percent', 'card_hold_amount', 'net_commission',
+        'card_hold_percent', 'card_hold_amount', 'advance_deduction',
+        'adjustments_earning', 'adjustments_deduction', 'net_commission',
         'commission_threshold', 'threshold_exempt', 'threshold_applied',
         'statement_supplied', 'transaction_count', 'fetch_error', 'notified_at',
     ];
@@ -45,6 +46,9 @@ class CommissionSlip extends Model
             'php_total' => 'decimal:2',
             'card_hold_percent' => 'decimal:2',
             'card_hold_amount' => 'decimal:2',
+            'advance_deduction' => 'decimal:2',
+            'adjustments_earning' => 'decimal:2',
+            'adjustments_deduction' => 'decimal:2',
             'net_commission' => 'decimal:2',
             'statement_supplied' => 'boolean',
             'notified_at' => 'datetime',
@@ -54,6 +58,12 @@ class CommissionSlip extends Model
     public function commissionRun(): BelongsTo
     {
         return $this->belongsTo(CommissionRun::class);
+    }
+
+    /** Amounts a person added by hand. They survive a recompute. */
+    public function adjustments(): HasMany
+    {
+        return $this->hasMany(CommissionSlipAdjustment::class);
     }
 
     public function employee(): BelongsTo

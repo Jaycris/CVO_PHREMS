@@ -112,6 +112,13 @@ class CommissionSlipPdfController
             ['Target attainment', $this->pct($slip->mtd_percent)],
         ];
 
+        // Paired row for row with the left column, so the advance needs a
+        // placeholder opposite it rather than a row of its own.
+        if ((float) $slip->advance_deduction > 0) {
+            $leftSummary[] = ['', ''];
+            $rightSummary[] = ['Less: commission advance repaid', $this->num($slip->advance_deduction, 'PHP ')];
+        }
+
         $y -= 23;
         foreach ($leftSummary as $i => [$label, $value]) {
             $summaryCell(48, 410, $y, $label, $value, $i % 2 === 0);

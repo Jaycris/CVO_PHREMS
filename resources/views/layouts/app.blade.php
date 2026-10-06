@@ -160,6 +160,9 @@
                         @can('commissions.open')
                             <x-nav-link :href="route('commissions.runs')" :active="request()->routeIs('commissions.runs') || request()->routeIs('commissions.run-show')" icon="chart">{{ auth()->user()->can('commissions.runs.manage') ? 'Commission Runs' : 'Release Commission' }}</x-nav-link>
                         @endcan
+                        @can('commissions.runs.manage')
+                            <x-nav-link :href="route('commissions.advances')" :active="request()->routeIs('commissions.advances')" icon="money">Commission Advances</x-nav-link>
+                        @endcan
                         @can('bank_details.approve')
                             <x-nav-link :href="route('bank-details.index')" :active="request()->routeIs('bank-details.*')" icon="money">Bank Details</x-nav-link>
                         @endcan
@@ -231,6 +234,7 @@
                         request()->routeIs('bank-details.*') => 'Bank Details',
                         request()->routeIs('my-commission') => 'My Commission',
                         request()->routeIs('commissions.run-show') => 'Commission Run',
+                        request()->routeIs('commissions.advances') => 'Commission Advances',
                         request()->routeIs('commissions.*') => 'Commission Runs',
                         request()->routeIs('org.departments') => 'Departments',
                         request()->routeIs('org.positions') => 'Positions',
