@@ -211,6 +211,23 @@ new #[Layout('layouts.app')] class extends Component
         $this->viewingSlipId = $id;
     }
 
+    /**
+     * One slip to one agent, for the figure that was corrected after the run
+     * went out. Everybody else is left alone.
+     */
+    public function sendOneSlip(int $slipId, CommissionSlipNotifier $notifier): void
+    {
+        abort_unless(
+            Auth::user()->canAny(['commissions.slips.send', 'commissions.runs.manage']),
+            403,
+            'You cannot send commission slips.',
+        );
+
+        $slip = CommissionSlip::where('commission_run_id', $this->runId)->findOrFail($slipId);
+
+        $this->statusMessage = $notifier->sendOne($slip)['message'];
+    }
+
     /*
      * Amounts a person adds to a slip: a bonus agreed verbally, a correction,
      * something the CRM has no idea about. They survive a recompute, which is
@@ -512,6 +529,18 @@ new #[Layout('layouts.app')] class extends Component
                             </td>
                             <td class="px-4 py-3 text-right">
                                 @unless ($slip->failed())
+                                    {{-- One agent at a time, for the figure that changed
+                                         after the run went out. --}}
+                                    @if ($run->isFinalized() && $canSendSlips)
+                                        <button wire:click="sendOneSlip({{ $slip->id }})"
+                                                wire:confirm="{{ $slip->notified_at
+                                                    ? 'Send this slip again to ' . $slip->employeeName() . '? They will get a second email.'
+                                                    : 'Send this slip to ' . $slip->employeeName() . '?' }}"
+                                                class="mr-3 font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">
+                                            {{ $slip->notified_at ? 'Send again' : 'Send' }}
+                                        </button>
+                                    @endif
+
                                     <button wire:click="viewSlip({{ $slip->id }})" @click="$wire.viewingSlipId = {{ $slip->id }}"
                                             class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">View slip</button>
                                 @endunless

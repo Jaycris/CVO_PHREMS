@@ -210,23 +210,16 @@ class CommissionRunService
         );
 
         /*
-         * A slip already sent is withdrawn before it is recomputed.
+         * What every agent was already told, to compare against afterwards.
          *
-         * The notifier only picks up slips with no notified_at, so leaving the
-         * stamp in place would mean the corrected figures are never sent: the
-         * agent keeps the old slip, Send reports nothing to do, and nobody finds
-         * out until they query the amount. Withdrawing costs them sight of it
-         * for as long as it takes to send again, which is the right way round.
+         * A slip whose figures move is withdrawn so the correction reaches
+         * them — the notifier only picks up slips with no notified_at, so
+         * leaving the stamp would mean they keep the old figure forever. A
+         * slip that did not move keeps its stamp, so adding one agent to a
+         * finished run does not email the other fifteen a second copy of
+         * numbers that never changed.
          */
-        $withdrawn = $run->slips()->whereNotNull('notified_at')->count();
-
-        if ($withdrawn > 0) {
-            $run->slips()->newQuery()
-                ->where('commission_run_id', $run->id)
-                ->update(['notified_at' => null]);
-
-            $run->log('slips_withdrawn', $withdrawn . ' sent slip(s) withdrawn for recomputing');
-        }
+        $before = $this->figureSnapshot($run);
 
         /*
          * Repayments this run already took are released before anything is
@@ -322,6 +315,8 @@ class CommissionRunService
         // a recomputed run.
         $run->slips()->whereNotIn('employee_id', $employees->pluck('id'))->delete();
 
+        $this->withdrawChangedSlips($run, $before);
+
         $run->update([
             'status' => 'computed',
             'computed_at' => now(),
@@ -378,6 +373,63 @@ class CommissionRunService
         ]);
 
         return round($net - $taken, 2);
+    }
+
+    /** The figures an agent would notice if they changed. */
+    protected const COMPARED_FIGURES = [
+        'mtd', 'target', 'mtd_percent', 'threshold_applied',
+        'service_commission', 'markup_commission', 'usd_total', 'exchange_rate', 'php_total',
+        'card_hold_percent', 'card_hold_amount', 'advance_deduction',
+        'adjustments_earning', 'adjustments_deduction', 'net_commission', 'transaction_count',
+    ];
+
+    /**
+     * What each already-sent slip says now, so a recompute can tell which
+     * agents actually have something new to read.
+     *
+     * @return array<int, string> slip id => fingerprint
+     */
+    protected function figureSnapshot(CommissionRun $run): array
+    {
+        return $run->slips()
+            ->whereNotNull('notified_at')
+            ->get(array_merge(self::COMPARED_FIGURES, ['id']))
+            ->mapWithKeys(fn (CommissionSlip $slip) => [$slip->id => $this->fingerprint($slip)])
+            ->all();
+    }
+
+    protected function fingerprint(CommissionSlip $slip): string
+    {
+        return collect(self::COMPARED_FIGURES)
+            ->map(fn (string $column) => (string) round((float) $slip->getAttribute($column), 4))
+            ->implode('|');
+    }
+
+    /**
+     * Takes back only the slips whose figures moved.
+     *
+     * @param  array<int, string>  $before
+     */
+    protected function withdrawChangedSlips(CommissionRun $run, array $before): void
+    {
+        if ($before === []) {
+            return;
+        }
+
+        $changed = $run->slips()
+            ->whereKey(array_keys($before))
+            ->get(array_merge(self::COMPARED_FIGURES, ['id']))
+            ->filter(fn (CommissionSlip $slip) => $this->fingerprint($slip) !== $before[$slip->id])
+            ->pluck('id');
+
+        if ($changed->isEmpty()) {
+            return;
+        }
+
+        CommissionSlip::whereIn('id', $changed)->update(['notified_at' => null]);
+
+        $run->log('slips_withdrawn', $changed->count()
+            . ' slip(s) changed and were withdrawn — sending again reaches only those agents');
     }
 
     /**
