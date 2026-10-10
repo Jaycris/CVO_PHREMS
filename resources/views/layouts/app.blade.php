@@ -168,7 +168,7 @@
                         @endcan
                     @endif
 
-                    @if (auth()->user()->canAny(['payroll.runs.manage', 'payroll.settings.manage', 'payroll.payslips.send', 'payroll.agent_pay.manage']))
+                    @if (auth()->user()->canAny(['payroll.runs.manage', 'payroll.settings.manage', 'payroll.payslips.send', 'payroll.agent_pay.manage', 'payroll.final_pay.manage']))
                         <p class="mb-1 mt-6 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 dark:text-ink-500">Payroll</p>
                         {{-- Named for what the person opening it can actually
                              do: somebody who may only release payslips is not
@@ -181,6 +181,9 @@
                         @endcan
                         @can('payroll.agent_pay.manage')
                             <x-nav-link :href="route('payroll.agent-pay')" :active="request()->routeIs('payroll.agent-pay')" icon="money">Agent Pay</x-nav-link>
+                        @endcan
+                        @can('payroll.final_pay.manage')
+                            <x-nav-link :href="route('payroll.final-pay')" :active="request()->routeIs('payroll.final-pay')" icon="money">Final Pay</x-nav-link>
                         @endcan
                         @can('payroll.settings.manage')
                             <x-nav-link :href="route('payroll.settings')" :active="request()->routeIs('payroll.settings')" icon="tag">Payroll Settings</x-nav-link>

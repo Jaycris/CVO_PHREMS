@@ -356,6 +356,12 @@ class Employee extends Model
         return $this->hasMany(LeaveRequest::class);
     }
 
+    /** Settlements after they left. One per year, and usually one in total. */
+    public function finalPays(): HasMany
+    {
+        return $this->hasMany(FinalPay::class);
+    }
+
     public function leaveDispositions(): HasMany
     {
         return $this->hasMany(EmployeeLeaveDisposition::class);

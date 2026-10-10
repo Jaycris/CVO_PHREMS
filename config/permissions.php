@@ -122,6 +122,7 @@ return [
              */
             'payroll.payslips.send' => 'Payroll — send finalized payslips out to employees (does not allow running payroll)',
             'payroll.agent_pay.manage' => 'Agent Pay — record pay for agents kept out of payroll, and send their pay slip (CEO/COO)',
+            'payroll.final_pay.manage' => 'Final Pay — settle what somebody is owed after they leave, hold it for clearance and release it',
             'payroll.settings.manage' => 'Payroll Settings — government contribution rates, which cutoff they come out of, and company payroll policy',
         ],
 

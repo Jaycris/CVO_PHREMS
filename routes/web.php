@@ -159,6 +159,12 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::livewire('/payroll/agent-pay', 'payroll.agent-pay')->name('payroll.agent-pay');
     });
 
+    // Settling up with somebody who has left: 13th month earned to their last
+    // day, less what they owe, held until clearance.
+    Route::middleware('can:payroll.final_pay.manage')->group(function () {
+        Route::livewire('/payroll/final-pay', 'payroll.final-pay')->name('payroll.final-pay');
+    });
+
     Route::middleware('can:payroll.settings.manage')->group(function () {
         Route::livewire('/payroll/settings', 'payroll.settings')->name('payroll.settings');
     });

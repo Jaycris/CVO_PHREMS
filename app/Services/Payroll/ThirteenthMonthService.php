@@ -66,7 +66,16 @@ class ThirteenthMonthService
      */
     public function preview(int $year): Collection
     {
+        /*
+         * Anybody settled on leaving is left out: their thirteenth month was
+         * paid with their final pay, and December must not pay it again.
+         */
+        $settled = \App\Models\FinalPay::where('for_year', $year)
+            ->where('status', '!=', \App\Models\FinalPay::CANCELLED)
+            ->pluck('employee_id');
+
         return Employee::where('include_in_payroll', true)
+            ->whereNotIn('id', $settled)
             ->orderBy('employee_id')
             ->get()
             ->map(function (Employee $employee) use ($year) {
