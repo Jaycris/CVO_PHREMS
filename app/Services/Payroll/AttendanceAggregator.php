@@ -359,7 +359,19 @@ class AttendanceAggregator
          * worked in their first cutoff is 3 / 3, not 11 / 11.
          */
         $days = (int) PayrollSetting::number('payroll_max_days_per_cutoff', 11);
+
+        /*
+         * Both have to be true, and the second one is the hard-won part.
+         *
+         * $wholeCutoff says this person was employed for all of the window.
+         * $isCutoff says the window IS a cutoff — because the aggregator is
+         * also asked about shorter spans, such as the days a leaver worked
+         * after their last payslip. Topping those up to eleven turned six
+         * days worked into eleven days paid, which is a payroll figure nobody
+         * could explain and the company would have paid.
+         */
         $wholeCutoff = $from === $start->timestamp && $to === $end->timestamp;
+        $isCutoff = $this->isWholeCutoff($start, $end);
         $extra = 0;
 
         /*
@@ -368,14 +380,20 @@ class AttendanceAggregator
          * scheduled for. Basic pay is a half-month priced over this, so a new
          * hire's five days are five elevenths of it rather than all of it.
          */
+        /*
+         * A day is always priced over a full cutoff, even when the window
+         * asked about is shorter. Pricing six days over six days would make
+         * each one worth a sixth of a half-month, and six of them the whole
+         * thing — a leaver paid a full fortnight for a week's work.
+         */
         $counters['days_in_cutoff'] = $days > 0 ? $days : $counters['days_expected'];
 
-        if ($days > 0 && $counters['days_expected'] > $days) {
+        if ($days > 0 && $isCutoff && $counters['days_expected'] > $days) {
             $extra = $counters['days_expected'] - $days;
 
             $counters['days_present'] = max(0, $counters['days_present'] - $extra);
             $counters['days_expected'] = $days;
-        } elseif ($days > 0 && $wholeCutoff && $counters['days_expected'] > 0 && $counters['days_expected'] < $days) {
+        } elseif ($days > 0 && $isCutoff && $wholeCutoff && $counters['days_expected'] > 0 && $counters['days_expected'] < $days) {
             $counters['days_present'] += $days - $counters['days_expected'];
             $counters['days_expected'] = $days;
         }
@@ -387,6 +405,20 @@ class AttendanceAggregator
         $counters['night_diff_minutes'] = array_sum($nights);
 
         return $counters;
+    }
+
+    /**
+     * Whether this window is a payroll cutoff rather than a span of days.
+     *
+     * The 11-day rule is about cutoffs. Asked about the six days somebody
+     * worked before they left, the honest answer is six — not eleven.
+     */
+    protected function isWholeCutoff(Carbon $start, Carbon $end): bool
+    {
+        $period = $this->periods->containing($start);
+
+        return Carbon::parse($period['start'])->isSameDay($start)
+            && Carbon::parse($period['end'])->isSameDay($end);
     }
 
     /**
