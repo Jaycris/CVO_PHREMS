@@ -80,9 +80,15 @@ class FinalPayService
             'thirteenth_month' => $thirteenth,
             'cash_advance_balance' => $cash,
             'commission_advance_balance' => $commission,
-            // Thirty days is the company's default and negotiable, so it is a
-            // date on the record rather than a rule in here.
-            'expected_release_on' => $employee->separation_date->copy()->addDays(30)->toDateString(),
+            /*
+             * Thirty days after their last day, then carried to the next
+             * payday — final pay goes out with the 15th or the 30th like
+             * everybody else's. Negotiable, so it is a date on the record
+             * rather than a rule in here.
+             */
+            'expected_release_on' => (new PayrollPeriodResolver)
+                ->nextPayDateAfter($employee->separation_date->copy()->addDays(30))
+                ->toDateString(),
             // Never below zero: a settlement cannot bill somebody. Whatever is
             // still owed after this is a debt to chase, not a negative payslip.
             'net_amount' => (float) max(0, round($owed - $cash - $commission, 2)),
@@ -251,6 +257,15 @@ class FinalPayService
     {
         abort_unless($finalPay->isPayable(), 422, 'This settlement has not been cleared yet.');
 
+        // Sending and paying are separate steps on purpose: the former
+        // employee sees the figures first, and the money follows on the 15th
+        // or the 30th with everybody else's.
+        abort_if(
+            $finalPay->emailed_at === null,
+            422,
+            'Send the statement first, so they can check the figures before the money moves.',
+        );
+
         return DB::transaction(function () use ($finalPay, $releasedOn) {
             $finalPay->update([
                 'status' => FinalPay::RELEASED,
@@ -279,6 +294,12 @@ class FinalPayService
      */
     public function emailStatement(FinalPay $finalPay): array
     {
+        abort_if(
+            $finalPay->status === FinalPay::CANCELLED,
+            422,
+            'A cancelled settlement has nothing to send.',
+        );
+
         $employee = $finalPay->employee;
         $name = $employee?->fullName() ?: 'This employee';
         $address = $employee?->personal_email;

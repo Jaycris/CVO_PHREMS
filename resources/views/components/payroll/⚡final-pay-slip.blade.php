@@ -94,19 +94,22 @@ new #[Layout('layouts.app')] class extends Component
         });
     }
 
+    /** Tells them what they are owed. No money moves. */
     public function send(FinalPayService $service): void
     {
         $this->attempt(function () use ($service) {
-            $final = $this->finalPay();
+            $this->statusMessage = $service->emailStatement($this->finalPay())['message']
+                . ' Mark it paid when the money goes out.';
+        });
+    }
 
-            // Releasing and sending are one action on purpose: a statement
-            // sent before the money moves invites a chase, and money moved
-            // without a statement invites a dispute.
-            if ($final->isPayable()) {
-                $final = $service->release($final, $this->releaseDate ?: now());
-            }
+    /** The money has gone out, usually on the 15th or the 30th. */
+    public function markPaid(FinalPayService $service): void
+    {
+        $this->attempt(function () use ($service) {
+            $final = $service->release($this->finalPay(), $this->releaseDate ?: now());
 
-            $this->statusMessage = $service->emailStatement($final)['message'];
+            $this->statusMessage = 'Marked as paid on ' . $final->released_on->format('M j, Y') . '.';
         });
     }
 
@@ -246,15 +249,26 @@ new #[Layout('layouts.app')] class extends Component
                 <x-button wire:click="recalculate" variant="secondary">Recalculate</x-button>
                 <x-button wire:click="finalize" wire:confirm="Lock these figures? Clearance should be signed off first.">Finalize</x-button>
             @elseif ($final->status === 'cleared')
-                <div>
-                    <x-label>Release date</x-label>
-                    <x-input wire:model="releaseDate" type="date" class="w-44" />
-                </div>
+                {{-- Two steps, in this order: they read the figures, then the
+                     money follows on the next payday. --}}
                 <x-button wire:click="send"
-                          wire:confirm="Release ₱{{ number_format((float) $final->net_amount, 2) }} and email the statement to {{ $employee?->personal_email ?: 'their personal address' }}?">
-                    <span wire:loading.remove wire:target="send">Release &amp; send statement</span>
+                          wire:confirm="Email the statement to {{ $employee?->personal_email ?: 'their personal address' }}? No money moves yet."
+                          :variant="$final->emailed_at ? 'secondary' : 'primary'">
+                    <span wire:loading.remove wire:target="send">{{ $final->emailed_at ? 'Send statement again' : 'Send statement' }}</span>
                     <span wire:loading wire:target="send">Sending…</span>
                 </x-button>
+
+                @if ($final->emailed_at)
+                    <div>
+                        <x-label>Paid on</x-label>
+                        <x-input wire:model="releaseDate" type="date" class="w-44" />
+                    </div>
+                    <x-button wire:click="markPaid"
+                              wire:confirm="Mark ₱{{ number_format((float) $final->net_amount, 2) }} as paid to {{ $employee?->fullName() }}?">
+                        Mark as paid
+                    </x-button>
+                @endif
+
                 <x-button wire:click="reopen" variant="secondary">Reopen</x-button>
             @elseif ($final->status === 'released')
                 <x-button wire:click="send" variant="secondary" wire:confirm="Send the statement again?">Send again</x-button>

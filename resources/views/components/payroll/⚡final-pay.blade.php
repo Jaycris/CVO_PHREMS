@@ -94,6 +94,7 @@ new #[Layout('layouts.app')] class extends Component
         });
     }
 
+    /** The money has gone out, on a payday. Telling them happened earlier. */
     public function release(int $id, FinalPayService $service): void
     {
         $this->guard();
@@ -101,11 +102,8 @@ new #[Layout('layouts.app')] class extends Component
         $this->attempt(function () use ($id, $service) {
             $final = $service->release(FinalPay::findOrFail($id), $this->releaseDate ?: now());
 
-            // The one thing they will chase if it never arrives, so it goes
-            // with the release rather than waiting for somebody to remember.
-            $sent = $service->emailStatement($final);
-
-            $this->statusMessage = 'Released. ' . $sent['message'];
+            $this->statusMessage = 'Marked as paid on '
+                . $final->released_on->format('M j, Y') . '.';
         });
     }
 
@@ -163,10 +161,11 @@ new #[Layout('layouts.app')] class extends Component
     }
 
     /**
-     * Releases and sends everything clearance has signed off.
+     * Sends the statement to everybody whose figures are locked.
      *
-     * The same button as a payroll run's Send Payslips, and the same rule:
-     * only what is ready goes, so pressing it twice cannot pay anybody twice.
+     * Telling them comes first: they read the figures, query anything that
+     * looks wrong, and the money follows on the next payday. Nothing here
+     * moves money, so pressing it twice only re-sends.
      */
     public function sendCleared(FinalPayService $service): void
     {
@@ -176,14 +175,13 @@ new #[Layout('layouts.app')] class extends Component
             $sent = 0;
             $skipped = [];
 
-            foreach (FinalPay::with('employee')->where('status', FinalPay::CLEARED)->get() as $final) {
-                $released = $service->release($final, $this->releaseDate ?: now());
-                $result = $service->emailStatement($released);
+            foreach (FinalPay::with('employee')->where('status', FinalPay::CLEARED)->whereNull('emailed_at')->get() as $final) {
+                $result = $service->emailStatement($final);
 
                 $result['sent'] ? $sent++ : $skipped[] = $final->employee?->fullName();
             }
 
-            $this->statusMessage = $sent . ' settlement(s) released and sent.'
+            $this->statusMessage = $sent . ' statement(s) sent.'
                 . ($skipped ? ' No personal email for ' . implode(', ', array_filter($skipped)) . '.' : '');
         });
     }
@@ -275,8 +273,8 @@ new #[Layout('layouts.app')] class extends Component
         <div class="flex flex-wrap items-center justify-between gap-4 border-t border-neutral-100 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-white/[0.02]">
             @if ($clearedCount > 0)
                 <div>
-                    <p class="text-sm font-bold text-[#0f172a] dark:text-white">{{ $clearedCount }} settlement(s) ready for release</p>
-                    <p class="mt-0.5 text-xs font-medium text-[#778599]">Statements will be emailed to each employee's personal address.</p>
+                    <p class="text-sm font-bold text-[#0f172a] dark:text-white">{{ $clearedCount }} settlement(s) ready to send</p>
+                    <p class="mt-0.5 text-xs font-medium text-[#778599]">The statement goes out first, so they can check it. Mark it paid when the money leaves on the 15th or the 30th.</p>
                 </div>
                 <div class="flex flex-wrap items-end gap-3">
                     <div class="w-44">
@@ -284,8 +282,8 @@ new #[Layout('layouts.app')] class extends Component
                         <x-input wire:model="releaseDate" type="date" />
                     </div>
                     <x-button wire:click="sendCleared"
-                              wire:confirm="Release ₱{{ number_format($clearedTotal, 2) }} to {{ $clearedCount }} person/people and email each statement to their personal address?">
-                        <span wire:loading.remove wire:target="sendCleared">Release &amp; Send Statements ({{ $clearedCount }})</span>
+                              wire:confirm="Email the statement to {{ $clearedCount }} person/people at their personal address? No money moves yet.">
+                        <span wire:loading.remove wire:target="sendCleared">Send Statements ({{ $clearedCount }})</span>
                         <span wire:loading wire:target="sendCleared">Sending…</span>
                     </x-button>
                 </div>
@@ -400,9 +398,9 @@ new #[Layout('layouts.app')] class extends Component
                                         </button>
                                     @elseif ($final->status === 'cleared')
                                         <button wire:click="release({{ $final->id }})"
-                                                wire:confirm="Release ₱{{ number_format((float) $final->net_amount, 2) }} to {{ $final->employee?->fullName() }} and email the statement to their personal address?"
+                                                wire:confirm="Mark ₱{{ number_format((float) $final->net_amount, 2) }} as paid to {{ $final->employee?->fullName() }}? Send the statement first if they have not had it."
                                                 class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-700 px-3 text-xs font-bold text-white shadow-sm transition hover:bg-brand-800">
-                                            <x-icon name="mail" class="h-4 w-4" /> Release &amp; email
+                                            <x-icon name="money" class="h-4 w-4" /> Mark as paid
                                         </button>
                                     @elseif ($final->status === 'released')
                                         <button wire:click="emailStatement({{ $final->id }})" wire:confirm="Send the statement again?"
@@ -418,7 +416,15 @@ new #[Layout('layouts.app')] class extends Component
                                         <button wire:click="cancel({{ $final->id }})" wire:confirm="Cancel this settlement?" class="text-red-600 hover:text-red-700 dark:text-red-400">Cancel</button>
                                     </div>
                                 @elseif ($final->status === 'cleared')
-                                    <button wire:click="hold({{ $final->id }})" class="mt-2 text-xs font-semibold text-amber-700 hover:text-amber-800 dark:text-amber-400">Put back on hold</button>
+                                    <div class="mt-2 flex items-center justify-end gap-3 text-xs font-semibold">
+                                        {{-- Telling them is its own step, before any money moves. --}}
+                                        <button wire:click="emailStatement({{ $final->id }})"
+                                                wire:confirm="Email the statement to {{ $final->employee?->fullName() }}? No money moves yet."
+                                                class="text-brand-700 hover:text-brand-800 dark:text-brand-400">
+                                            {{ $final->emailed_at ? 'Send statement again' : 'Send statement' }}
+                                        </button>
+                                        <button wire:click="hold({{ $final->id }})" class="text-amber-700 hover:text-amber-800 dark:text-amber-400">Put back on hold</button>
+                                    </div>
                                 @endif
                             </td>
                         </tr>

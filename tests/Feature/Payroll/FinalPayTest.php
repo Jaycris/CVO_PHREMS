@@ -161,8 +161,10 @@ class FinalPayTest extends PayrollTestCase
 
         Livewire::actingAs($this->hr)
             ->test('payroll.final-pay')
+            ->call('emailStatement', $final->id)
+            ->assertSee('Statement sent to rio.moreno@gmail.com')
             ->call('release', $final->id)
-            ->assertSee('Statement sent to rio.moreno@gmail.com');
+            ->assertSee('Marked as paid');
 
         Mail::assertQueued(FinalPayStatementMail::class, fn ($mail) => $mail->hasTo('rio.moreno@gmail.com'));
         $this->assertSame(FinalPay::RELEASED, $final->fresh()->status);
@@ -272,13 +274,14 @@ class FinalPayTest extends PayrollTestCase
     }
 
     #[Test]
-    public function the_settlement_is_due_thirty_days_after_their_last_day(): void
+    public function the_settlement_is_due_on_the_payday_after_thirty_days(): void
     {
-        // The company's default, and negotiable — so it is a date on the
-        // record rather than a rule nobody can change.
+        // Final pay goes out with the 15th or the 30th like everybody else's.
+        // Left on 16 October, thirty days lands on the 15th itself, so it
+        // carries to the 30th. Negotiable — it is a date on the record.
         $final = $this->service()->record($this->leaver(), $this->hr);
 
-        $this->assertSame('2026-11-15', $final->expected_release_on->toDateString());
+        $this->assertSame('2026-11-30', $final->expected_release_on->toDateString());
     }
 
     #[Test]
@@ -302,7 +305,9 @@ class FinalPayTest extends PayrollTestCase
         Livewire::actingAs($this->hr)
             ->test('payroll.final-pay-slip', ['finalPay' => $final->fresh()])
             ->call('send')
-            ->assertSee('Statement sent to rio.moreno@gmail.com');
+            ->assertSee('Statement sent to rio.moreno@gmail.com')
+            ->call('markPaid')
+            ->assertSee('Marked as paid');
 
         $this->assertSame(FinalPay::RELEASED, $final->fresh()->status);
         Mail::assertQueued(FinalPayStatementMail::class);
@@ -322,14 +327,14 @@ class FinalPayTest extends PayrollTestCase
             ->assertSee('Net to release')
             ->assertSee('Send Statements (1)')
             ->call('sendCleared')
-            ->assertSee('1 settlement(s) released and sent.');
+            ->assertSee('1 statement(s) sent.');
 
-        $this->assertSame(FinalPay::RELEASED, $final->fresh()->status);
+        $this->assertNotNull($final->fresh()->emailed_at);
         Mail::assertQueued(FinalPayStatementMail::class);
     }
 
     #[Test]
-    public function pressing_release_twice_cannot_pay_anybody_twice(): void
+    public function sending_twice_does_not_send_the_same_statement_again(): void
     {
         Mail::fake();
 
@@ -340,7 +345,7 @@ class FinalPayTest extends PayrollTestCase
         Livewire::actingAs($this->hr)
             ->test('payroll.final-pay')
             ->call('sendCleared')
-            ->assertSee('0 settlement(s) released and sent.');
+            ->assertSee('0 statement(s) sent.');
 
         Mail::assertQueuedCount(1);
     }
