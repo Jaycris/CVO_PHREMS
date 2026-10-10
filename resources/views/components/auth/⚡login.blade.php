@@ -83,7 +83,7 @@ new #[Layout('layouts.guest')] class extends Component
 
                     <form wire:submit="login" class="space-y-6">
                         <div>
-                            <div class="relative">
+                            <div class="relative" x-data="{ showPassword: false }">
                                 <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 font-medium text-ink-400">
                                     <x-icon name="user-circle" class="h-5 w-5" />
                                 </span>
@@ -102,8 +102,12 @@ new #[Layout('layouts.guest')] class extends Component
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                                     </svg>
                                 </span>
-                                <input wire:model="password" id="password" type="password" placeholder="Password"
-                                    class="block w-full rounded-lg border border-ink-300 bg-white py-3 pl-11 pr-4 text-sm font-medium text-ink-800 shadow-md shadow-ink-200/70 placeholder:text-ink-400 focus:border-brand-600 focus:bg-white focus:ring-2 focus:ring-brand-600/20 dark:border-white/10 dark:bg-ink-800 dark:text-white dark:shadow-black/20 dark:focus:bg-ink-800">
+                                <input wire:model="password" id="password" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" placeholder="Password"
+                                    class="block w-full rounded-lg border border-ink-300 bg-white py-3 pl-11 pr-12 text-sm font-medium text-ink-800 shadow-md shadow-ink-200/70 placeholder:text-ink-400 focus:border-brand-600 focus:bg-white focus:ring-2 focus:ring-brand-600/20 dark:border-white/10 dark:bg-ink-800 dark:text-white dark:shadow-black/20 dark:focus:bg-ink-800">
+                                <button type="button" @click="showPassword = ! showPassword" :aria-label="showPassword ? 'Hide password' : 'Show password'" :title="showPassword ? 'Hide password' : 'Show password'" class="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-ink-400 transition hover:text-ink-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-600 dark:hover:text-white">
+                                    <x-icon x-show="! showPassword" name="eye" class="h-5 w-5" />
+                                    <x-icon x-cloak x-show="showPassword" name="eye-slash" class="h-5 w-5" />
+                                </button>
                             </div>
                             <div class="mt-1.5 min-h-[1.25rem] pl-4">
                                 @error('password') <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
