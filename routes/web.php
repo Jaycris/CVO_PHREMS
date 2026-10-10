@@ -163,6 +163,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     // day, less what they owe, held until clearance.
     Route::middleware('can:payroll.final_pay.manage')->group(function () {
         Route::livewire('/payroll/final-pay', 'payroll.final-pay')->name('payroll.final-pay');
+        Route::livewire('/payroll/final-pay/{finalPay}', 'payroll.final-pay-slip')->name('payroll.final-pay-slip');
     });
 
     Route::middleware('can:payroll.settings.manage')->group(function () {

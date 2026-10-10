@@ -282,6 +282,59 @@ class FinalPayTest extends PayrollTestCase
     }
 
     #[Test]
+    public function the_settlement_has_its_own_page_that_finalizes_and_sends(): void
+    {
+        // The same shape as a payroll run: work it out, lock it, send it.
+        Mail::fake();
+
+        $employee = $this->leaver();
+        $final = $this->service()->record($employee, $this->hr);
+
+        $page = Livewire::actingAs($this->hr)->test('payroll.final-pay-slip', ['finalPay' => $final]);
+
+        $page->assertSee('Net final pay')
+            ->assertSee('Finalize')
+            ->call('finalize')
+            ->assertSet('errorMessage', null);
+
+        $this->assertSame(FinalPay::CLEARED, $final->fresh()->status);
+
+        Livewire::actingAs($this->hr)
+            ->test('payroll.final-pay-slip', ['finalPay' => $final->fresh()])
+            ->call('send')
+            ->assertSee('Statement sent to rio.moreno@gmail.com');
+
+        $this->assertSame(FinalPay::RELEASED, $final->fresh()->status);
+        Mail::assertQueued(FinalPayStatementMail::class);
+    }
+
+    #[Test]
+    public function a_finalized_settlement_cannot_be_edited_until_it_is_reopened(): void
+    {
+        $final = $this->service()->clear($this->service()->record($this->leaver(), $this->hr), $this->hr);
+
+        Livewire::actingAs($this->hr)
+            ->test('payroll.final-pay-slip', ['finalPay' => $final])
+            ->call('recalculate')
+            ->assertSet('errorMessage', null)
+            ->call('reopen');
+
+        $this->assertSame(FinalPay::HELD, $final->fresh()->status);
+    }
+
+    #[Test]
+    public function somebody_without_the_permission_cannot_open_a_settlement(): void
+    {
+        $final = $this->service()->record($this->leaver(), $this->hr);
+
+        $clerk = User::factory()->create();
+        $clerk->assignRole('Admin');
+        $clerk->givePermissionTo('payroll.runs.manage');
+
+        $this->actingAs($clerk)->get(route('payroll.final-pay-slip', $final))->assertForbidden();
+    }
+
+    #[Test]
     public function somebody_without_the_permission_cannot_settle_anybody(): void
     {
         $employee = $this->leaver();

@@ -266,6 +266,7 @@ new #[Layout('layouts.app')] class extends Component
                             </td>
                             <td class="px-4 py-3 text-right">
                                 <div class="flex flex-wrap justify-end gap-3">
+                                    <a href="{{ route('payroll.final-pay-slip', $final) }}" wire:navigate class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Open</a>
                                     @if ($final->status === 'held')
                                         <button wire:click="recalculate({{ $final->id }})" class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Recalculate</button>
                                         <button wire:click="editDeduction({{ $final->id }})" class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Deduction</button>
