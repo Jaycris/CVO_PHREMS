@@ -309,6 +309,43 @@ class FinalPayTest extends PayrollTestCase
     }
 
     #[Test]
+    public function the_page_opens_like_a_payroll_run_and_releases_what_is_cleared(): void
+    {
+        // Summary, then one button that moves everything ready on — the same
+        // shape as Send Payslips on a run.
+        Mail::fake();
+
+        $final = $this->service()->clear($this->service()->record($this->leaver(), $this->hr), $this->hr);
+
+        Livewire::actingAs($this->hr)
+            ->test('payroll.final-pay')
+            ->assertSee('Net to release')
+            ->assertSee('Send Statements (1)')
+            ->call('sendCleared')
+            ->assertSee('1 settlement(s) released and sent.');
+
+        $this->assertSame(FinalPay::RELEASED, $final->fresh()->status);
+        Mail::assertQueued(FinalPayStatementMail::class);
+    }
+
+    #[Test]
+    public function pressing_release_twice_cannot_pay_anybody_twice(): void
+    {
+        Mail::fake();
+
+        $this->service()->clear($this->service()->record($this->leaver(), $this->hr), $this->hr);
+
+        Livewire::actingAs($this->hr)->test('payroll.final-pay')->call('sendCleared');
+
+        Livewire::actingAs($this->hr)
+            ->test('payroll.final-pay')
+            ->call('sendCleared')
+            ->assertSee('0 settlement(s) released and sent.');
+
+        Mail::assertQueuedCount(1);
+    }
+
+    #[Test]
     public function a_finalized_settlement_cannot_be_edited_until_it_is_reopened(): void
     {
         $final = $this->service()->clear($this->service()->record($this->leaver(), $this->hr), $this->hr);

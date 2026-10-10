@@ -162,10 +162,42 @@ new #[Layout('layouts.app')] class extends Component
         });
     }
 
+    /**
+     * Releases and sends everything clearance has signed off.
+     *
+     * The same button as a payroll run's Send Payslips, and the same rule:
+     * only what is ready goes, so pressing it twice cannot pay anybody twice.
+     */
+    public function sendCleared(FinalPayService $service): void
+    {
+        $this->guard();
+
+        $this->attempt(function () use ($service) {
+            $sent = 0;
+            $skipped = [];
+
+            foreach (FinalPay::with('employee')->where('status', FinalPay::CLEARED)->get() as $final) {
+                $released = $service->release($final, $this->releaseDate ?: now());
+                $result = $service->emailStatement($released);
+
+                $result['sent'] ? $sent++ : $skipped[] = $final->employee?->fullName();
+            }
+
+            $this->statusMessage = $sent . ' settlement(s) released and sent.'
+                . ($skipped ? ' No personal email for ' . implode(', ', array_filter($skipped)) . '.' : '');
+        });
+    }
+
     public function with(FinalPayService $service): array
     {
+        $open = FinalPay::with('employee')->whereIn('status', [FinalPay::HELD, FinalPay::CLEARED])->get();
+
         return [
             'awaiting' => $service->awaitingSettlement(),
+            'heldCount' => $open->where('status', FinalPay::HELD)->count(),
+            'clearedCount' => $open->where('status', FinalPay::CLEARED)->count(),
+            'clearedTotal' => $open->where('status', FinalPay::CLEARED)->sum(fn (FinalPay $f) => (float) $f->net_amount),
+            'openTotal' => $open->sum(fn (FinalPay $f) => (float) $f->net_amount),
             'settlements' => FinalPay::with(['employee', 'clearedBy'])
                 ->orderByRaw("CASE status WHEN 'held' THEN 0 WHEN 'cleared' THEN 1 ELSE 2 END")
                 ->orderByDesc('id')
@@ -189,6 +221,50 @@ new #[Layout('layouts.app')] class extends Component
     @if ($errorMessage)
         <div class="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">{{ $errorMessage }}</div>
     @endif
+
+    {{-- The same strip a payroll run opens with: what is in front of you, and
+         the buttons that move it on. --}}
+    <x-card>
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+                <p class="text-xs font-medium text-[#778599]">Waiting to be worked out</p>
+                <p class="mt-1 text-2xl font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $awaiting->count() }}</p>
+            </div>
+            <div>
+                <p class="text-xs font-medium text-[#778599]">Held for clearance</p>
+                <p class="mt-1 text-2xl font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $heldCount }}</p>
+            </div>
+            <div>
+                <p class="text-xs font-medium text-[#778599]">Cleared, ready to pay</p>
+                <p class="mt-1 text-2xl font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $clearedCount }}</p>
+            </div>
+            <div>
+                <p class="text-xs font-medium text-[#778599]">Net to release</p>
+                <p class="mt-1 text-2xl font-bold text-brand-700 dark:text-brand-400 tabular-nums">₱{{ number_format($openTotal, 2) }}</p>
+            </div>
+        </div>
+
+        <div class="mt-5 flex flex-wrap items-end gap-2 border-t border-neutral-100 pt-5 dark:border-neutral-800">
+            @if ($clearedCount > 0)
+                <div>
+                    <x-label>Release date</x-label>
+                    <x-input wire:model="releaseDate" type="date" class="w-44" />
+                </div>
+
+                <x-button wire:click="sendCleared"
+                          wire:confirm="Release ₱{{ number_format($clearedTotal, 2) }} to {{ $clearedCount }} person/people and email each statement to their personal address?">
+                    <span wire:loading.remove wire:target="sendCleared">Release &amp; Send Statements ({{ $clearedCount }})</span>
+                    <span wire:loading wire:target="sendCleared">Sending…</span>
+                </x-button>
+            @elseif ($heldCount > 0)
+                <p class="text-sm font-medium text-[#778599]">
+                    {{ $heldCount }} settlement(s) waiting on clearance. Open one to check the figures and finalize it.
+                </p>
+            @else
+                <p class="text-sm font-medium text-[#778599]">Nothing waiting to be released.</p>
+            @endif
+        </div>
+    </x-card>
 
     @if ($awaiting->isNotEmpty())
         <x-card :padding="false">
