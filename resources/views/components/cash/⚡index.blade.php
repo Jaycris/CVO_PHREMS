@@ -92,9 +92,9 @@ new #[Layout('layouts.app')] class extends Component
     {
         $entry = CashEntry::findOrFail($id);
 
-        if ($this->lockedByAgentPay($entry)) {
+        if ($reason = $this->lockReason($entry)) {
             $this->showForm = false;
-            $this->statusMessage = 'That entry was written by Agent Pay. Change the payment there, and this entry follows.';
+            $this->statusMessage = $reason;
 
             return;
         }
@@ -116,9 +116,11 @@ new #[Layout('layouts.app')] class extends Component
     {
         // The edit button is hidden and edit() refuses, but a crafted request
         // can still arrive with an id — and that is the path by which the entry
-        // and its agent payment would start to disagree.
-        if ($this->editingId && ($existing = CashEntry::find($this->editingId)) && $this->lockedByAgentPay($existing)) {
-            abort(403, 'That entry was written by Agent Pay. Change the payment there instead.');
+        // and the payroll behind it would start to disagree.
+        if ($this->editingId && ($existing = CashEntry::find($this->editingId))) {
+            if ($reason = $this->lockReason($existing)) {
+                abort(403, $reason);
+            }
         }
 
         $data = $this->validate([
@@ -160,8 +162,8 @@ new #[Layout('layouts.app')] class extends Component
     {
         $entry = CashEntry::findOrFail($id);
 
-        if ($this->lockedByAgentPay($entry)) {
-            $this->statusMessage = 'That entry was written by Agent Pay. Delete the payment there, and this entry goes with it.';
+        if ($reason = $this->lockReason($entry, 'Undo')) {
+            $this->statusMessage = $reason;
 
             return;
         }
@@ -172,15 +174,27 @@ new #[Layout('layouts.app')] class extends Component
     }
 
     /**
-     * Whether an entry belongs to an agent payment.
+     * Why an entry cannot be touched here, or null if it can.
      *
-     * Those are changed from Agent Pay, never from here. The payment is the
-     * source of truth; editing its entry on this screen would leave two records
-     * of the same money that disagree, with nothing to say which is right.
+     * Entries the system wrote are changed where the money was decided, never
+     * from this screen. That record is the source of truth; editing its entry
+     * here would leave two records of the same money that disagree, with
+     * nothing to say which is right. The message names the page to go to,
+     * because "locked" on its own leaves somebody stuck.
      */
-    protected function lockedByAgentPay(CashEntry $entry): bool
+    protected function lockReason(CashEntry $entry, string $verb = 'Change'): ?string
     {
-        return $entry->source_type === \App\Services\Payroll\AgentPayService::LEDGER_SOURCE;
+        $page = match ($entry->source_type) {
+            \App\Services\Payroll\AgentPayService::LEDGER_SOURCE => 'Agent Pay',
+            \App\Services\Payroll\PayrollLedger::RUN_SOURCE => 'Run Payroll',
+            \App\Services\Payroll\PayrollLedger::FINAL_PAY_SOURCE => 'Final Pay',
+            null => null,
+            default => 'payroll',
+        };
+
+        return $page === null
+            ? null
+            : 'That entry was written by ' . $page . '. ' . $verb . ' it there, and this entry follows.';
     }
 
     protected function periodStart(): Carbon
@@ -383,10 +397,16 @@ new #[Layout('layouts.app')] class extends Component
                                 {{ $entry->isIn() ? '—' : $peso($entry->amount) }}
                             </td>
                             <td class="px-4 py-3 text-right">
-                                @if ($entry->source_type === \App\Services\Payroll\AgentPayService::LEDGER_SOURCE)
-                                    {{-- Changed from Agent Pay, never here, so the entry
-                                         and its payment cannot disagree. --}}
-                                    <span class="text-xs font-semibold text-ink-500 dark:text-ink-400">From Agent Pay</span>
+                                @if (! $entry->wasEnteredByHand())
+                                    {{-- Changed where the money was decided, never here, so
+                                         the entry and the record behind it cannot disagree. --}}
+                                    <span class="text-xs font-semibold text-ink-500 dark:text-ink-400">
+                                        @switch($entry->source_type)
+                                            @case(\App\Services\Payroll\PayrollLedger::RUN_SOURCE) From Run Payroll @break
+                                            @case(\App\Services\Payroll\PayrollLedger::FINAL_PAY_SOURCE) From Final Pay @break
+                                            @default From Agent Pay
+                                        @endswitch
+                                    </span>
                                 @else
                                     <div class="flex flex-wrap justify-end gap-2">
                                         <x-button wire:click="edit({{ $entry->id }})" @click="$wire.showForm = true"

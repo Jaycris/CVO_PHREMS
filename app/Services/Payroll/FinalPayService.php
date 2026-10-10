@@ -280,6 +280,9 @@ class FinalPayService
                 ->whereIn('status', [CommissionAdvance::ACTIVE, CommissionAdvance::ON_HOLD])
                 ->update(['status' => CommissionAdvance::PAID]);
 
+            // Company money left the bank, so Money In & Out has to show it.
+            (new PayrollLedger)->recordFinalPay($finalPay->fresh());
+
             return $finalPay->fresh();
         });
     }

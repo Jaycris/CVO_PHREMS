@@ -338,15 +338,20 @@ class PayrollService
     {
         abort_unless($run->status === 'finalized', 403, 'Only a finalized payroll run can be marked paid.');
 
-        $run->update([
-            'status' => 'paid',
-            'paid_at' => now(),
-            'paid_by_user_id' => $actor?->id,
-        ]);
+        return DB::transaction(function () use ($run, $actor) {
+            $run->update([
+                'status' => 'paid',
+                'paid_at' => now(),
+                'paid_by_user_id' => $actor?->id,
+            ]);
 
-        $run->log('marked_paid', 'Net ₱' . number_format((float) $run->total_net, 2) . ' released.');
+            // The biggest thing the company spends, now visible in Money In & Out.
+            (new PayrollLedger)->recordRun($run->fresh());
 
-        return $run->fresh();
+            $run->log('marked_paid', 'Net ₱' . number_format((float) $run->total_net, 2) . ' released.');
+
+            return $run->fresh();
+        });
     }
 
     /**
