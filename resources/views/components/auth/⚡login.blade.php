@@ -83,7 +83,7 @@ new #[Layout('layouts.guest')] class extends Component
 
                     <form wire:submit="login" class="space-y-6">
                         <div>
-                            <div class="relative" x-data="{ showPassword: false }">
+                            <div class="relative">
                                 <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 font-medium text-ink-400">
                                     <x-icon name="user-circle" class="h-5 w-5" />
                                 </span>
@@ -96,7 +96,7 @@ new #[Layout('layouts.guest')] class extends Component
                         </div>
 
                         <div>
-                            <div class="relative">
+                            <div class="relative" x-data="{ showPassword: false }">
                                 <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 font-medium text-ink-400">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
