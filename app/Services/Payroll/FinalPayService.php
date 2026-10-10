@@ -7,6 +7,7 @@ use App\Models\CashAdvance;
 use App\Models\CommissionAdvance;
 use App\Models\Employee;
 use App\Models\FinalPay;
+use App\Models\Payslip;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -56,22 +57,126 @@ class FinalPayService
 
         $year = (int) $employee->separation_date->year;
         $earned = $this->thirteenthMonth->basicEarnedFor($employee, $year);
+        $unpaid = $this->unpaidDays($employee);
 
         $cash = $this->cashAdvanceBalance($employee);
         $commission = $this->commissionAdvanceBalance($employee);
 
-        $thirteenth = round($earned['total'] / 12, 2);
+        /*
+         * The days they worked after their last payslip count towards the
+         * thirteenth month as well — they are basic pay, earned in the same
+         * year, and no payroll run will ever record them now.
+         */
+        $basicForYear = round($earned['total'] + $unpaid['unpaid_salary'], 2);
+        $thirteenth = round($basicForYear / 12, 2);
 
-        return [
+        $owed = round($unpaid['unpaid_salary'] + $unpaid['unpaid_night_differential']
+            + $unpaid['unpaid_overtime'] + $thirteenth, 2);
+
+        return $unpaid + [
             'for_year' => $year,
             'separation_date' => $employee->separation_date->toDateString(),
-            'basic_earned' => $earned['total'],
+            'basic_earned' => $basicForYear,
             'thirteenth_month' => $thirteenth,
             'cash_advance_balance' => $cash,
             'commission_advance_balance' => $commission,
+            // Thirty days is the company's default and negotiable, so it is a
+            // date on the record rather than a rule in here.
+            'expected_release_on' => $employee->separation_date->copy()->addDays(30)->toDateString(),
             // Never below zero: a settlement cannot bill somebody. Whatever is
             // still owed after this is a debt to chase, not a negative payslip.
-            'net_amount' => (float) max(0, round($thirteenth - $cash - $commission, 2)),
+            'net_amount' => (float) max(0, round($owed - $cash - $commission, 2)),
+        ];
+    }
+
+    /**
+     * The days worked since their last payslip, priced as payroll would.
+     *
+     * They drop out of the run for the cutoff they left in, so nothing else
+     * will ever pay these days. The window starts the day after the last
+     * settled run that covered them and ends on their last day.
+     *
+     * @return array<string, mixed>
+     */
+    protected function unpaidDays(Employee $employee): array
+    {
+        $empty = [
+            'unpaid_from' => null,
+            'unpaid_days' => 0.0,
+            'unpaid_salary' => 0.0,
+            'unpaid_night_differential' => 0.0,
+            'unpaid_overtime' => 0.0,
+        ];
+
+        $lastPaid = Payslip::where('employee_id', $employee->id)
+            ->whereHas('payrollRun', fn ($q) => $q
+                ->where('run_type', 'regular')
+                ->whereIn('status', ['finalized', 'paid']))
+            ->with('payrollRun')
+            ->get()
+            ->max(fn (Payslip $payslip) => $payslip->payrollRun->period_end);
+
+        $from = $lastPaid
+            ? Carbon::parse($lastPaid)->addDay()->startOfDay()
+            : ($employee->hire_date?->copy()->startOfDay() ?? $employee->separation_date->copy()->startOfMonth());
+
+        $to = $employee->separation_date->copy()->endOfDay();
+
+        if ($from->gt($to)) {
+            // Their last cutoff was already paid in full — nothing is owed for
+            // days, only the thirteenth month.
+            return $empty;
+        }
+
+        /*
+         * Cutoff by cutoff, exactly as payroll would have paid them.
+         *
+         * Not one long window: basic pay is half a month priced over a
+         * cutoff's own days, so measuring six weeks in one go prices a day
+         * against the wrong number and absences then run the figure negative.
+         */
+        $periods = new PayrollPeriodResolver;
+        $aggregator = new AttendanceAggregator;
+        $calculator = new PayslipCalculator(
+            (new StatutoryDeductionCalculator)->preload($employee->separation_date)
+        );
+
+        $totals = ['days' => 0.0, 'salary' => 0.0, 'night' => 0.0, 'overtime' => 0.0];
+        $period = $periods->containing($from);
+
+        while (Carbon::parse($period['start'])->lte($to)) {
+            // Clipped to the part they were actually still employed for.
+            $start = Carbon::parse($period['start'])->max($from);
+            $end = Carbon::parse($period['end'])->min($to);
+
+            $counters = $aggregator->aggregate(collect([$employee]), $start, $end)[$employee->id] ?? null;
+
+            if ($counters !== null) {
+                $figures = $calculator->calculate($employee, $counters, $period['cutoff']);
+
+                $totals['days'] += (float) ($counters['days_present'] ?? 0);
+                // basic_earned is the pro-rated basic with absences already
+                // off it, and never less than nothing.
+                $totals['salary'] += max(0, (float) $figures['basic_earned']);
+                $totals['night'] += (float) $figures['night_differential_pay'];
+                $totals['overtime'] += (float) $figures['overtime_pay'];
+            }
+
+            $next = Carbon::parse($period['end'])->addDay();
+
+            if ($next->gt($to)) {
+                break;
+            }
+
+            $period = $periods->containing($next);
+        }
+
+        return [
+            'unpaid_from' => $from->toDateString(),
+            'unpaid_days' => round($totals['days'], 2),
+            'unpaid_salary' => round($totals['salary'], 2),
+            'unpaid_night_differential' => round($totals['night'], 2),
+            'unpaid_overtime' => round($totals['overtime'], 2),
         ];
     }
 
@@ -228,6 +333,11 @@ class FinalPayService
         $finalPay->update([
             'basic_earned' => $figures['basic_earned'],
             'thirteenth_month' => $figures['thirteenth_month'],
+            'unpaid_from' => $figures['unpaid_from'],
+            'unpaid_days' => $figures['unpaid_days'],
+            'unpaid_salary' => $figures['unpaid_salary'],
+            'unpaid_night_differential' => $figures['unpaid_night_differential'],
+            'unpaid_overtime' => $figures['unpaid_overtime'],
             'cash_advance_balance' => $figures['cash_advance_balance'],
             'commission_advance_balance' => $figures['commission_advance_balance'],
         ]);
@@ -237,8 +347,10 @@ class FinalPayService
 
     protected function retotal(FinalPay $finalPay): FinalPay
     {
+        $owed = round((float) $finalPay->thirteenth_month + $finalPay->unpaidTotal(), 2);
+
         $finalPay->update([
-            'net_amount' => (float) max(0, round((float) $finalPay->thirteenth_month - $finalPay->totalDeductions(), 2)),
+            'net_amount' => (float) max(0, round($owed - $finalPay->totalDeductions(), 2)),
         ]);
 
         return $finalPay->fresh();

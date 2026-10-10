@@ -58,10 +58,38 @@
                         <td style="padding:38px;">
                             <h2 style="margin:0 0 14px; color:#0f172a; font-size:22px; line-height:1.35; font-weight:800;">Hello {{ $name }},</h2>
                             <p style="margin:0; color:#475569; font-size:16px; line-height:1.7;">
-                                Here is what you are owed after your last day. Your final salary is not in this statement — it was paid with your last payslip, for the days you worked in that cutoff.
+                                Here is what you are owed after your last day — the days you worked in your final cutoff, and the 13th month you earned this year.
                             </p>
 
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:26px 0 0; border-collapse:collapse;">
+                                @if ($finalPay->unpaidTotal() > 0)
+                                    <tr>
+                                        <td style="padding:12px 0; border-bottom:1px solid #e2e8f0; color:#475569; font-size:15px;">
+                                            Pay for your last days worked
+                                            <span style="display:block; color:#94a3b8; font-size:13px;">
+                                                {{ rtrim(rtrim(number_format((float) $finalPay->unpaid_days, 2), '0'), '.') }} day(s)@if ($finalPay->unpaid_from), from {{ $finalPay->unpaid_from->format('M j') }} to {{ $finalPay->separation_date->format('M j, Y') }}@endif
+                                            </span>
+                                        </td>
+                                        <td style="padding:12px 0; border-bottom:1px solid #e2e8f0; text-align:right; color:#0f172a; font-size:15px; font-weight:700;">
+                                            {{ $money($finalPay->unpaid_salary) }}
+                                        </td>
+                                    </tr>
+
+                                    @if ((float) $finalPay->unpaid_night_differential > 0)
+                                        <tr>
+                                            <td style="padding:12px 0; border-bottom:1px solid #e2e8f0; color:#475569; font-size:15px;">Night differential</td>
+                                            <td style="padding:12px 0; border-bottom:1px solid #e2e8f0; text-align:right; color:#0f172a; font-size:15px; font-weight:700;">{{ $money($finalPay->unpaid_night_differential) }}</td>
+                                        </tr>
+                                    @endif
+
+                                    @if ((float) $finalPay->unpaid_overtime > 0)
+                                        <tr>
+                                            <td style="padding:12px 0; border-bottom:1px solid #e2e8f0; color:#475569; font-size:15px;">Overtime</td>
+                                            <td style="padding:12px 0; border-bottom:1px solid #e2e8f0; text-align:right; color:#0f172a; font-size:15px; font-weight:700;">{{ $money($finalPay->unpaid_overtime) }}</td>
+                                        </tr>
+                                    @endif
+                                @endif
+
                                 <tr>
                                     <td style="padding:12px 0; border-bottom:1px solid #e2e8f0; color:#475569; font-size:15px;">
                                         13th month pay for {{ $finalPay->for_year }}
@@ -88,6 +116,10 @@
                             @if ($finalPay->released_on)
                                 <p style="margin:18px 0 0; color:#475569; font-size:15px; line-height:1.7;">
                                     Released on {{ $finalPay->released_on->format('F j, Y') }}.
+                                </p>
+                            @elseif ($finalPay->expected_release_on)
+                                <p style="margin:18px 0 0; color:#475569; font-size:15px; line-height:1.7;">
+                                    Expected to be released on or about {{ $finalPay->expected_release_on->format('F j, Y') }}, once clearance is complete.
                                 </p>
                             @endif
 

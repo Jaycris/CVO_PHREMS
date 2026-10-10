@@ -225,6 +225,7 @@ new #[Layout('layouts.app')] class extends Component
                     <tr>
                         <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Employee</th>
                         <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Last day</th>
+                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Last days</th>
                         <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">13th month</th>
                         <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Owed to us</th>
                         <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Net</th>
@@ -240,6 +241,12 @@ new #[Layout('layouts.app')] class extends Component
                                 <span class="block text-xs font-medium text-[#778599]">{{ $final->employee?->employee_id }}</span>
                             </td>
                             <td class="px-4 py-3 font-medium text-[#778599]">{{ $final->separation_date->format('M j, Y') }}</td>
+                            <td class="px-4 py-3 text-right font-medium text-[#778599] tabular-nums">
+                                ₱{{ number_format($final->unpaidTotal(), 2) }}
+                                @if ((float) $final->unpaid_days > 0)
+                                    <span class="block text-xs">{{ rtrim(rtrim(number_format((float) $final->unpaid_days, 2), '0'), '.') }} day(s) worked</span>
+                                @endif
+                            </td>
                             <td class="px-4 py-3 text-right font-medium text-[#778599] tabular-nums">₱{{ number_format((float) $final->thirteenth_month, 2) }}</td>
                             <td class="px-4 py-3 text-right font-medium text-[#778599] tabular-nums">
                                 ₱{{ number_format($final->totalDeductions(), 2) }}
@@ -250,6 +257,9 @@ new #[Layout('layouts.app')] class extends Component
                             <td class="px-4 py-3 text-right font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $final->net_amount, 2) }}</td>
                             <td class="px-4 py-3">
                                 <x-badge :color="$final->statusColor()">{{ $final->statusLabel() }}</x-badge>
+                                @if ($final->expected_release_on && $final->status !== 'released')
+                                    <span class="block text-xs font-medium text-[#778599]">Due about {{ $final->expected_release_on->format('M j') }}</span>
+                                @endif
                                 @if ($final->emailed_at)
                                     <span class="block text-xs font-medium text-[#778599]">Emailed {{ $final->emailed_at->format('M j') }}</span>
                                 @endif
@@ -278,7 +288,7 @@ new #[Layout('layouts.app')] class extends Component
 
                         @if ($deductingId === $final->id)
                             <tr wire:key="deduct-{{ $final->id }}">
-                                <td colspan="7" class="bg-[#f8fafc] px-4 py-4 dark:bg-neutral-800/50">
+                                <td colspan="8" class="bg-[#f8fafc] px-4 py-4 dark:bg-neutral-800/50">
                                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
                                         <div class="sm:col-span-2">
                                             <x-label>What is still owed?</x-label>
@@ -299,7 +309,7 @@ new #[Layout('layouts.app')] class extends Component
                             </tr>
                         @endif
                     @empty
-                        <tr><td colspan="7" class="px-4 py-10 text-center font-medium text-[#778599]">Nobody has been settled yet.</td></tr>
+                        <tr><td colspan="8" class="px-4 py-10 text-center font-medium text-[#778599]">Nobody has been settled yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>

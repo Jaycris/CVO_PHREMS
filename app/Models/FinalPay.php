@@ -24,6 +24,8 @@ class FinalPay extends Model
 
     protected $fillable = [
         'employee_id', 'separation_date', 'for_year',
+        'unpaid_from', 'unpaid_days', 'unpaid_salary',
+        'unpaid_night_differential', 'unpaid_overtime', 'expected_release_on',
         'basic_earned', 'thirteenth_month',
         'cash_advance_balance', 'commission_advance_balance',
         'other_deduction', 'other_deduction_label', 'net_amount',
@@ -35,6 +37,12 @@ class FinalPay extends Model
     {
         return [
             'separation_date' => 'date',
+            'unpaid_from' => 'date',
+            'unpaid_days' => 'decimal:2',
+            'unpaid_salary' => 'decimal:2',
+            'unpaid_night_differential' => 'decimal:2',
+            'unpaid_overtime' => 'decimal:2',
+            'expected_release_on' => 'date',
             'basic_earned' => 'decimal:2',
             'thirteenth_month' => 'decimal:2',
             'cash_advance_balance' => 'decimal:2',
@@ -55,6 +63,17 @@ class FinalPay extends Model
     public function clearedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'cleared_by_user_id');
+    }
+
+    /** The days they worked in the cutoff they left in. */
+    public function unpaidTotal(): float
+    {
+        return round(
+            (float) $this->unpaid_salary
+            + (float) $this->unpaid_night_differential
+            + (float) $this->unpaid_overtime,
+            2,
+        );
     }
 
     public function totalDeductions(): float

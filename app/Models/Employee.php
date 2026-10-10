@@ -213,9 +213,21 @@ class Employee extends Model
         $start = Carbon::parse($periodStart)->toDateString();
         $end = Carbon::parse($periodEnd)->toDateString();
 
+        /*
+         * Somebody who leaves during a cutoff drops out of that run entirely.
+         *
+         * Their remaining days are paid through Final Pay instead, alongside
+         * the thirteenth month they earned — one settlement, released when
+         * clearance is signed off rather than on the next pay date. Paying
+         * part of it here and the rest there would mean two payments, weeks
+         * apart, for the same fortnight.
+         *
+         * Cutoffs that ended before they left are unaffected: they worked
+         * those in full and were paid for them.
+         */
         return $query->where('include_in_payroll', true)
             ->where(fn (Builder $q) => $q->whereNull('hire_date')->orWhere('hire_date', '<=', $end))
-            ->where(fn (Builder $q) => $q->whereNull('separation_date')->orWhere('separation_date', '>=', $start));
+            ->where(fn (Builder $q) => $q->whereNull('separation_date')->orWhere('separation_date', '>', $end));
     }
 
     /*

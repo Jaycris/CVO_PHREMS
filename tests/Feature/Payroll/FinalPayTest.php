@@ -72,12 +72,15 @@ class FinalPayTest extends PayrollTestCase
     {
         $employee = $this->leaver();
 
-        $earned = app(ThirteenthMonthService::class)->basicEarnedFor($employee, 2026)['total'];
+        $paid = app(ThirteenthMonthService::class)->basicEarnedFor($employee, 2026)['total'];
         $preview = $this->service()->preview($employee);
 
-        $this->assertSame($earned, $preview['basic_earned']);
-        $this->assertSame(round($earned / 12, 2), $preview['thirteenth_month']);
+        // The days since their last payslip are basic pay too, and no payroll
+        // run will ever record them — so they count towards the 13th month.
+        $this->assertSame(round($paid + $preview['unpaid_salary'], 2), $preview['basic_earned']);
+        $this->assertSame(round($preview['basic_earned'] / 12, 2), $preview['thirteenth_month']);
         $this->assertSame(2026, $preview['for_year']);
+        $this->assertGreaterThan(0, $preview['unpaid_salary'], 'the cutoff they left in is settled here');
     }
 
     #[Test]
@@ -96,8 +99,11 @@ class FinalPayTest extends PayrollTestCase
 
         $preview = $this->service()->preview($employee->fresh());
 
+        $owed = round($preview['thirteenth_month'] + $preview['unpaid_salary']
+            + $preview['unpaid_night_differential'] + $preview['unpaid_overtime'], 2);
+
         $this->assertSame(300.00, $preview['cash_advance_balance']);
-        $this->assertSame(round($preview['thirteenth_month'] - 300, 2), $preview['net_amount']);
+        $this->assertSame(round($owed - 300, 2), $preview['net_amount']);
     }
 
     #[Test]
@@ -222,6 +228,57 @@ class FinalPayTest extends PayrollTestCase
         $updated = $this->service()->recalculate($final->fresh());
 
         $this->assertGreaterThan($before, (float) $updated->thirteenth_month);
+    }
+
+    #[Test]
+    public function a_leaver_drops_out_of_the_run_for_the_cutoff_they_left_in(): void
+    {
+        // Their remaining days are settled in Final Pay instead, so paying
+        // part of the fortnight here would pay it twice.
+        $employee = $this->makeEmployee(20000, 'day', ['separation_date' => '2026-08-16']);
+        $period = $this->period();                       // Aug 11-25
+        $this->fillAttendance($employee, $period);
+
+        // Somebody has to stay, or the run has nobody in it at all.
+        $this->fillAttendance($this->makeEmployee(20000, 'day'), $period);
+
+        $service = app(PayrollService::class);
+        $run = $service->openRun((int) $period['start']->year, (int) $period['start']->month, $period['cutoff']);
+        $service->compute($run, $this->hr);
+
+        $this->assertSame(0, \App\Models\Payslip::where('employee_id', $employee->id)->count());
+    }
+
+    #[Test]
+    public function recomputing_takes_a_leaver_back_out_of_the_run(): void
+    {
+        // The usual order: the run is computed, then HR records that somebody
+        // left. Recomputing used to leave their payslip exactly where it was.
+        $employee = $this->makeEmployee(20000, 'day');
+        $period = $this->period();
+        $this->fillAttendance($employee, $period);
+        $this->fillAttendance($this->makeEmployee(20000, 'day'), $period);
+
+        $service = app(PayrollService::class);
+        $run = $service->openRun((int) $period['start']->year, (int) $period['start']->month, $period['cutoff']);
+        $service->compute($run, $this->hr);
+
+        $this->assertSame(1, \App\Models\Payslip::where('employee_id', $employee->id)->count());
+
+        $employee->update(['separation_date' => '2026-08-16']);
+        $service->compute($run->fresh(), $this->hr);
+
+        $this->assertSame(0, \App\Models\Payslip::where('employee_id', $employee->id)->count());
+    }
+
+    #[Test]
+    public function the_settlement_is_due_thirty_days_after_their_last_day(): void
+    {
+        // The company's default, and negotiable — so it is a date on the
+        // record rather than a rule nobody can change.
+        $final = $this->service()->record($this->leaver(), $this->hr);
+
+        $this->assertSame('2026-11-15', $final->expected_release_on->toDateString());
     }
 
     #[Test]

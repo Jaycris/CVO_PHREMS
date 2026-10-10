@@ -209,6 +209,15 @@ class PayrollService
                 $totals['net'] += (float) $payslip->net_pay;
             }
 
+            /*
+             * Somebody no longer eligible must not linger on a recomputed run.
+             *
+             * Setting a separation date and recomputing used to leave their
+             * payslip exactly where it was, so a leaver stayed in the run and
+             * in its totals with no way to get them out.
+             */
+            $run->payslips()->whereNotIn('employee_id', $employees->pluck('id'))->delete();
+
             $this->withdrawChangedPayslips($run, $before);
 
             // Overtime is stamped as consumed so it cannot be paid again on a
