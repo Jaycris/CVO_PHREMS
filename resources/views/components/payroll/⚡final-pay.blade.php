@@ -208,60 +208,99 @@ new #[Layout('layouts.app')] class extends Component
 ?>
 
 <div class="space-y-6">
-    <div>
-        <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Final Pay</h1>
-        <p class="text-sm font-medium text-[#778599] dark:text-neutral-400">
+    <div class="max-w-3xl">
+        <p class="text-xs font-bold uppercase tracking-[0.14em] text-brand-700 dark:text-brand-400">Payroll</p>
+        <h1 class="mt-1 text-3xl font-bold tracking-tight text-[#0f172a] dark:text-white">Final Pay</h1>
+        <p class="mt-2 text-sm font-medium leading-6 text-[#65758c] dark:text-neutral-400">
             What somebody is owed after their last day: 13th month earned up to then, less anything they still owe. Held until clearance.
         </p>
     </div>
 
     @if ($statusMessage)
-        <div class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{{ $statusMessage }}</div>
+        <div class="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-900/30 dark:text-emerald-300">
+            <x-icon name="check" class="h-4 w-4 shrink-0" />
+            {{ $statusMessage }}
+        </div>
     @endif
     @if ($errorMessage)
-        <div class="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">{{ $errorMessage }}</div>
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-900/30 dark:text-red-300">{{ $errorMessage }}</div>
     @endif
 
     {{-- The same strip a payroll run opens with: what is in front of you, and
          the buttons that move it on. --}}
-    <x-card>
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
-                <p class="text-xs font-medium text-[#778599]">Waiting to be worked out</p>
-                <p class="mt-1 text-2xl font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $awaiting->count() }}</p>
+    <x-card :padding="false">
+        <div class="grid grid-cols-2 divide-x divide-y divide-neutral-100 sm:grid-cols-4 sm:divide-y-0 dark:divide-neutral-800">
+            <div class="p-5 sm:p-6">
+                <div class="flex items-center gap-3">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-[#65758c] dark:bg-white/5 dark:text-neutral-300">
+                        <x-icon name="clock" class="h-5 w-5" />
+                    </span>
+                    <p class="text-xs font-bold uppercase tracking-wide text-[#65758c]">To calculate</p>
+                </div>
+                <p class="mt-4 text-2xl font-bold text-[#0f172a] tabular-nums dark:text-white">{{ $awaiting->count() }}</p>
+                <p class="mt-1 text-xs font-medium text-[#778599]">Awaiting final figures</p>
             </div>
-            <div>
-                <p class="text-xs font-medium text-[#778599]">Held for clearance</p>
-                <p class="mt-1 text-2xl font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $heldCount }}</p>
+            <div class="p-5 sm:p-6">
+                <div class="flex items-center gap-3">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
+                        <x-icon name="lock" class="h-5 w-5" />
+                    </span>
+                    <p class="text-xs font-bold uppercase tracking-wide text-[#65758c]">On hold</p>
+                </div>
+                <p class="mt-4 text-2xl font-bold text-[#0f172a] tabular-nums dark:text-white">{{ $heldCount }}</p>
+                <p class="mt-1 text-xs font-medium text-[#778599]">Waiting for clearance</p>
             </div>
-            <div>
-                <p class="text-xs font-medium text-[#778599]">Cleared, ready to pay</p>
-                <p class="mt-1 text-2xl font-bold text-[#0f172a] dark:text-white tabular-nums">{{ $clearedCount }}</p>
+            <div class="p-5 sm:p-6">
+                <div class="flex items-center gap-3">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300">
+                        <x-icon name="check" class="h-5 w-5" />
+                    </span>
+                    <p class="text-xs font-bold uppercase tracking-wide text-[#65758c]">Ready</p>
+                </div>
+                <p class="mt-4 text-2xl font-bold text-[#0f172a] tabular-nums dark:text-white">{{ $clearedCount }}</p>
+                <p class="mt-1 text-xs font-medium text-[#778599]">Cleared for release</p>
             </div>
-            <div>
-                <p class="text-xs font-medium text-[#778599]">Net to release</p>
-                <p class="mt-1 text-2xl font-bold text-brand-700 dark:text-brand-400 tabular-nums">₱{{ number_format($openTotal, 2) }}</p>
+            <div class="p-5 sm:p-6">
+                <div class="flex items-center gap-3">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-400/10 dark:text-brand-300">
+                        <x-icon name="money" class="h-5 w-5" />
+                    </span>
+                    <p class="text-xs font-bold uppercase tracking-wide text-[#65758c]">Net to release</p>
+                </div>
+                <p class="mt-4 text-2xl font-bold text-brand-700 tabular-nums dark:text-brand-400">₱{{ number_format($openTotal, 2) }}</p>
+                <p class="mt-1 text-xs font-medium text-[#778599]">Across open settlements</p>
             </div>
         </div>
 
-        <div class="mt-5 flex flex-wrap items-end gap-2 border-t border-neutral-100 pt-5 dark:border-neutral-800">
+        <div class="flex flex-wrap items-center justify-between gap-4 border-t border-neutral-100 bg-[#f8fafc] px-5 py-4 dark:border-neutral-800 dark:bg-white/[0.02]">
             @if ($clearedCount > 0)
                 <div>
-                    <x-label>Release date</x-label>
-                    <x-input wire:model="releaseDate" type="date" class="w-44" />
+                    <p class="text-sm font-bold text-[#0f172a] dark:text-white">{{ $clearedCount }} settlement(s) ready for release</p>
+                    <p class="mt-0.5 text-xs font-medium text-[#778599]">Statements will be emailed to each employee's personal address.</p>
                 </div>
-
-                <x-button wire:click="sendCleared"
-                          wire:confirm="Release ₱{{ number_format($clearedTotal, 2) }} to {{ $clearedCount }} person/people and email each statement to their personal address?">
-                    <span wire:loading.remove wire:target="sendCleared">Release &amp; Send Statements ({{ $clearedCount }})</span>
-                    <span wire:loading wire:target="sendCleared">Sending…</span>
-                </x-button>
+                <div class="flex flex-wrap items-end gap-3">
+                    <div class="w-44">
+                        <x-label>Release date</x-label>
+                        <x-input wire:model="releaseDate" type="date" />
+                    </div>
+                    <x-button wire:click="sendCleared"
+                              wire:confirm="Release ₱{{ number_format($clearedTotal, 2) }} to {{ $clearedCount }} person/people and email each statement to their personal address?">
+                        <span wire:loading.remove wire:target="sendCleared">Release &amp; Send Statements ({{ $clearedCount }})</span>
+                        <span wire:loading wire:target="sendCleared">Sending…</span>
+                    </x-button>
+                </div>
             @elseif ($heldCount > 0)
-                <p class="text-sm font-medium text-[#778599]">
-                    {{ $heldCount }} settlement(s) waiting on clearance. Open one to check the figures and finalize it.
-                </p>
+                <div class="flex items-center gap-3">
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
+                        <x-icon name="lock" class="h-4 w-4" />
+                    </span>
+                    <div>
+                        <p class="text-sm font-bold text-[#0f172a] dark:text-white">{{ $heldCount }} settlement(s) waiting on clearance</p>
+                        <p class="mt-0.5 text-xs font-medium text-[#778599]">Open a record to verify the figures before marking it cleared.</p>
+                    </div>
+                </div>
             @else
-                <p class="text-sm font-medium text-[#778599]">Nothing waiting to be released.</p>
+                <p class="text-sm font-semibold text-[#65758c]">Nothing waiting to be released.</p>
             @endif
         </div>
     </x-card>
@@ -295,71 +334,92 @@ new #[Layout('layouts.app')] class extends Component
     @endif
 
     <x-card :padding="false">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <div>
+                <h2 class="text-[15px] font-bold text-[#0f172a] dark:text-white">Final pay settlements</h2>
+                <p class="mt-1 text-xs font-medium text-[#778599]">Review amounts, record deductions, clear, and release each settlement.</p>
+            </div>
+            <span class="rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-bold text-[#526783] dark:bg-white/5 dark:text-neutral-300">
+                {{ $settlements->total() }} total
+            </span>
+        </div>
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+            <table class="min-w-[1120px] divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
                 <thead class="bg-[#f8fafc] dark:bg-neutral-800/50">
                     <tr>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Employee</th>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Last day</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Last days</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">13th month</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Owed to us</th>
-                        <th class="px-4 py-4 text-right text-xs font-medium uppercase tracking-wide text-[#778599]">Net</th>
-                        <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Status</th>
-                        <th class="px-4 py-4"></th>
+                        <th class="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#65758c]">Employee</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#65758c]">Last day</th>
+                        <th class="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-[#65758c]">Last days</th>
+                        <th class="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-[#65758c]">13th month</th>
+                        <th class="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-[#65758c]">Deductions</th>
+                        <th class="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-[#65758c]">Net pay</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#65758c]">Status</th>
+                        <th class="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-[#65758c]">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
                     @forelse ($settlements as $final)
-                        <tr wire:key="final-{{ $final->id }}">
-                            <td class="px-4 py-3 font-medium text-[#65758c] dark:text-white">
-                                {{ $final->employee?->fullName() ?: '—' }}
-                                <span class="block text-xs font-medium text-[#778599]">{{ $final->employee?->employee_id }}</span>
+                        <tr wire:key="final-{{ $final->id }}" class="transition hover:bg-[#fbfcfd] dark:hover:bg-white/[0.02]">
+                            <td class="px-5 py-4">
+                                <p class="font-bold text-[#0f172a] dark:text-white">{{ $final->employee?->fullName() ?: '—' }}</p>
+                                <span class="mt-0.5 block text-xs font-medium text-[#778599]">{{ $final->employee?->employee_id }}</span>
                             </td>
-                            <td class="px-4 py-3 font-medium text-[#778599]">{{ $final->separation_date->format('M j, Y') }}</td>
-                            <td class="px-4 py-3 text-right font-medium text-[#778599] tabular-nums">
-                                ₱{{ number_format($final->unpaidTotal(), 2) }}
+                            <td class="whitespace-nowrap px-4 py-4 font-semibold text-[#65758c]">{{ $final->separation_date->format('M j, Y') }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-semibold text-[#526783] tabular-nums">
+                                <span class="text-[#0f172a] dark:text-white">₱{{ number_format($final->unpaidTotal(), 2) }}</span>
                                 @if ((float) $final->unpaid_days > 0)
-                                    <span class="block text-xs">{{ rtrim(rtrim(number_format((float) $final->unpaid_days, 2), '0'), '.') }} day(s) worked</span>
+                                    <span class="mt-0.5 block text-xs font-medium text-[#778599]">{{ rtrim(rtrim(number_format((float) $final->unpaid_days, 2), '0'), '.') }} day(s) worked</span>
                                 @endif
                             </td>
-                            <td class="px-4 py-3 text-right font-medium text-[#778599] tabular-nums">₱{{ number_format((float) $final->thirteenth_month, 2) }}</td>
-                            <td class="px-4 py-3 text-right font-medium text-[#778599] tabular-nums">
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-semibold text-[#526783] tabular-nums">₱{{ number_format((float) $final->thirteenth_month, 2) }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right font-semibold text-[#526783] tabular-nums">
                                 ₱{{ number_format($final->totalDeductions(), 2) }}
                                 @if ($final->other_deduction_label)
-                                    <span class="block text-xs">{{ $final->other_deduction_label }}</span>
+                                    <span class="mt-0.5 block max-w-36 whitespace-normal text-xs font-medium text-[#778599]">{{ $final->other_deduction_label }}</span>
                                 @endif
                             </td>
-                            <td class="px-4 py-3 text-right font-bold text-[#0f172a] dark:text-white tabular-nums">₱{{ number_format((float) $final->net_amount, 2) }}</td>
-                            <td class="px-4 py-3">
+                            <td class="whitespace-nowrap px-4 py-4 text-right text-base font-bold text-[#0f172a] tabular-nums dark:text-white">₱{{ number_format((float) $final->net_amount, 2) }}</td>
+                            <td class="px-4 py-4">
                                 <x-badge :color="$final->statusColor()">{{ $final->statusLabel() }}</x-badge>
                                 @if ($final->expected_release_on && $final->status !== 'released')
-                                    <span class="block text-xs font-medium text-[#778599]">Due about {{ $final->expected_release_on->format('M j') }}</span>
+                                    <span class="mt-1 block text-xs font-medium text-[#778599]">Due about {{ $final->expected_release_on->format('M j') }}</span>
                                 @endif
                                 @if ($final->emailed_at)
-                                    <span class="block text-xs font-medium text-[#778599]">Emailed {{ $final->emailed_at->format('M j') }}</span>
+                                    <span class="mt-1 block text-xs font-medium text-[#778599]">Emailed {{ $final->emailed_at->format('M j') }}</span>
                                 @endif
                             </td>
-                            <td class="px-4 py-3 text-right">
-                                <div class="flex flex-wrap justify-end gap-3">
-                                    <a href="{{ route('payroll.final-pay-slip', $final) }}" wire:navigate class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Open</a>
+                            <td class="w-72 px-5 py-4 text-right">
+                                <div class="flex items-center justify-end gap-2">
+                                    <a href="{{ route('payroll.final-pay-slip', $final) }}" wire:navigate class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-bold text-[#526783] shadow-sm transition hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-white/5">
+                                        <x-icon name="eye" class="h-4 w-4" /> Open
+                                    </a>
                                     @if ($final->status === 'held')
-                                        <button wire:click="recalculate({{ $final->id }})" class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Recalculate</button>
-                                        <button wire:click="editDeduction({{ $final->id }})" class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Deduction</button>
                                         <button wire:click="clear({{ $final->id }})" wire:confirm="Clearance signed off for {{ $final->employee?->fullName() }}?"
-                                                class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Mark cleared</button>
-                                        <button wire:click="cancel({{ $final->id }})" wire:confirm="Cancel this settlement?"
-                                                class="font-medium text-red-600 hover:text-red-700 dark:text-red-400">Cancel</button>
+                                                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-700 px-3 text-xs font-bold text-white shadow-sm transition hover:bg-brand-800">
+                                            <x-icon name="check" class="h-4 w-4" /> Mark cleared
+                                        </button>
                                     @elseif ($final->status === 'cleared')
                                         <button wire:click="release({{ $final->id }})"
                                                 wire:confirm="Release ₱{{ number_format((float) $final->net_amount, 2) }} to {{ $final->employee?->fullName() }} and email the statement to their personal address?"
-                                                class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Release &amp; email</button>
-                                        <button wire:click="hold({{ $final->id }})" class="font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400">Put back on hold</button>
+                                                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-700 px-3 text-xs font-bold text-white shadow-sm transition hover:bg-brand-800">
+                                            <x-icon name="mail" class="h-4 w-4" /> Release &amp; email
+                                        </button>
                                     @elseif ($final->status === 'released')
                                         <button wire:click="emailStatement({{ $final->id }})" wire:confirm="Send the statement again?"
-                                                class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Email again</button>
+                                                class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 text-xs font-bold text-brand-800 transition hover:bg-brand-100 dark:border-brand-400/20 dark:bg-brand-400/10 dark:text-brand-300">
+                                            <x-icon name="mail" class="h-4 w-4" /> Email again
+                                        </button>
                                     @endif
                                 </div>
+                                @if ($final->status === 'held')
+                                    <div class="mt-2 flex items-center justify-end gap-3 text-xs font-semibold">
+                                        <button wire:click="recalculate({{ $final->id }})" class="text-[#65758c] hover:text-[#0f172a] dark:text-neutral-400 dark:hover:text-white">Recalculate</button>
+                                        <button wire:click="editDeduction({{ $final->id }})" class="text-[#65758c] hover:text-[#0f172a] dark:text-neutral-400 dark:hover:text-white">Deduction</button>
+                                        <button wire:click="cancel({{ $final->id }})" wire:confirm="Cancel this settlement?" class="text-red-600 hover:text-red-700 dark:text-red-400">Cancel</button>
+                                    </div>
+                                @elseif ($final->status === 'cleared')
+                                    <button wire:click="hold({{ $final->id }})" class="mt-2 text-xs font-semibold text-amber-700 hover:text-amber-800 dark:text-amber-400">Put back on hold</button>
+                                @endif
                             </td>
                         </tr>
 
