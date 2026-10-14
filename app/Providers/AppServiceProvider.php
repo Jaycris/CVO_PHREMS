@@ -4,11 +4,13 @@ namespace App\Providers;
 
 use App\Models\AttendanceBreak;
 use App\Models\AttendanceDay;
+use App\Models\Employee;
 use App\Models\PayrollRun;
 use App\Models\Payslip;
 use App\Models\PayslipAdjustment;
 use App\Models\User;
 use App\Observers\AttendanceLockObserver;
+use App\Observers\EmployeeObserver;
 use App\Observers\PayslipAdjustmentObserver;
 use App\Observers\PayslipObserver;
 use App\Services\Sms\LogDriver;
@@ -95,6 +97,10 @@ class AppServiceProvider extends ServiceProvider
             'commissions.runs.manage',
             'commissions.slips.send',
         ]));
+
+        // The login address follows the company address, whichever screen
+        // changed it.
+        Employee::observe(EmployeeObserver::class);
 
         // Refuses any write to a finalised or paid payslip, whatever code path
         // it arrives through.

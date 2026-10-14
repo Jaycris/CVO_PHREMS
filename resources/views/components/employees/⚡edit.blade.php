@@ -636,6 +636,26 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             <div class="professional-panel sticky top-24 rounded-2xl p-5">
+                {{--
+                    A refusal used to look exactly like a save. The form stayed
+                    put, the only sign was a red line in a section somewhere up
+                    the page, and the change people thought they had made —
+                    clocking on, a new address — was never written. One blank
+                    field anywhere on the form, often one HR never filled in,
+                    silently stopped every other change with it.
+                --}}
+                @if ($errors->any())
+                    <div class="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-500/10">
+                        <p class="text-sm font-bold text-red-700 dark:text-red-300">Nothing was saved</p>
+                        <p class="mt-1 text-xs font-medium text-red-700/80 dark:text-red-300/80">Fix these and save again:</p>
+                        <ul class="mt-2 list-disc space-y-1 pl-4 text-xs font-medium text-red-700 dark:text-red-300">
+                            @foreach ($errors->all() as $message)
+                                <li>{{ $message }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
                 <div class="flex flex-col gap-3">
                     <x-button type="submit" class="w-full">Save Changes</x-button>
                     <x-button as="a" variant="secondary" href="{{ route('employees.show', $employee) }}" wire:navigate class="w-full">Cancel</x-button>
