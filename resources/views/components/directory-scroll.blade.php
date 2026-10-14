@@ -54,7 +54,10 @@
                 this.floatingLeft = Math.round(left);
                 this.floatingWidth = Math.max(0, Math.round(right - left));
                 this.floatingVisible = this.hasOverflow
-                    && bounds.bottom > 0
+                    // Hand control back to the table's own scrollbar as soon
+                    // as it enters the viewport, so the floating copy never
+                    // covers the final visible row.
+                    && bounds.bottom > window.innerHeight
                     && bounds.top < window.innerHeight
                     && this.floatingWidth > 0;
 

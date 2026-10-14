@@ -14,6 +14,7 @@ class DirectoryScrollTest extends TestCase
         $this->assertStringContainsString('x-teleport="body"', $html);
         $this->assertStringContainsString('Floating horizontal table scroll', $html);
         $this->assertStringContainsString('fixed bottom-3', $html);
+        $this->assertStringContainsString('bounds.bottom > window.innerHeight', $html);
         $this->assertStringContainsString('tabindex="0"', $html);
         $this->assertStringNotContainsString('topScroller', $html);
     }
