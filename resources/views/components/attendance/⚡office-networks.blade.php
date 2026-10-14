@@ -32,7 +32,11 @@ new #[Layout('layouts.app')] class extends Component
     public string $label = '';
     public string $ip_address = '';
     public string $note = '';
-    public bool $is_active = true;
+    // A string, not a bool: this is a <select>, and an option's value is text.
+    // A bool false matches neither "1" nor "0", so the browser shows the first
+    // option — editing a switched-off network would open on Yes and switch it
+    // back on the moment anything else was saved.
+    public string $is_active = '1';
 
     public function mount(): void
     {
@@ -91,7 +95,7 @@ new #[Layout('layouts.app')] class extends Component
     public function create(): void
     {
         $this->reset(['editingId', 'label', 'note']);
-        $this->is_active = true;
+        $this->is_active = '1';
 
         // Pre-filled with wherever the person setting this up is sitting,
         // which in practice is the office. Reading your own public address off
@@ -111,7 +115,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->label = $network->label;
         $this->ip_address = $network->ip_address;
         $this->note = (string) $network->note;
-        $this->is_active = (bool) $network->is_active;
+        $this->is_active = $network->is_active ? '1' : '0';
 
         $this->resetValidation();
         $this->errorMessage = null;
@@ -124,10 +128,12 @@ new #[Layout('layouts.app')] class extends Component
             'label' => ['required', 'string', 'max:120'],
             'ip_address' => ['required', 'string', 'max:64', 'unique:office_networks,ip_address,' . $this->editingId],
             'note' => ['nullable', 'string', 'max:200'],
-            'is_active' => ['boolean'],
+            'is_active' => ['required', 'in:0,1'],
         ], [], ['ip_address' => 'address']);
 
         $data['ip_address'] = trim($data['ip_address']);
+        // Back to a bool for the column, now the <select> has had its string.
+        $data['is_active'] = $data['is_active'] === '1';
 
         if (! OfficeNetwork::isValidAddress($data['ip_address'])) {
             $this->addError('ip_address', 'That is not a valid IP address or range. Use 203.0.113.5 for one address, or 203.0.113.0/24 for a range.');
@@ -376,8 +382,8 @@ new #[Layout('layouts.app')] class extends Component
             <div>
                 <x-label>In use?</x-label>
                 <x-select wire:model="is_active">
-                    <option value="1">Yes</option>
-                    <option value="0">No — keep the record but do not allow it</option>
+                    <option value="1" @selected($is_active === '1')>Yes</option>
+                    <option value="0" @selected($is_active === '0')>No — keep the record but do not allow it</option>
                 </x-select>
             </div>
         </div>

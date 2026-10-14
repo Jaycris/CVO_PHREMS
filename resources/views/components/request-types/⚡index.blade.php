@@ -24,15 +24,21 @@ new #[Layout('layouts.app')] class extends Component
     public string $name = '';
     public string $description = '';
     public string $instructions = '';
-    public bool $needs_dates = false;
-    public bool $is_active = true;
+    /*
+     * Strings, not bools: these are <select>s and an option's value is text.
+     * A bool matches neither "1" nor "0", so the browser falls back to the
+     * first option — a type that asks for dates would open claiming it does
+     * not, and saving anything else about it would make that true.
+     */
+    public string $needs_dates = '0';
+    public string $is_active = '1';
     public string $sort_order = '0';
 
     public function create(): void
     {
         $this->reset(['editingId', 'name', 'description', 'instructions']);
-        $this->needs_dates = false;
-        $this->is_active = true;
+        $this->needs_dates = '0';
+        $this->is_active = '1';
         $this->sort_order = (string) (RequestType::max('sort_order') + 1);
         $this->resetValidation();
         $this->errorMessage = null;
@@ -47,8 +53,8 @@ new #[Layout('layouts.app')] class extends Component
         $this->name = $type->name;
         $this->description = (string) $type->description;
         $this->instructions = (string) $type->instructions;
-        $this->needs_dates = (bool) $type->needs_dates;
-        $this->is_active = (bool) $type->is_active;
+        $this->needs_dates = $type->needs_dates ? '1' : '0';
+        $this->is_active = $type->is_active ? '1' : '0';
         $this->sort_order = (string) $type->sort_order;
 
         $this->resetValidation();
@@ -62,10 +68,14 @@ new #[Layout('layouts.app')] class extends Component
             'name' => ['required', 'string', 'max:120', 'unique:request_types,name,' . $this->editingId],
             'description' => ['nullable', 'string', 'max:200'],
             'instructions' => ['nullable', 'string', 'max:200'],
-            'needs_dates' => ['boolean'],
-            'is_active' => ['boolean'],
+            'needs_dates' => ['required', 'in:0,1'],
+            'is_active' => ['required', 'in:0,1'],
             'sort_order' => ['required', 'integer', 'min:0'],
         ]);
+
+        // Back to bools for the columns, now the <select>s have had their strings.
+        $data['needs_dates'] = $data['needs_dates'] === '1';
+        $data['is_active'] = $data['is_active'] === '1';
 
         RequestType::updateOrCreate(['id' => $this->editingId], $data);
 
@@ -223,8 +233,8 @@ new #[Layout('layouts.app')] class extends Component
                 <div>
                     <x-label>Asks for dates?</x-label>
                     <x-select wire:model="needs_dates">
-                        <option value="0">No — just details</option>
-                        <option value="1">Yes — pick specific days</option>
+                        <option value="0" @selected($needs_dates === '0')>No — just details</option>
+                        <option value="1" @selected($needs_dates === '1')>Yes — pick specific days</option>
                     </x-select>
                     <p class="mt-1 text-xs font-medium text-[#778599]">
                         Yes for work from home or a shift change. No for a certificate or equipment.
@@ -240,8 +250,8 @@ new #[Layout('layouts.app')] class extends Component
             <div>
                 <x-label>Accepting requests?</x-label>
                 <x-select wire:model="is_active">
-                    <option value="1">Yes</option>
-                    <option value="0">No — hide it from the form</option>
+                    <option value="1" @selected($is_active === '1')>Yes</option>
+                    <option value="0" @selected($is_active === '0')>No — hide it from the form</option>
                 </x-select>
             </div>
         </div>

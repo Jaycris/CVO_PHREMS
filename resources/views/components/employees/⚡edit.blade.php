@@ -47,7 +47,12 @@ new #[Layout('layouts.app')] class extends Component
     public string $philhealth_number = '';
     public string $pagibig_number = '';
     public string $workplace_type = '';
-    public bool $tracks_attendance = true;
+    /*
+     * A string, not a bool, because this is a <select>. An option's value is
+     * always text: a bool false assigned to one matches neither "1" nor "0",
+     * and the browser quietly shows the first option instead of the real one.
+     */
+    public string $tracks_attendance = '1';
     public bool $welcome_sms = false;
     public string $employment_type = '';
     public string $company_email = '';
@@ -107,7 +112,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->philhealth_number = (string) $employee->philhealth_number;
         $this->pagibig_number = (string) $employee->pagibig_number;
         $this->workplace_type = (string) $employee->workplace_type;
-        $this->tracks_attendance = (bool) $employee->tracks_attendance;
+        $this->tracks_attendance = $employee->tracks_attendance ? '1' : '0';
         $this->welcome_sms = (bool) $employee->welcome_sms;
         $this->employment_type = (string) $employee->employment_type;
         $this->company_email = (string) $employee->company_email;
@@ -178,7 +183,7 @@ new #[Layout('layouts.app')] class extends Component
             'sss_number' => ['nullable', 'string', 'max:50'],
             'philhealth_number' => ['nullable', 'string', 'max:50'],
             'pagibig_number' => ['nullable', 'string', 'max:50'],
-            'tracks_attendance' => ['boolean'],
+            'tracks_attendance' => ['required', 'in:0,1'],
             'welcome_sms' => ['boolean'],
             'workplace_type' => ['nullable', 'in:Onsite,Hybrid,Remote'],
             'employment_type' => ['nullable', 'in:Full-time,Part-time'],
@@ -210,6 +215,9 @@ new #[Layout('layouts.app')] class extends Component
                 $data[$optional] = null;
             }
         }
+
+        // Back to a bool for the column, now the <select> has had its string.
+        $data['tracks_attendance'] = $data['tracks_attendance'] === '1';
 
         /*
          * Dropped rather than merely hidden. The inputs are not rendered before
@@ -465,9 +473,18 @@ new #[Layout('layouts.app')] class extends Component
                     </div>
                     <div class="min-w-0">
                         <x-label>Clocks in and out?</x-label>
+                        {{--
+                            @selected is not decoration here. Without it no
+                            option carries the attribute, so the browser shows
+                            the first one — Yes — whatever the record says.
+                            Somebody looking at a fixed-work employee saw Yes,
+                            picked Yes, and picking the option already showing
+                            fires no change event: nothing synced and Save wrote
+                            the old value straight back.
+                        --}}
                         <x-select wire:model="tracks_attendance">
-                            <option value="1">Yes — uses the punch clock</option>
-                            <option value="0">No — fixed work, no punching</option>
+                            <option value="1" @selected($tracks_attendance === '1')>Yes — uses the punch clock</option>
+                            <option value="0" @selected($tracks_attendance === '0')>No — fixed work, no punching</option>
                         </x-select>
                         <p class="mt-1 text-xs font-medium text-[#778599]">Set per person, whatever their department. Choose No and payroll counts every scheduled day as worked, so no absence is ever deducted.</p>
                         @error('tracks_attendance') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror

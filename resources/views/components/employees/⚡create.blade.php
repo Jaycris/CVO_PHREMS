@@ -19,7 +19,9 @@ new #[Layout('layouts.app')] class extends Component
     public string $gender = '';
     public string $phone_name = '';
     public string $workplace_type = '';
-    public bool $tracks_attendance = true;
+    // A string, not a bool: an option value is text, and a bool matches
+    // neither "1" nor "0", so the browser shows the first option instead.
+    public string $tracks_attendance = '1';
     public string $employment_type = '';
     public string $company_email = '';
     public string $personal_email = '';
@@ -65,7 +67,7 @@ new #[Layout('layouts.app')] class extends Component
             // at the point of creating the record, and the employee fills it in.
             'gender' => ['nullable', 'in:Male,Female'],
             'phone_name' => ['nullable', 'string', 'max:255'],
-            'tracks_attendance' => ['boolean'],
+            'tracks_attendance' => ['required', 'in:0,1'],
             'workplace_type' => ['nullable', 'in:Onsite,Hybrid,Remote'],
             'employment_type' => ['nullable', 'in:Full-time,Part-time'],
             'company_email' => ['required', 'email', 'unique:employees,company_email'],
@@ -105,6 +107,9 @@ new #[Layout('layouts.app')] class extends Component
             $data['commission_scheme'] = null;
             $data['quota'] = null;
         }
+
+        // Back to a bool for the column, now the <select> has had its string.
+        $data['tracks_attendance'] = $data['tracks_attendance'] === '1';
 
         $employee = Employee::create($data);
 
@@ -222,8 +227,8 @@ new #[Layout('layouts.app')] class extends Component
                     <div class="min-w-0">
                         <x-label>Clocks in and out?</x-label>
                         <x-select wire:model="tracks_attendance">
-                            <option value="1">Yes — uses the punch clock</option>
-                            <option value="0">No — fixed work, no punching</option>
+                            <option value="1" @selected($tracks_attendance === '1')>Yes — uses the punch clock</option>
+                            <option value="0" @selected($tracks_attendance === '0')>No — fixed work, no punching</option>
                         </x-select>
                         <p class="mt-1 text-xs font-medium text-[#778599]">Set per person, whatever their department. Choose No and payroll counts every scheduled day as worked, so no absence is ever deducted.</p>
                         @error('tracks_attendance') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror

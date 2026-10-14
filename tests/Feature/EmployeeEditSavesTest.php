@@ -50,12 +50,46 @@ class EmployeeEditSavesTest extends TestCase
         $employee = $this->employee(['tracks_attendance' => false]);
 
         Livewire::test('employees.edit', ['employee' => $employee])
-            ->assertSet('tracks_attendance', false)
+            ->assertSet('tracks_attendance', '0')
             ->set('tracks_attendance', '1')
             ->call('save')
             ->assertHasNoErrors();
 
         $this->assertTrue((bool) $employee->fresh()->tracks_attendance);
+    }
+
+    /**
+     * The one that mattered, and the one the tests above could never catch.
+     *
+     * No option carried `selected`, so the browser showed the first — Yes —
+     * for somebody whose record said No. Picking the option already on screen
+     * fires no change event, so nothing reached the server and Save wrote the
+     * old value back. Setting the property in a test skips the markup
+     * entirely, which is why every earlier test passed on a form that was
+     * broken in front of HR all along.
+     */
+    #[Test]
+    public function the_clocks_in_dropdown_opens_on_the_value_the_record_holds(): void
+    {
+        $fixed = $this->employee(['tracks_attendance' => false]);
+
+        Livewire::test('employees.edit', ['employee' => $fixed])
+            ->assertSeeHtml('<option value="0" selected>')
+            ->assertDontSeeHtml('<option value="1" selected>');
+
+        $punches = $this->employee(['tracks_attendance' => true]);
+
+        Livewire::test('employees.edit', ['employee' => $punches])
+            ->assertSeeHtml('<option value="1" selected>')
+            ->assertDontSeeHtml('<option value="0" selected>');
+    }
+
+    #[Test]
+    public function the_same_dropdown_on_the_new_employee_form_starts_on_yes(): void
+    {
+        Livewire::test('employees.create')
+            ->assertSeeHtml('<option value="1" selected>')
+            ->assertDontSeeHtml('<option value="0" selected>');
     }
 
     #[Test]
