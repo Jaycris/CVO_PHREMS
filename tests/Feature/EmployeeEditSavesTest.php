@@ -126,12 +126,18 @@ class EmployeeEditSavesTest extends TestCase
         $this->assertSame('travis@inkspiremediahouse.com', $login->fresh()->email);
     }
 
+    /**
+     * A pair that had already drifted apart still catches up.
+     *
+     * The first version of this only moved a login that still matched the old
+     * company email. That skipped every pair already out of step — the ones
+     * that most needed it — so changing the profile did nothing and no amount
+     * of re-saving would ever fix them.
+     */
     #[Test]
-    public function a_login_address_somebody_set_by_hand_is_left_where_it_is(): void
+    public function a_login_that_had_already_drifted_is_brought_back_in_line(): void
     {
-        // Theirs, not a copy of the company address. Dragging it along would
-        // change the address they sign in with without anybody asking.
-        $login = User::factory()->create(['email' => 'travis.personal@gmail.com']);
+        $login = User::factory()->create(['email' => 'travis@somewhere-else.com']);
         $employee = $this->employee([
             'company_email' => 'travis@inkspiremediallc.com',
             'user_id' => $login->id,
@@ -139,9 +145,10 @@ class EmployeeEditSavesTest extends TestCase
 
         Livewire::test('employees.edit', ['employee' => $employee])
             ->set('company_email', 'travis@inkspiremediahouse.com')
-            ->call('save');
+            ->call('save')
+            ->assertHasNoErrors();
 
-        $this->assertSame('travis.personal@gmail.com', $login->fresh()->email);
+        $this->assertSame('travis@inkspiremediahouse.com', $login->fresh()->email);
     }
 
     #[Test]

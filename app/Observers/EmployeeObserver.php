@@ -15,9 +15,12 @@ class EmployeeObserver
      * signing in with an address that no longer exists — and the Users
      * directory still showing the old one.
      *
-     * Only an address that still matched the old company email is moved. One
-     * somebody deliberately set to something else is theirs, and dragging it
-     * along would quietly lock them out.
+     * This first only moved a login that still matched the old company email,
+     * on the theory that a different one had been set deliberately. In
+     * practice the pairs that most needed fixing were the ones already out of
+     * step, and that rule skipped exactly those: changing the profile did
+     * nothing, and no amount of re-saving would ever catch them up. The
+     * company email is the address of record, so the login follows it.
      */
     public function updated(Employee $employee): void
     {
@@ -26,9 +29,8 @@ class EmployeeObserver
         }
 
         $user = $employee->user;
-        $was = $employee->getOriginal('company_email');
 
-        if (! $user || $user->email !== $was) {
+        if (! $user || $user->email === $employee->company_email) {
             return;
         }
 
