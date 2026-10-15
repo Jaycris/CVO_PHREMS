@@ -32,6 +32,16 @@ new #[Layout('layouts.app')] class extends Component
     public string $separationType = '';
     public ?string $separationReason = null;
 
+    /*
+     * The payout account, shown only when somebody asks for it.
+     *
+     * Masked by default because this page is open on screen all day and an
+     * account number is enough for anyone walking past to copy down. Whoever
+     * pays the salary still has to read the whole thing, so it reveals on a
+     * click and the number never reaches the browser until then.
+     */
+    public bool $showBankNumber = false;
+
     // The profile is read-only; each section opens its own editor.
     public bool $showScheduleModal = false;
     public bool $showPayrollModal = false;
@@ -47,6 +57,19 @@ new #[Layout('layouts.app')] class extends Component
     public ?int $openingLeaveTypeId = null;
     public string $openingDays = '';
     public string $openingNote = '';
+
+    public function toggleBankNumber(): void
+    {
+        // The people who decide a change and the people who pay the salary.
+        // Everyone else keeps the masked version.
+        abort_unless(
+            auth()->user()?->can('bank_details.approve') || auth()->user()?->can('bank_details.notify'),
+            403,
+            'You cannot see full account numbers.',
+        );
+
+        $this->showBankNumber = ! $this->showBankNumber;
+    }
 
     public function openScheduleModal(): void
     {
@@ -817,7 +840,23 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
                 <div>
                     <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Account Number</dt>
-                    <dd class="mt-1 font-mono text-sm font-bold tracking-wide text-ink-950 dark:text-white">{{ $employee->hasBankDetails() ? $employee->maskedBankAccount() : 'Not provided' }}</dd>
+                    <dd class="mt-1 font-mono text-sm font-bold tracking-wide text-ink-950 dark:text-white">
+                        @if (! $employee->hasBankDetails())
+                            Not provided
+                        @elseif ($showBankNumber)
+                            {{ $employee->bank_account_number }}
+                        @else
+                            {{ $employee->maskedBankAccount() }}
+                        @endif
+                    </dd>
+                    @canany(['bank_details.approve', 'bank_details.notify'])
+                        @if ($employee->hasBankDetails())
+                            <button type="button" wire:click="toggleBankNumber"
+                                    class="mt-1 text-xs font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">
+                                {{ $showBankNumber ? 'Hide number' : 'Show number' }}
+                            </button>
+                        @endif
+                    @endcanany
                 </div>
                 <div>
                     <dt class="text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Last Updated</dt>

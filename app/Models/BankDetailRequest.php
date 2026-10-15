@@ -80,6 +80,21 @@ class BankDetailRequest extends Model
         return $this->previous_bank_account_number === null;
     }
 
+    /**
+     * Whether this is the account the salary actually goes to today.
+     *
+     * Approving replaces the account on the employee record, but the requests
+     * stay as a list, so somebody who changed banks twice has two rows. Read
+     * without this, those look like two accounts competing rather than one
+     * that replaced the other.
+     */
+    public function isInForce(): bool
+    {
+        return $this->status === 'approved'
+            && filled($this->bank_account_number)
+            && $this->bank_account_number === $this->employee?->bank_account_number;
+    }
+
     public function statusLabel(): string
     {
         return match ($this->status) {

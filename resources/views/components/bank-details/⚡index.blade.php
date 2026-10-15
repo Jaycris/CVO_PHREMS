@@ -27,6 +27,17 @@ new #[Layout('layouts.app')] class extends Component
     public string $decisionNote = '';
     public bool $showDecision = false;
 
+    #[Locked]
+    public ?int $viewingId = null;
+    public bool $showHistory = false;
+
+    /*
+     * Masked until asked for. Whoever pays the salary has to read the whole
+     * number, but it does not belong on screen by default in a list anyone
+     * can walk past.
+     */
+    public bool $revealNumber = false;
+
     public function updatedSearch(): void
     {
         $this->resetPage('history');
@@ -45,6 +56,34 @@ new #[Layout('layouts.app')] class extends Component
         $this->reset(['decidingId', 'decisionNote']);
         $this->resetValidation();
         $this->showDecision = false;
+    }
+
+    /**
+     * Opens a decided row.
+     *
+     * The list has room for a bank name and a masked number, which is not
+     * enough to answer what was actually approved — whose account, what it
+     * replaced, why they asked, and what the decision note said.
+     */
+    public function openHistory(int $id): void
+    {
+        $this->viewingId = BankDetailRequest::whereIn('status', ['approved', 'declined', 'cancelled'])
+            ->findOrFail($id)->id;
+        // Closed again each time, so a number left showing does not greet
+        // whoever opens the next row.
+        $this->revealNumber = false;
+        $this->showHistory = true;
+    }
+
+    public function toggleNumber(): void
+    {
+        $this->revealNumber = ! $this->revealNumber;
+    }
+
+    public function closeHistory(): void
+    {
+        $this->reset(['viewingId', 'revealNumber']);
+        $this->showHistory = false;
     }
 
     public function decide(bool $approved, BankDetailService $service): void
@@ -87,6 +126,9 @@ new #[Layout('layouts.app')] class extends Component
                 ->paginate($this->perPage(), pageName: 'history'),
             'deciding' => $this->decidingId
                 ? BankDetailRequest::with('employee')->find($this->decidingId)
+                : null,
+            'viewing' => $this->viewingId
+                ? BankDetailRequest::with(['employee', 'decidedBy'])->find($this->viewingId)
                 : null,
         ];
     }
@@ -186,6 +228,7 @@ new #[Layout('layouts.app')] class extends Component
                         <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Status</th>
                         <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">Decided by</th>
                         <th class="px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#778599]">When</th>
+                        <th class="px-4 py-4"></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -198,14 +241,29 @@ new #[Layout('layouts.app')] class extends Component
                                 {{ $request->bank_name }}
                                 <span class="text-xs tabular-nums">{{ $request->maskedAccount() }}</span>
                             </td>
-                            <td class="px-4 py-3"><x-badge :color="$request->statusColor()">{{ $request->statusLabel() }}</x-badge></td>
+                            <td class="px-4 py-3">
+                                <x-badge :color="$request->statusColor()">{{ $request->statusLabel() }}</x-badge>
+                                {{-- Somebody who changed banks twice has two rows.
+                                     Without this they read as two accounts at
+                                     once instead of one that replaced the other. --}}
+                                @if ($request->isInForce())
+                                    <span class="mt-1 block text-xs font-bold text-emerald-700 dark:text-emerald-400">Salary goes here now</span>
+                                @endif
+                            </td>
                             <td class="px-4 py-3 font-medium text-[#778599]">{{ $request->decidedBy?->name ?? '—' }}</td>
                             <td class="whitespace-nowrap px-4 py-3 font-medium text-[#778599]">
                                 {{ ($request->decided_at ?? $request->updated_at)->format('M j, Y') }}
                             </td>
+                            <td class="px-4 py-3 text-right">
+                                {{-- Opens the panel immediately; the server
+                                     call behind it only loads the record. --}}
+                                <button wire:click="openHistory({{ $request->id }})"
+                                        @click="$wire.showHistory = true"
+                                        class="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400">Details</button>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-4 py-10 text-center font-medium text-[#778599]">Nothing decided yet.</td></tr>
+                        <tr><td colspan="6" class="px-4 py-10 text-center font-medium text-[#778599]">Nothing decided yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -217,6 +275,84 @@ new #[Layout('layouts.app')] class extends Component
             </div>
         @endif
     </x-card>
+
+    <x-modal wire="showHistory" onClose="closeHistory" maxWidth="lg">
+        @unless ($viewing)
+            <p class="py-6 text-center text-sm font-medium text-[#778599]">Loading…</p>
+        @else
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-bold text-[#0f172a] dark:text-white">
+                        {{ $viewing->employee->fullName() ?: $viewing->employee->employee_id }}
+                    </h2>
+                    <p class="mt-1 text-sm font-medium text-[#778599]">
+                        Filed {{ $viewing->created_at->format('F j, Y') }}.
+                        {{ $viewing->statusLabel() }}
+                        {{ $viewing->decidedBy ? 'by ' . $viewing->decidedBy->name : '' }}
+                        {{ $viewing->decided_at ? 'on ' . $viewing->decided_at->format('F j, Y') : '' }}.
+                    </p>
+                </div>
+                <x-badge :color="$viewing->statusColor()">{{ $viewing->statusLabel() }}</x-badge>
+            </div>
+
+            @if ($viewing->isInForce())
+                <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    This is the account {{ $viewing->employee->first_name ?: 'this employee' }} is paid to today.
+                </div>
+            @elseif ($viewing->status === 'approved')
+                {{-- Approved, but another change has been approved since. --}}
+                <div class="mt-4 rounded-xl border border-neutral-200 bg-[#f8fafc] p-4 text-sm font-medium text-[#65758c] dark:border-neutral-800 dark:bg-neutral-800/50 dark:text-neutral-300">
+                    This account was replaced by a later change. The salary no longer goes here.
+                </div>
+            @endif
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                <div class="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+                    <p class="text-xs font-bold uppercase tracking-wide text-[#778599]">
+                        {{ $viewing->isFirstEntry() ? 'Nothing on file before' : 'Was paid to' }}
+                    </p>
+                    <p class="mt-1 text-sm font-semibold text-[#65758c] dark:text-neutral-300">{{ $viewing->previous_bank_name ?: '—' }}</p>
+                    <p class="text-sm font-medium text-[#778599]">{{ $viewing->previous_bank_account_name ?: '—' }}</p>
+                    <p class="text-sm font-medium tabular-nums text-[#778599]">{{ $viewing->maskedPreviousAccount() }}</p>
+                </div>
+
+                <div class="rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/20 dark:bg-brand-500/10">
+                    <p class="text-xs font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">
+                        {{ $viewing->status === 'approved' ? 'Changed to' : 'Asked for' }}
+                    </p>
+                    <p class="mt-1 text-sm font-bold text-[#0f172a] dark:text-white">{{ $viewing->bank_name }}</p>
+                    <p class="text-sm font-medium text-[#65758c] dark:text-neutral-300">{{ $viewing->bank_account_name }}</p>
+                    {{-- Masked until asked for: the number is needed to pay
+                         them, but not by default on a screen left open. --}}
+                    <p class="text-sm font-bold tabular-nums text-[#0f172a] dark:text-white">
+                        {{ $revealNumber ? $viewing->bank_account_number : $viewing->maskedAccount() }}
+                    </p>
+                    <button type="button" wire:click="toggleNumber"
+                            class="mt-1 text-xs font-bold text-brand-700 hover:text-brand-800 dark:text-brand-300">
+                        {{ $revealNumber ? 'Hide number' : 'Show number' }}
+                    </button>
+                </div>
+            </div>
+
+            @if ($viewing->reason)
+                <div class="mt-4 rounded-xl bg-[#f8fafc] p-4 dark:bg-neutral-800/50">
+                    <p class="text-xs font-bold uppercase tracking-wide text-[#778599]">Their reason</p>
+                    <p class="mt-1 text-sm font-medium text-[#65758c] dark:text-neutral-300">{{ $viewing->reason }}</p>
+                </div>
+            @endif
+
+            @if ($viewing->decision_note)
+                <div class="mt-3 rounded-xl bg-[#f8fafc] p-4 dark:bg-neutral-800/50">
+                    <p class="text-xs font-bold uppercase tracking-wide text-[#778599]">Note from {{ $viewing->decidedBy?->name ?? 'HR' }}</p>
+                    <p class="mt-1 text-sm font-medium text-[#65758c] dark:text-neutral-300">{{ $viewing->decision_note }}</p>
+                </div>
+            @endif
+
+            <div class="mt-5">
+                <x-button wire:click="closeHistory" @click="modalOpen = false" variant="secondary">Close</x-button>
+            </div>
+        @endunless
+    </x-modal>
 
     <x-modal wire="showDecision" onClose="closeDecision" maxWidth="lg">
         {{-- The panel is on screen before the record arrives, so it says so
