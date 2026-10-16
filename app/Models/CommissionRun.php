@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
 class CommissionRun extends Model
@@ -109,6 +110,42 @@ class CommissionRun extends Model
     public function month(): string
     {
         return $this->period_start->format('Y-m');
+    }
+
+    /** True when the dates asked for are a whole calendar month. */
+    public function coversWholeMonth(): bool
+    {
+        return $this->period_start->isSameDay($this->period_start->copy()->startOfMonth())
+            && $this->period_end->isSameDay($this->period_end->copy()->endOfMonth())
+            && $this->period_start->isSameMonth($this->period_end);
+    }
+
+    /**
+     * Sales the CRM sent that fall outside the dates this run asked for.
+     *
+     * The agreed CRM API takes a month and nothing finer. A custom range sends
+     * from and to as well, in the hope the CRM narrows it, but a CRM that only
+     * understands months answers with the whole month — and the totals it
+     * sends are for the whole month too. Those totals are what the agent gets
+     * paid, so this is the difference between a ten-day run and a thirty-one
+     * day one, not a cosmetic one.
+     *
+     * Counted from the sold dates already stored, so nothing has to be asked
+     * of the CRM again to find out.
+     */
+    public function salesOutsideThePeriod(): Collection
+    {
+        if ($this->coversWholeMonth()) {
+            return collect();
+        }
+
+        return CommissionSlipLine::query()
+            ->whereIn('commission_slip_id', $this->slips()->select('id'))
+            ->whereNotNull('sold_date')
+            ->where(fn ($q) => $q
+                ->whereDate('sold_date', '<', $this->period_start->toDateString())
+                ->orWhereDate('sold_date', '>', $this->period_end->toDateString()))
+            ->get();
     }
 
     public function typeLabel(): string

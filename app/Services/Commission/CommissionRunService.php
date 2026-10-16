@@ -502,6 +502,22 @@ class CommissionRunService
             'Every agent failed to read from the CRM. Fix the connection and compute again before finalizing.'
         );
 
+        /*
+         * The CRM answered with sales from outside the dates asked for, which
+         * means it ignored them and sent the whole month — and the totals it
+         * sent cover the whole month with it. Finalizing is what turns those
+         * totals into what an agent is paid, so it stops here rather than
+         * paying thirty-one days against a ten-day run.
+         */
+        $strays = $run->salesOutsideThePeriod();
+
+        abort_if($strays->isNotEmpty(), 422, sprintf(
+            'The CRM sent %d sale(s) from outside %s — it answered with the whole month, so these figures are not for '
+            . 'this period. Run it as a whole month, or have the CRM honour the from and to dates first.',
+            $strays->count(),
+            $run->periodLabel(),
+        ));
+
         $run->update([
             'status' => 'finalized',
             'finalized_at' => now(),

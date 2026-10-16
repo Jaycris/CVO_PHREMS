@@ -314,6 +314,9 @@ new #[Layout('layouts.app')] class extends Component
                 ->orderByRaw('CASE WHEN fetch_error IS NULL THEN 1 ELSE 0 END')
                 ->orderByDesc('net_commission')
                 ->paginate($this->perPage()),
+            // Empty for a whole-month run, which is every run the agreed CRM
+            // API can actually narrow.
+            'strays' => $run->salesOutsideThePeriod(),
             'logs' => $run->logs()->limit(15)->get(),
             'pendingSends' => $run->isFinalized() ? $notifier->pendingCount($run) : 0,
             'canFinalize' => Auth::user()->can('commissions.runs.finalize'),
@@ -348,6 +351,30 @@ new #[Layout('layouts.app')] class extends Component
 
     @if ($errorMessage)
         <div class="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">{{ $errorMessage }}</div>
+    @endif
+
+    {{--
+        The CRM answered with sales from outside the dates asked for, so it
+        ignored them and sent the whole month — totals included. Those totals
+        are what an agent is paid, so this is said before Finalize rather than
+        after, and Finalize refuses while it stands.
+    --}}
+    @if ($strays->isNotEmpty())
+        <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+            <p class="text-sm font-bold text-amber-900 dark:text-amber-200">
+                These figures are for the whole month, not {{ $run->periodLabel() }}
+            </p>
+            <p class="mt-1 text-sm font-medium text-amber-900/90 dark:text-amber-200/90">
+                The CRM sent {{ $strays->count() }} sale(s) dated outside these days — the earliest
+                {{ $strays->min('sold_date') }} and the latest {{ $strays->max('sold_date') }} — which means it
+                answered with all of {{ $run->period_start->format('F Y') }}. The commission totals it sent cover
+                the whole month too, so finalizing this would pay the month, not the ten days.
+            </p>
+            <p class="mt-2 text-sm font-medium text-amber-900/90 dark:text-amber-200/90">
+                Run it as a whole month instead, or ask for the CRM to honour the <span class="font-mono">from</span>
+                and <span class="font-mono">to</span> dates. Finalize is refused until then.
+            </p>
+        </div>
     @endif
 
     {{-- The three steps, offered one at a time and in order. --}}

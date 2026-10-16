@@ -20,6 +20,19 @@ GET  {CRM_API_BASE_URL}/api/hris/commission-slip
 |---|---|---|
 | `agent` | `AG-101` or `maria.santos@creativision.net` | Who the slip is for — see §2 |
 | `month` | `2026-08` | Calendar month, always `YYYY-MM` |
+| `from` | `2026-10-01` | First day to include, inclusive |
+| `to` | `2026-10-10` | Last day to include, inclusive |
+
+**`from` and `to` are not optional to honour.** Commission is not always run for
+a whole month — a ten-day run is an ordinary thing — and the HRIS pays whatever
+the `summary` says. A CRM that reads only `month` answers with the whole month,
+and the agent is paid for thirty-one days against a ten-day run. Both the
+`transactions` rows **and** every figure in `summary` have to be narrowed to
+`from`–`to`.
+
+`month` is still sent, and still matches `from`, so nothing breaks while this is
+being added. Until the CRM narrows them, the HRIS refuses to finalize any run
+whose returned sales fall outside the dates it asked for.
 
 ### Authentication
 
