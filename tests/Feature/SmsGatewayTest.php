@@ -113,16 +113,43 @@ class SmsGatewayTest extends TestCase
     }
 
     #[Test]
-    public function a_long_message_is_cut_to_one_segment(): void
+    public function a_message_may_run_to_three_segments(): void
     {
-        // Longer would still send, as two or three segments, charged as two or
-        // three. Nothing here is worth paying twice for.
+        // This used to stop at one, which is how a holiday notice arrived on
+        // everybody's phone ending "Enjoy the long weekend, ever...".
         $this->gateway->send('09171234567', str_repeat('a', 400));
 
         $sent = $this->driver->last()['message'];
 
-        $this->assertSame(SmsGateway::SEGMENT, mb_strlen($sent));
+        $this->assertSame(400, mb_strlen($sent));
+        $this->assertStringEndsNotWith('...', $sent);
+        $this->assertSame(3, SmsGateway::segments($sent));
+    }
+
+    #[Test]
+    public function past_three_segments_it_is_still_cut(): void
+    {
+        // Each segment is another credit for every person on the list, and a
+        // text needing a fourth is a notice board post with a text pointing
+        // at it.
+        $this->gateway->send('09171234567', str_repeat('a', 900));
+
+        $sent = $this->driver->last()['message'];
+
+        $this->assertSame(SmsGateway::MAX_LENGTH, mb_strlen($sent));
         $this->assertStringEndsWith('...', $sent);
+    }
+
+    #[Test]
+    public function segments_are_counted_on_what_is_sent_not_on_what_was_typed(): void
+    {
+        // Emoji are dropped by the composer — the holiday notice was written
+        // with them. Counting the typed text would price a message by
+        // characters that never leave the building.
+        $typed = str_repeat('a', 160) . '😅💚🎉✨🌟';
+
+        $this->assertSame(165, mb_strlen($typed));
+        $this->assertSame(1, SmsGateway::segments($this->gateway->compose($typed)));
     }
 
     #[Test]

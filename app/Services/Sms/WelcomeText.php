@@ -16,8 +16,10 @@ use App\Models\Employee;
 class WelcomeText
 {
     /**
-     * One text, not two. The gateway cuts everything to 160 characters to keep
-     * each message to one credit; this is 149.
+     * One text, not two. The gateway allows up to three segments now, for a
+     * notice somebody sat down and wrote; this goes to every new hire without
+     * anyone reading it first, so it stays inside one credit at 149
+     * characters. WelcomeTextTest holds it there.
      *
      * No "PhremsCVO:" in front, unlike the other texts — the company asked for
      * it to open with the welcome. The sender name already shows as PhremsCVO.

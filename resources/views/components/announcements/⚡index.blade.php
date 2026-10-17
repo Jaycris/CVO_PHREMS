@@ -406,11 +406,15 @@ new #[Layout('layouts.app')] class extends Component
             // by the same code that sends it. No guessing at the length.
             'smsPreview' => $canManage ? $this->smsPreview() : '',
             'smsReach' => $canManage ? $this->smsReach() : ['total' => 0, 'reachable' => 0],
+            // What it will actually be charged as, counted on the composed
+            // text rather than what was typed.
+            'smsSegments' => SmsGateway::segments($canManage ? $this->smsPreview() : ''),
             // Composed by the same code that sends it, so the count on screen
             // is the real one rather than a guess at the typed length.
-            'blastPreview' => $canManage && trim($this->blastMessage) !== ''
+            'blastPreview' => $blastPreview = ($canManage && trim($this->blastMessage) !== ''
                 ? app(SmsGateway::class)->compose($this->blastMessage)
-                : '',
+                : ''),
+            'blastSegments' => SmsGateway::segments($blastPreview),
             // Counts the chosen few when a few are chosen, so the confirmation
             // never says "all 52" next to a list of three ticks.
             'blastReach' => $canManage
@@ -758,7 +762,7 @@ new #[Layout('layouts.app')] class extends Component
                                 @if ($notifyBySms)
                                     <span class="mt-2 block rounded-lg border border-red-200 bg-white p-2.5 dark:border-red-400/20 dark:bg-ink-900">
                                         <span class="block text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500 dark:text-ink-400">
-                                            What the phone will show — {{ mb_strlen($smsPreview) }}/{{ \App\Services\Sms\SmsGateway::SEGMENT }} characters
+                                            What the phone will show — {{ mb_strlen($smsPreview) }}/{{ \App\Services\Sms\SmsGateway::MAX_LENGTH }} characters
                                         </span>
                                         <span class="mt-1 block break-words font-mono text-xs leading-relaxed text-ink-800 dark:text-ink-200">
                                             {{ $smsPreview !== '' ? $smsPreview : 'Type a title and message above.' }}
@@ -769,6 +773,15 @@ new #[Layout('layouts.app')] class extends Component
                                                 — {{ $smsReach['total'] - $smsReach['reachable'] }} have no usable mobile number on file
                                             @endif
                                         </span>
+                                        {{-- Every 160 characters is another credit per person, so the
+                                             price of the sentence just typed is shown while it can
+                                             still be shortened. --}}
+                                        @if ($smsPreview !== '')
+                                            <span class="mt-1 block text-xs font-semibold {{ $smsSegments > 1 ? 'text-amber-700 dark:text-amber-400' : 'text-ink-600 dark:text-ink-300' }}">
+                                                Sends as {{ $smsSegments }} text{{ $smsSegments > 1 ? 's' : '' }} per person
+                                                — {{ $smsSegments * $smsReach['reachable'] }} credit(s) in total
+                                            </span>
+                                        @endif
                                     </span>
                                 @endif
                             </span>
@@ -851,7 +864,7 @@ new #[Layout('layouts.app')] class extends Component
 
                 <div class="rounded-lg border border-ink-200 bg-ink-50 p-3 dark:border-white/10 dark:bg-white/5">
                     <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500 dark:text-ink-400">
-                        What the phone will show — {{ mb_strlen($blastPreview) }}/{{ \App\Services\Sms\SmsGateway::SEGMENT }} characters
+                        What the phone will show — {{ mb_strlen($blastPreview) }}/{{ \App\Services\Sms\SmsGateway::MAX_LENGTH }} characters
                     </p>
                     <p class="mt-1 break-words font-mono text-xs leading-relaxed text-ink-800 dark:text-ink-200">
                         {{ $blastPreview !== '' ? $blastPreview : 'Type a message above.' }}
@@ -863,6 +876,12 @@ new #[Layout('layouts.app')] class extends Component
                             — {{ $blastReach['total'] - $blastReach['reachable'] }} have no usable mobile number on file
                         @endif
                     </p>
+                    @if ($blastPreview !== '')
+                        <p class="mt-1 text-xs font-semibold {{ $blastSegments > 1 ? 'text-amber-700 dark:text-amber-400' : 'text-ink-600 dark:text-ink-300' }}">
+                            Sends as {{ $blastSegments }} text{{ $blastSegments > 1 ? 's' : '' }} per person
+                            — {{ $blastSegments * $blastReach['reachable'] }} credit(s) in total
+                        </p>
+                    @endif
                 </div>
 
                 <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-400/20 dark:bg-red-400/10">

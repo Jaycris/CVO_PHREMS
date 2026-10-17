@@ -23,10 +23,38 @@ class SmsGateway
      * One segment of a plain-text SMS.
      *
      * Longer messages still send, as two or three segments, and are charged as
-     * two or three. Nothing here is worth paying twice for, so messages are
-     * written to fit and cut if they do not.
+     * two or three.
      */
     public const SEGMENT = 160;
+
+    /**
+     * How many segments a message may run to.
+     *
+     * This was one, and anything longer was cut with an ellipsis — which is
+     * how a holiday notice reached everybody's phone ending "Enjoy the long
+     * weekend, ever...". One credit each is the right default for a reminder;
+     * it is the wrong answer for the message somebody actually wrote.
+     *
+     * Three is where it stops. Each segment is another credit for every person
+     * on the list, and a text long enough to need a fourth is a notice board
+     * post with a text pointing at it.
+     */
+    public const MAX_SEGMENTS = 3;
+
+    /** The longest message that will be sent whole. */
+    public const MAX_LENGTH = self::SEGMENT * self::MAX_SEGMENTS;
+
+    /**
+     * Segments a composed message will be charged as.
+     *
+     * Counted on what compose() returns, never on raw text: an en dash the
+     * composer strips would otherwise be counted as a message three times the
+     * price of the one that actually goes out.
+     */
+    public static function segments(string $composed): int
+    {
+        return max(1, (int) ceil(mb_strlen($composed) / self::SEGMENT));
+    }
 
     /**
      * How a message names itself in its own opening words.
@@ -116,7 +144,7 @@ class SmsGateway
     }
 
     /**
-     * Makes a message safe and short enough to send as one segment.
+     * Makes a message safe to send, and no longer than MAX_LENGTH.
      *
      * The subtle part is the character set. A plain SMS holds 160 GSM-7
      * characters, but a single character outside that set — an en dash, a curly
@@ -147,10 +175,10 @@ class SmsGateway
         $ascii = preg_replace('/[^\x20-\x7E]/u', '', $ascii);
         $ascii = trim(preg_replace('/\s+/', ' ', (string) $ascii));
 
-        if (mb_strlen($ascii) <= self::SEGMENT) {
+        if (mb_strlen($ascii) <= self::MAX_LENGTH) {
             return $ascii;
         }
 
-        return rtrim(mb_substr($ascii, 0, self::SEGMENT - 3)) . '...';
+        return rtrim(mb_substr($ascii, 0, self::MAX_LENGTH - 3)) . '...';
     }
 }
