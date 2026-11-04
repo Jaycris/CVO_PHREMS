@@ -61,7 +61,14 @@ class LeaveRequestActionNeeded extends Notification implements ShouldQueue
         $leaveRequest = $this->leaveRequest;
         $employeeName = $leaveRequest->employee->fullName() ?: $leaveRequest->employee->employee_id;
 
-        $days = $leaveRequest->daysLabel() . ' of ' . $leaveRequest->leaveType->name;
+        /*
+         * The dates are in here because without them two requests from the
+         * same person read word for word the same. Somebody filing one day in
+         * November and another a fortnight later produced two identical lines
+         * in the bell, which looked like the same notification sent twice.
+         */
+        $days = $leaveRequest->daysLabel() . ' of ' . $leaveRequest->leaveType->name
+            . ' ' . $leaveRequest->datesLabel();
         $manager = $this->approvedByManager();
 
         return [

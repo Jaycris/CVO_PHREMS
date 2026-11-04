@@ -114,7 +114,8 @@ class LeaveService
         $this->notifyHr(
             $leaveRequest,
             'New leave request from ' . $this->employeeName($employee)
-                . ' (' . $leaveRequest->daysLabel() . ', ' . $leaveType->name . ') submitted.',
+                . ' (' . $leaveRequest->daysLabel() . ', ' . $leaveType->name . ') '
+                . $leaveRequest->datesLabel() . ' submitted.',
             [$approver?->id, $employee->user?->id],
         );
 
@@ -152,10 +153,15 @@ class LeaveService
 
         $ceo?->notify(new LeaveRequestActionNeeded($leaveRequest));
 
-        $this->notifyRequestor($leaveRequest, 'Your leave request was approved by your Manager and is now awaiting CEO/COO approval.');
+        $this->notifyRequestor(
+            $leaveRequest,
+            'Your leave request ' . $leaveRequest->datesLabel()
+                . ' was approved by your Manager and is now awaiting CEO/COO approval.',
+        );
         $this->notifyHr(
             $leaveRequest,
-            $this->employeeName($leaveRequest->employee) . "'s leave request was approved by Manager, now pending CEO/COO.",
+            $this->employeeName($leaveRequest->employee) . "'s leave request "
+                . $leaveRequest->datesLabel() . ' was approved by Manager, now pending CEO/COO.',
             [$ceo?->id, $manager?->id, $leaveRequest->employee->user?->id],
         );
     }
@@ -205,12 +211,19 @@ class LeaveService
     /** @param list<int|null> $exceptUserIds people already told about this one */
     protected function notifyFinalDecision(LeaveRequest $leaveRequest, string $outcome, ?string $note, array $exceptUserIds = []): void
     {
-        $summary = "Your leave request was {$outcome}." . ($leaveRequest->is_lwop && str_contains($outcome, 'approved') ? ' This will be recorded as Leave Without Pay (LWOP).' : '') . ($note ? " Note: {$note}" : '');
+        /*
+         * The dates are in every one of these because without them two
+         * requests from the same person read word for word the same, and a
+         * bell full of identical lines looks like one notification repeating.
+         */
+        $dates = $leaveRequest->datesLabel();
+
+        $summary = "Your leave request {$dates} was {$outcome}." . ($leaveRequest->is_lwop && str_contains($outcome, 'approved') ? ' This will be recorded as Leave Without Pay (LWOP).' : '') . ($note ? " Note: {$note}" : '');
 
         $this->notifyRequestor($leaveRequest, $summary);
         $this->notifyHr(
             $leaveRequest,
-            $this->employeeName($leaveRequest->employee) . "'s leave request was {$outcome}.",
+            $this->employeeName($leaveRequest->employee) . "'s leave request {$dates} was {$outcome}.",
             [...$exceptUserIds, $leaveRequest->employee->user?->id],
         );
     }
