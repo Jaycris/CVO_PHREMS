@@ -119,6 +119,8 @@ return [
          * Blank closes the lookup API entirely rather than opening it.
          */
         'inbound_token' => env('CRM_INBOUND_API_TOKEN'),
+        // Separate read-only credential: the employee directory token does not grant access to commission releases.
+        'commission_release_token' => env('CRM_COMMISSION_RELEASE_TOKEN'),
     ],
 
 ];

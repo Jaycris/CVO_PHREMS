@@ -35,6 +35,8 @@ class CommissionTransaction
         public readonly ?float $phpTotal = null,
         public readonly ?float $cardHoldAmount = null,
         public readonly ?float $netCommission = null,
+        public readonly ?int $crmPaymentId = null,
+        public readonly ?int $crmAgentId = null,
     ) {}
 
     /** @param array<string, mixed> $row */
@@ -42,6 +44,8 @@ class CommissionTransaction
     {
         return new self(
             soldDate: self::text($row, ['sold_date', 'soldDate', 'date']),
+            crmPaymentId: isset($row['crm_payment_id']) && ctype_digit((string) $row['crm_payment_id']) && (int) $row['crm_payment_id'] > 0 ? (int) $row['crm_payment_id'] : null,
+            crmAgentId: isset($row['crm_agent_id']) && ctype_digit((string) $row['crm_agent_id']) && (int) $row['crm_agent_id'] > 0 ? (int) $row['crm_agent_id'] : null,
             brand: self::text($row, ['brand']),
             client: self::text($row, ['author', 'client', 'author_client', 'customer']),
             bookTitle: self::text($row, ['book_title', 'bookTitle', 'title']),

@@ -280,6 +280,8 @@ class CommissionRunService
                         $record->lines()->create([
                             'sort_order' => $index,
                             'sold_date' => $row->soldDate,
+                            'crm_payment_id' => $row->crmPaymentId,
+                            'crm_agent_id' => $row->crmAgentId,
                             'brand' => $row->brand,
                             'client' => $row->client,
                             'book_title' => $row->bookTitle,

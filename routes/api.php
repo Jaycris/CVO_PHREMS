@@ -43,6 +43,10 @@ Route::middleware('throttle:120,1')
         Route::get('/openings/{slug}', [CareersController::class, 'show'])->name('api.careers.show');
     });
 
+Route::post('/api/crm/commission-release-status', \App\Http\Controllers\Api\CrmCommissionReleaseController::class)
+    ->middleware([\App\Http\Middleware\AuthenticateCrmCommissionRequest::class, 'throttle:120,1'])
+    ->name('api.crm.commission-release-status');
+
 Route::middleware([AuthenticateCrmRequest::class, 'throttle:60,1'])
     ->prefix('api/crm')
     ->group(function () {
