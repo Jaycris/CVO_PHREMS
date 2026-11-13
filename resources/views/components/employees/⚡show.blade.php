@@ -58,6 +58,45 @@ new #[Layout('layouts.app')] class extends Component
     public string $openingDays = '';
     public string $openingNote = '';
 
+    public bool $showRehireModal = false;
+    public string $rehireDate = '';
+    public string $rehireNote = '';
+
+    public function openRehireModal(): void
+    {
+        abort_unless(auth()->user()?->can('employees.manage'), 403);
+
+        $this->rehireDate = now()->toDateString();
+        $this->rehireNote = '';
+        $this->resetValidation();
+        $this->showRehireModal = true;
+    }
+
+    /**
+     * Brings somebody back as a period of their own.
+     *
+     * Clearing the last day by hand would read as unbroken service from a
+     * hire date that is no longer true, which is how the first rehire here
+     * lost two months of history.
+     */
+    public function rehireEmployee(): void
+    {
+        abort_unless(auth()->user()?->can('employees.manage'), 403);
+
+        $data = $this->validate([
+            'rehireDate' => ['required', 'date'],
+            'rehireNote' => ['nullable', 'string', 'max:255'],
+        ], [], ['rehireDate' => 'return date']);
+
+        $this->employee->rehire($data['rehireDate'], $data['rehireNote'] ?: null);
+
+        $this->employee->refresh();
+        $this->showRehireModal = false;
+        $this->statusMessage = ($this->employee->fullName() ?: $this->employee->employee_id)
+            . ' is back from ' . \Illuminate\Support\Carbon::parse($data['rehireDate'])->format('M d, Y')
+            . '. Their earlier employment is kept on the record.';
+    }
+
     public function toggleBankNumber(): void
     {
         // The people who decide a change and the people who pay the salary.
@@ -100,6 +139,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->showScheduleModal = false;
         $this->showPayrollModal = false;
         $this->showLeaveModal = false;
+        $this->showRehireModal = false;
         $this->resetValidation();
     }
 
@@ -482,6 +522,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         return [
             'workSchedules' => WorkSchedule::orderBy('name')->get(),
+            'employmentPeriods' => $this->employee->employmentPeriods()->get(),
             'currentAssignment' => $this->employee->currentScheduleAssignment(),
             'scheduleHistory' => $this->employee->scheduleAssignments()->with('workSchedule')->get(),
             'leaveTypes' => LeaveType::where('is_active', true)->orderBy('name')->get(),
@@ -867,7 +908,66 @@ new #[Layout('layouts.app')] class extends Component
     </section>
 
     <section x-show="activeTab === 'schedule'" x-cloak class="space-y-4">
+        {{--
+            Employment history, above the schedule because it is the coarser
+            question. An employee record holds one hire date and one last day,
+            which cannot describe somebody who left and came back — the dates
+            get overwritten and the earlier stretch disappears.
+        --}}
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-xl font-bold text-ink-950 dark:text-white">Employment</h2>
+                <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">
+                    @if ($employmentPeriods->count() > 1)
+                        {{ $employmentPeriods->count() }} periods ·
+                        {{ $employee->monthsOfService() }} month(s) of service in total
+                    @else
+                        {{ $employee->monthsOfService() }} month(s) of service
+                    @endif
+                </p>
+            </div>
+            @if ($employee->separation_date && auth()->user()?->can('employees.manage'))
+                <x-button wire:click="openRehireModal" class="h-10 px-4">Bring them back</x-button>
+            @endif
+        </div>
+
+        <div class="professional-panel overflow-hidden">
+            @if ($employmentPeriods->isNotEmpty())
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-ink-200 text-sm dark:divide-white/10">
+                        <thead class="bg-ink-50 dark:bg-white/[0.03]">
+                            <tr>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Period</th>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Length</th>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">How it ended</th>
+                                <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink-500 dark:text-ink-400">Note</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-ink-100 dark:divide-white/10">
+                            @foreach ($employmentPeriods as $period)
+                                <tr wire:key="period-{{ $period->id }}">
+                                    <td class="whitespace-nowrap px-5 py-4 font-semibold text-ink-950 dark:text-white">
+                                        {{ $period->label() }}
+                                        @if ($period->isOpen())
+                                            <x-badge color="green" class="ml-2">Current</x-badge>
+                                        @endif
+                                    </td>
+                                    <td class="whitespace-nowrap px-5 py-4 text-ink-700 dark:text-ink-200">{{ $period->months() }} month(s)</td>
+                                    <td class="px-5 py-4 text-ink-700 dark:text-ink-200">{{ $period->endReasonLabel() ?? '—' }}</td>
+                                    <td class="px-5 py-4 text-ink-600 dark:text-ink-300">{{ $period->note ?: '—' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <p class="px-5 py-8 text-center text-sm font-medium text-ink-500 dark:text-ink-400">
+                    No employment history recorded.
+                </p>
+            @endif
+        </div>
+
+        <div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-bold text-ink-950 dark:text-white">Work Schedule</h2>
                 <p class="mt-1 text-sm font-medium text-ink-500 dark:text-ink-400">
@@ -992,6 +1092,34 @@ new #[Layout('layouts.app')] class extends Component
             @endif
         </div>
     </section>
+    <x-modal :show="$showRehireModal" onClose="closeModals">
+        <h2 class="mb-1 text-lg font-bold text-[#0f172a] dark:text-white">Bring them back</h2>
+        <p class="mb-4 text-sm font-medium text-ink-600 dark:text-ink-300">
+            Their earlier employment stays on the record as its own period. Their hire date is left as it is —
+            whether tenure restarts is a separate decision.
+        </p>
+        <form wire:submit="rehireEmployee" class="space-y-4">
+            <div>
+                <x-label>First day back</x-label>
+                <x-input wire:model="rehireDate" type="date" />
+                @error('rehireDate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            </div>
+            <div>
+                <x-label>Note <span class="font-medium text-[#778599]">(optional)</span></x-label>
+                <x-input wire:model="rehireNote" type="text" placeholder="e.g. Returned to the same team" />
+                @error('rehireNote') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+            </div>
+            <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+                Check any final pay for their last employment is settled first. Bringing them back puts them in
+                payroll runs again from this date.
+            </div>
+            <div class="flex gap-2 pt-1">
+                <x-button type="submit">Bring them back</x-button>
+                <x-button type="button" variant="secondary" wire:click="closeModals">Cancel</x-button>
+            </div>
+        </form>
+    </x-modal>
+
     <x-modal :show="$showScheduleModal" onClose="closeModals">
         <h2 class="mb-4 text-lg font-bold text-[#0f172a] dark:text-white">Update Work Schedule</h2>
         <form wire:submit="assignSchedule" class="space-y-4">

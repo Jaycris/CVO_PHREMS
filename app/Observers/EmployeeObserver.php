@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Employee;
+use App\Models\EmploymentPeriod;
 use App\Models\User;
 
 class EmployeeObserver
@@ -24,6 +25,8 @@ class EmployeeObserver
      */
     public function updated(Employee $employee): void
     {
+        $this->closePeriodWhenTheyLeave($employee);
+
         if (! $employee->wasChanged('company_email')) {
             return;
         }
@@ -46,5 +49,53 @@ class EmployeeObserver
         }
 
         $user->update(['email' => $employee->company_email]);
+    }
+
+    /** A new employee starts their first period the moment they exist. */
+    public function created(Employee $employee): void
+    {
+        if ($employee->hire_date === null) {
+            return;
+        }
+
+        EmploymentPeriod::create([
+            'employee_id' => $employee->id,
+            'started_on' => $employee->hire_date->toDateString(),
+            'recorded_by_user_id' => auth()->id(),
+        ]);
+    }
+
+    /**
+     * Closes the open period when somebody is given a last day.
+     *
+     * Only this direction is inferred. Clearing a last day could mean a
+     * rehire or a mistake being undone, and guessing wrong either invents a
+     * period that never happened or loses one that did — so reopening is an
+     * explicit act, through Employee::rehire().
+     */
+    protected function closePeriodWhenTheyLeave(Employee $employee): void
+    {
+        if (! $employee->wasChanged('separation_date') || $employee->separation_date === null) {
+            return;
+        }
+
+        $open = $employee->employmentPeriods()->open()->latest('started_on')->first();
+
+        if (! $open) {
+            return;
+        }
+
+        // A last day before the period began is somebody correcting a typo in
+        // the wrong direction. Closing on it would leave a period that ends
+        // before it starts, which no report could make sense of.
+        if ($open->started_on->gt($employee->separation_date)) {
+            return;
+        }
+
+        $open->update([
+            'ended_on' => $employee->separation_date->toDateString(),
+            'end_reason' => $employee->separation_type,
+            'recorded_by_user_id' => auth()->id() ?? $open->recorded_by_user_id,
+        ]);
     }
 }

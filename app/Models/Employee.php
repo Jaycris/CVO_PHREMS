@@ -431,6 +431,76 @@ class Employee extends Model
         return $this->scheduleAssignmentForDate(Carbon::today());
     }
 
+    public function employmentPeriods(): HasMany
+    {
+        return $this->hasMany(EmploymentPeriod::class)->orderBy('started_on');
+    }
+
+    /** The stretch they are serving now, if they are still here. */
+    public function currentEmploymentPeriod(): ?EmploymentPeriod
+    {
+        return $this->employmentPeriods()->open()->latest('started_on')->first();
+    }
+
+    /**
+     * Months served across every period, the gaps left out.
+     *
+     * Somebody with five months, a fortnight away and three months back is
+     * eight months of service, not eight and a half.
+     */
+    public function monthsOfService(): int
+    {
+        return (int) $this->employmentPeriods->sum(fn (EmploymentPeriod $period) => $period->months());
+    }
+
+    /**
+     * Brings somebody back, as a period of their own.
+     *
+     * Clearing the last day on its own would read as unbroken service from a
+     * hire date that is no longer true — which is exactly what happened to
+     * the first person this was needed for, and why nobody could say how
+     * long she had worked here without reading her payslips.
+     *
+     * The hire date is deliberately left alone. Payroll, leave and the
+     * thirteenth month all read it, and moving it is a separate decision
+     * about whether tenure restarts.
+     */
+    public function rehire(Carbon|string $returnedOn, ?string $note = null): EmploymentPeriod
+    {
+        $returned = Carbon::parse($returnedOn)->startOfDay();
+
+        abort_if(
+            $this->currentEmploymentPeriod() !== null,
+            422,
+            'This employee is already employed — there is nothing to bring them back from.',
+        );
+
+        $last = $this->employmentPeriods()->latest('started_on')->first();
+
+        abort_if(
+            $last && $last->ended_on !== null && $returned->lte($last->ended_on),
+            422,
+            'They must come back after their last day, not on or before it.',
+        );
+
+        return DB::transaction(function () use ($returned, $note) {
+            // Cleared together: the date is what keeps them out of payroll,
+            // and leaving the reason behind would show "Terminated" against
+            // somebody who is back at their desk.
+            $this->forceFill([
+                'separation_date' => null,
+                'separation_type' => null,
+                'separation_reason' => null,
+            ])->save();
+
+            return $this->employmentPeriods()->create([
+                'started_on' => $returned->toDateString(),
+                'note' => $note,
+                'recorded_by_user_id' => auth()->id(),
+            ]);
+        });
+    }
+
     public function scheduleAssignmentForDate(Carbon|string $date): ?EmployeeScheduleAssignment
     {
         $date = Carbon::parse($date)->toDateString();
