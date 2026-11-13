@@ -24,6 +24,18 @@ new #[Layout('layouts.app')] class extends Component
     #[Locked]
     public ?int $editingDayId = null;
 
+    /*
+     * Who and when, for a day that was never punched at all.
+     *
+     * Correcting an existing row takes both from the row. A missing day has
+     * no row to take them from — somebody started before their account
+     * existed, or the clock was unreachable — so they are asked for. These
+     * are posted rather than locked, which is why save() checks the
+     * permission and the date against settled payroll before writing.
+     */
+    public string $editEmployeeId = '';
+    public string $editDate = '';
+
     public string $editTimeIn = '';
     public string $editTimeOut = '';
     public string $editReason = '';
@@ -99,6 +111,8 @@ new #[Layout('layouts.app')] class extends Component
         $day = AttendanceDay::findOrFail($dayId);
 
         $this->editingDayId = $day->id;
+        $this->editEmployeeId = (string) $day->employee_id;
+        $this->editDate = $day->work_date->toDateString();
         $this->editTimeIn = $day->time_in?->format('H:i') ?? '';
         $this->editTimeOut = $day->time_out?->format('H:i') ?? '';
         $this->editBreaks = $day->breaks
@@ -117,11 +131,67 @@ new #[Layout('layouts.app')] class extends Component
         $this->showEdit = true;
     }
 
+    /**
+     * Records a day nobody clocked.
+     *
+     * Three people in one fortnight worked days PHREMS has no record of —
+     * two started before their account existed and one came back from
+     * termination. Each one was a console job, and the only alternative on
+     * screen was marking them off-site, which is a false statement on a
+     * payslip. Correcting a day was always possible; adding one was not.
+     *
+     * The employee is prefilled from the filter when one is chosen, because
+     * that is almost always who it is for.
+     */
+    public function addMissingDay(): void
+    {
+        abort_unless($this->canCorrect(), 403);
+
+        $this->editingDayId = null;
+        $this->editEmployeeId = $this->employeeId;
+        $this->editDate = '';
+        $this->editTimeIn = '';
+        $this->editTimeOut = '';
+        $this->editBreaks = [];
+        $this->editReason = '';
+
+        $this->resetValidation();
+        $this->showEdit = true;
+    }
+
+    /**
+     * The shift the chosen employee was on for the chosen date.
+     *
+     * Offered as a hint rather than filled in. A missing day is being typed
+     * from somebody's memory of what happened, and prefilling the scheduled
+     * hours would quietly turn "I think he was here" into a full day's pay.
+     */
+    public function scheduleHint(): ?string
+    {
+        if ($this->editingDayId !== null || blank($this->editEmployeeId) || blank($this->editDate)) {
+            return null;
+        }
+
+        $employee = Employee::find($this->editEmployeeId);
+        $schedule = $employee?->scheduleAssignmentForDate($this->editDate)?->workSchedule;
+
+        if (! $schedule) {
+            return null;
+        }
+
+        return $schedule->isWorkDay($this->editDate)
+            ? $schedule->name . ', ' . $schedule->start_time->format('H:i') . '–' . $schedule->end_time->format('H:i')
+            : 'Not a scheduled work day on this date.';
+    }
+
     public function save(AttendanceCorrectionService $corrections): void
     {
         abort_unless($this->canCorrect(), 403);
 
         $this->validate([
+            // Only asked for when adding a day; an edit takes both from the row.
+            'editEmployeeId' => ['required', 'exists:employees,id'],
+            'editDate' => ['required', 'date'],
             'editTimeIn' => ['nullable', 'date_format:H:i'],
             'editTimeOut' => ['nullable', 'date_format:H:i'],
             'editBreaks' => ['array', 'max:8'],
@@ -134,17 +204,26 @@ new #[Layout('layouts.app')] class extends Component
             // different from what I clocked?" needs an answer on the record.
             'editReason' => ['required', 'string', 'min:3', 'max:255'],
         ], attributes: [
+            'editEmployeeId' => 'employee',
+            'editDate' => 'date',
             'editTimeIn' => 'time in',
             'editTimeOut' => 'time out',
             'editReason' => 'reason',
         ]);
 
-        $day = AttendanceDay::with('employee')->findOrFail($this->editingDayId);
+        /*
+         * An edit works from the row; a new day works from what was typed.
+         * The service creates the row when none exists, so both paths end in
+         * the same call and both leave a correction on the record.
+         */
+        $day = $this->editingDayId ? AttendanceDay::with('employee')->findOrFail($this->editingDayId) : null;
+        $employee = $day?->employee ?? Employee::findOrFail($this->editEmployeeId);
+        $workDate = $day?->work_date ?? \Illuminate\Support\Carbon::parse($this->editDate);
 
         try {
             $corrections->apply(
-                $day->employee,
-                $day->work_date,
+                $employee,
+                $workDate,
                 $this->editTimeIn ?: null,
                 $this->editTimeOut ?: null,
                 $this->editReason,
@@ -159,22 +238,39 @@ new #[Layout('layouts.app')] class extends Component
             );
         } catch (\Illuminate\Validation\ValidationException $e) {
             // The service speaks in its own field names; put them where the
-            // form can show them.
-            foreach ($e->errors() as $messages) {
-                $this->addError('editTimeOut', $messages[0]);
+            // form can show them. The settled-payroll refusal is about the
+            // date, and showing it under Time Out reads like a typo rather
+            // than a closed payroll run.
+            foreach ($e->errors() as $field => $messages) {
+                $this->addError($field === 'workDate' ? 'editDate' : 'editTimeOut', $messages[0]);
             }
 
             return;
         }
 
         $this->showEdit = false;
-        $this->statusMessage = 'Attendance for ' . $day->work_date->format('M d, Y')
-            . ' updated for ' . ($day->employee->fullName() ?: $day->employee->employee_id) . '.';
+        $this->statusMessage = 'Attendance for ' . $workDate->format('M d, Y')
+            . ($day ? ' updated for ' : ' recorded for ')
+            . ($employee->fullName() ?: $employee->employee_id) . '.';
+
+        // A day added outside the filtered range would otherwise be saved and
+        // then not appear, which reads as the save having failed.
+        if ($day === null) {
+            $date = $workDate->toDateString();
+
+            if ($date < $this->fromDate) {
+                $this->fromDate = $date;
+            }
+
+            if ($date > $this->toDate) {
+                $this->toDate = $date;
+            }
+        }
     }
 
     public function closeEdit(): void
     {
-        $this->reset(['editingDayId', 'editTimeIn', 'editTimeOut', 'editBreaks', 'editReason']);
+        $this->reset(['editingDayId', 'editEmployeeId', 'editDate', 'editTimeIn', 'editTimeOut', 'editBreaks', 'editReason']);
         $this->resetValidation();
         $this->showEdit = false;
     }
@@ -219,7 +315,15 @@ new #[Layout('layouts.app')] class extends Component
 ?>
 
 <div class="space-y-6">
-    <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Daily Time Record</h1>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1 class="text-xl font-bold text-[#0f172a] dark:text-white">Daily Time Record</h1>
+
+        @if ($canCorrect)
+            <x-button wire:click="addMissingDay" @click="modalOpen = true" class="h-10 px-4">
+                Record a missing day
+            </x-button>
+        @endif
+    </div>
 
     @if ($statusMessage)
         <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
@@ -348,14 +452,54 @@ new #[Layout('layouts.app')] class extends Component
         @php $editing = $editingDayId ? \App\Models\AttendanceDay::with('employee')->find($editingDayId) : null; @endphp
 
         <div>
-            <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">Correct attendance</p>
-            <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">
-                {{ $editing?->employee->fullName() ?: $editing?->employee->employee_id }}
-            </h2>
-            <p class="mt-1 text-sm font-medium text-ink-600 dark:text-ink-300">
-                {{ $editing?->work_date->format('l, M d, Y') }}
+            <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-700 dark:text-brand-300">
+                {{ $editing ? 'Correct attendance' : 'Record a missing day' }}
             </p>
+            @if ($editing)
+                <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">
+                    {{ $editing->employee->fullName() ?: $editing->employee->employee_id }}
+                </h2>
+                <p class="mt-1 text-sm font-medium text-ink-600 dark:text-ink-300">
+                    {{ $editing->work_date->format('l, M d, Y') }}
+                </p>
+            @else
+                <h2 class="mt-1 text-xl font-bold text-ink-950 dark:text-white">A day nobody clocked</h2>
+                <p class="mt-1 text-sm font-medium text-ink-600 dark:text-ink-300">
+                    For somebody who worked before their account existed, or when the clock could not be reached.
+                </p>
+            @endif
         </div>
+
+        {{-- Only asked for on a new day. An edit takes both from the row, and
+             offering them would invite moving somebody else's punch. --}}
+        @unless ($editing)
+            <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                <div>
+                    <x-label>Employee</x-label>
+                    <x-select wire:model.live="editEmployeeId">
+                        <option value="">Select employee</option>
+                        @foreach ($employees as $employee)
+                            <option value="{{ $employee->id }}">{{ $employee->employee_id }} — {{ $employee->fullName() ?: $employee->company_email }}</option>
+                        @endforeach
+                    </x-select>
+                    @error('editEmployeeId') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <x-label>Date</x-label>
+                    <x-input wire:model.live="editDate" type="date" max="{{ now()->toDateString() }}" />
+                    @error('editDate') <p class="mt-1.5 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                </div>
+            </div>
+
+            @if ($hint = $this->scheduleHint())
+                {{-- Shown, not filled in. Typing a missing day is somebody
+                     recalling what happened; prefilling the scheduled hours
+                     would turn "I think he was here" into a full day's pay. --}}
+                <p class="mt-2 text-xs font-medium text-ink-500 dark:text-ink-400">
+                    Their schedule that day: <span class="font-semibold">{{ $hint }}</span>
+                </p>
+            @endif
+        @endunless
 
         <div class="mt-6 grid gap-4 sm:grid-cols-2">
             <div>
