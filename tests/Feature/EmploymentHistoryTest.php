@@ -212,7 +212,7 @@ class EmploymentHistoryTest extends TestCase
             ->test('employees.show', ['employee' => $employee->fresh()])
             ->assertSee('Sep 1, 2026 – Oct 30, 2026')
             ->assertSee('Terminated')
-            ->assertSee('Bring them back')
+            ->assertSee('Rehire')
             ->call('openRehireModal')
             ->set('rehireDate', '2026-11-11')
             ->set('rehireNote', 'Returned to the same team')
@@ -235,7 +235,7 @@ class EmploymentHistoryTest extends TestCase
 
         Livewire::actingAs($plain)
             ->test('employees.show', ['employee' => $employee->fresh()])
-            ->assertDontSee('Bring them back')
+            ->assertDontSee('Rehire')
             ->call('openRehireModal')
             ->assertStatus(403);
     }

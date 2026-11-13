@@ -927,7 +927,7 @@ new #[Layout('layouts.app')] class extends Component
                 </p>
             </div>
             @if ($employee->separation_date && auth()->user()?->can('employees.manage'))
-                <x-button wire:click="openRehireModal" class="h-10 px-4">Bring them back</x-button>
+                <x-button wire:click="openRehireModal" class="h-10 px-4">Rehire</x-button>
             @endif
         </div>
 
@@ -1093,7 +1093,7 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </section>
     <x-modal :show="$showRehireModal" onClose="closeModals">
-        <h2 class="mb-1 text-lg font-bold text-[#0f172a] dark:text-white">Bring them back</h2>
+        <h2 class="mb-1 text-lg font-bold text-[#0f172a] dark:text-white">Rehire</h2>
         <p class="mb-4 text-sm font-medium text-ink-600 dark:text-ink-300">
             Their earlier employment stays on the record as its own period. Their hire date is left as it is —
             whether tenure restarts is a separate decision.
@@ -1114,7 +1114,7 @@ new #[Layout('layouts.app')] class extends Component
                 payroll runs again from this date.
             </div>
             <div class="flex gap-2 pt-1">
-                <x-button type="submit">Bring them back</x-button>
+                <x-button type="submit">Rehire</x-button>
                 <x-button type="button" variant="secondary" wire:click="closeModals">Cancel</x-button>
             </div>
         </form>
